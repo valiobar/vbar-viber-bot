@@ -1,0 +1,127 @@
+# Docker Compose Override Example
+# Copy this file to docker-compose.override.yml and customize for your local development environment
+# This file is automatically loaded by docker-compose when present
+
+version: '3.8'
+
+services:
+  # Admin Service Development Overrides
+  admin:
+    build:
+      context: ..
+      dockerfile: infrastructure/docker/Dockerfile.admin
+    environment:
+      - NODE_ENV=development
+      - MONGODB_URI=mongodb://mongodb-admin:27017/admin
+      - RABBITMQ_URL=amqp://admin:admin@rabbitmq:5672
+    # Uncomment for hot reload (requires Next.js dev mode)
+    # volumes:
+    #   - ../services/admin:/app
+    #   - /app/node_modules
+    #   - /app/.next
+    # command: npm run dev
+
+  # Viber Service Development Overrides
+  viber:
+    build:
+      context: ..
+      dockerfile: infrastructure/docker/Dockerfile.viber
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+      - MONGODB_URI=mongodb://mongodb-bot:27017/bot
+      - RABBITMQ_URL=amqp://admin:admin@rabbitmq:5672
+      - VIBER_BOT_TOKEN=${VIBER_BOT_TOKEN:-your-viber-bot-token}
+      - VIBER_WEBHOOK_URL=${VIBER_WEBHOOK_URL:-http://localhost:3001}
+    # Uncomment for hot reload
+    # volumes:
+    #   - ../services/viber:/app
+    #   - /app/node_modules
+    #   - /app/dist
+    # command: npm run dev
+
+  # AI Service Development Overrides
+  ai:
+    build:
+      context: ..
+      dockerfile: infrastructure/docker/Dockerfile.ai
+    environment:
+      - NODE_ENV=development
+      - PORT=3002
+      - MONGODB_URI=mongodb://mongodb-ai:27017/ai
+      - RABBITMQ_URL=amqp://admin:admin@rabbitmq:5672
+      - OLLAMA_URL=http://ollama:11434
+      - AI_MODEL_PROVIDER=ollama
+      - AI_MODEL_NAME=llama2
+    # Uncomment for hot reload
+    # volumes:
+    #   - ../services/ai:/app
+    #   - /app/node_modules
+    #   - /app/dist
+    # command: npm run dev
+
+  # Analytics Service Development Overrides
+  analytics:
+    build:
+      context: ..
+      dockerfile: infrastructure/docker/Dockerfile.analytics
+    environment:
+      - NODE_ENV=development
+      - PORT=3003
+      - MONGODB_URI=mongodb://mongodb-analytics:27017/analytics
+      - RABBITMQ_URL=amqp://admin:admin@rabbitmq:5672
+    # Uncomment for hot reload
+    # volumes:
+    #   - ../services/analytics:/app
+    #   - /app/node_modules
+    #   - /app/dist
+    # command: npm run dev
+
+  # MongoDB Development Overrides
+  mongodb-admin:
+    ports:
+      - "27017:27017"  # Expose MongoDB port for local access
+    # Uncomment to mount local data directory
+    # volumes:
+    #   - ./data/mongodb-admin:/data/db
+
+  mongodb-bot:
+    ports:
+      - "27018:27017"  # Expose MongoDB port for local access
+    # Uncomment to mount local data directory
+    # volumes:
+    #   - ./data/mongodb-bot:/data/db
+
+  mongodb-ai:
+    ports:
+      - "27019:27017"  # Expose MongoDB port for local access
+    # Uncomment to mount local data directory
+    # volumes:
+    #   - ./data/mongodb-ai:/data/db
+
+  mongodb-analytics:
+    ports:
+      - "27020:27017"  # Expose MongoDB port for local access
+    # Uncomment to mount local data directory
+    # volumes:
+    #   - ./data/mongodb-analytics:/data/db
+
+  # RabbitMQ Development Overrides
+  rabbitmq:
+    # Ports are already exposed in main docker-compose.yml
+    # Management UI available at http://localhost:15672
+    # Default credentials: admin/admin
+
+  # Ollama Development Overrides
+  ollama:
+    # Port is already exposed in main docker-compose.yml
+    # API available at http://localhost:11434
+    # Uncomment for GPU support (requires NVIDIA Docker runtime)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+

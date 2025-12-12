@@ -1,0 +1,61 @@
+{
+  "name": "vbar-viber-bot",
+  "version": "1.0.0",
+  "description": "Microservices architecture for Viber bot with Admin, Viber, AI, and Analytics services",
+  "private": true,
+  "workspaces": [
+    "services/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "build:admin": "npm run build --workspace=services/admin",
+    "build:viber": "npm run build --workspace=services/viber",
+    "build:ai": "npm run build --workspace=services/ai",
+    "build:analytics": "npm run build --workspace=services/analytics",
+    "build:shared": "npm run build --workspace=packages/shared",
+    "dev": "npm run dev --workspaces --if-present",
+    "dev:admin": "npm run dev --workspace=services/admin",
+    "dev:viber": "npm run dev --workspace=services/viber",
+    "dev:ai": "npm run dev --workspace=services/ai",
+    "dev:analytics": "npm run dev --workspace=services/analytics",
+    "test": "npm run test --workspaces --if-present",
+    "test:admin": "npm run test --workspace=services/admin",
+    "test:viber": "npm run test --workspace=services/viber",
+    "test:ai": "npm run test --workspace=services/ai",
+    "test:analytics": "npm run test --workspace=services/analytics",
+    "test:shared": "npm run test --workspace=packages/shared",
+    "lint": "npm run lint --workspaces --if-present",
+    "lint:fix": "npm run lint:fix --workspaces --if-present",
+    "clean": "npm run clean --workspaces --if-present && rm -rf node_modules",
+    "install:all": "npm install",
+    "docker:build": "docker-compose -f infrastructure/docker-compose.yml build",
+    "docker:up": "docker-compose -f infrastructure/docker-compose.yml up",
+    "docker:down": "docker-compose -f infrastructure/docker-compose.yml down",
+    "docker:logs": "docker-compose -f infrastructure/docker-compose.yml logs -f",
+    "docker:infra:up": "docker-compose -f infrastructure/docker-compose.infrastructure.yml up -d",
+    "docker:infra:down": "docker-compose -f infrastructure/docker-compose.infrastructure.yml down",
+    "docker:infra:logs": "docker-compose -f infrastructure/docker-compose.infrastructure.yml logs -f",
+    "docker:infra:stop": "docker-compose -f infrastructure/docker-compose.infrastructure.yml stop",
+    "docker:infra:start": "docker-compose -f infrastructure/docker-compose.infrastructure.yml start"
+  },
+  "keywords": [
+    "microservices",
+    "viber",
+    "bot",
+    "nextjs",
+    "nodejs",
+    "typescript"
+  ],
+  "author": "",
+  "license": "ISC",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
+

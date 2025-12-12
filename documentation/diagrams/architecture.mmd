@@ -1,0 +1,143 @@
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#ff6b6b','primaryTextColor':'#fff','primaryBorderColor':'#7C0000','lineColor':'#F8B229','secondaryColor':'#006100','tertiaryColor':'#fff'}}}%%
+graph TB
+    %% External Systems
+    ViberAPI[Viber API<br/>External]
+    Users[Users<br/>Admin Dashboard]
+    
+    %% Shared Package
+    SharedPackage[Shared Package<br/>@vbar/shared<br/>Types, Utils, Config]
+    
+    %% Admin Service with Hexagonal Architecture
+    subgraph AdminService["Admin Service (Next.js)"]
+        direction TB
+        AdminAdapterIn[Input Adapters<br/>Next.js App Router<br/>API Routes]
+        AdminPortsIn[Input Ports<br/>Use Case Interfaces]
+        AdminApp[Application Layer<br/>Use Cases, Services, DTOs]
+        AdminDomain[Domain Layer<br/>Entities, Business Rules]
+        AdminPortsOut[Output Ports<br/>Repository Interfaces]
+        AdminAdapterOut[Output Adapters<br/>MongoDB Repositories<br/>External Service Clients]
+        
+        AdminAdapterIn --> AdminPortsIn
+        AdminPortsIn --> AdminApp
+        AdminApp --> AdminDomain
+        AdminApp --> AdminPortsOut
+        AdminPortsOut --> AdminAdapterOut
+    end
+    
+    %% Viber Service with Hexagonal Architecture
+    subgraph ViberService["Viber Service (Express)"]
+        direction TB
+        ViberAdapterIn[Input Adapters<br/>Express Routes<br/>Webhook Handlers]
+        ViberPortsIn[Input Ports<br/>Use Case Interfaces]
+        ViberApp[Application Layer<br/>Use Cases, Services, DTOs]
+        ViberDomain[Domain Layer<br/>Entities, Business Rules]
+        ViberPortsOut[Output Ports<br/>Repository Interfaces]
+        ViberAdapterOut[Output Adapters<br/>MongoDB Repositories<br/>Message Publishers]
+        
+        ViberAdapterIn --> ViberPortsIn
+        ViberPortsIn --> ViberApp
+        ViberApp --> ViberDomain
+        ViberApp --> ViberPortsOut
+        ViberPortsOut --> ViberAdapterOut
+    end
+    
+    %% AI Service with Hexagonal Architecture
+    subgraph AIService["AI Service (Express)"]
+        direction TB
+        AIAdapterIn[Input Adapters<br/>Express Routes<br/>gRPC Server]
+        AIPortsIn[Input Ports<br/>Use Case Interfaces]
+        AIApp[Application Layer<br/>Use Cases, Services, DTOs]
+        AIDomain[Domain Layer<br/>Entities, Business Rules]
+        AIPortsOut[Output Ports<br/>Repository Interfaces]
+        AIAdapterOut[Output Adapters<br/>MongoDB Repositories<br/>AI Provider Clients]
+        
+        AIAdapterIn --> AIPortsIn
+        AIPortsIn --> AIApp
+        AIApp --> AIDomain
+        AIApp --> AIPortsOut
+        AIPortsOut --> AIAdapterOut
+    end
+    
+    %% Analytics Service with Hexagonal Architecture
+    subgraph AnalyticsService["Analytics Service (Express)"]
+        direction TB
+        AnalyticsAdapterIn[Input Adapters<br/>Express Routes<br/>Message Queue Consumers]
+        AnalyticsPortsIn[Input Ports<br/>Use Case Interfaces]
+        AnalyticsApp[Application Layer<br/>Use Cases, Services, DTOs]
+        AnalyticsDomain[Domain Layer<br/>Entities, Business Rules]
+        AnalyticsPortsOut[Output Ports<br/>Repository Interfaces]
+        AnalyticsAdapterOut[Output Adapters<br/>MongoDB Repositories]
+        
+        AnalyticsAdapterIn --> AnalyticsPortsIn
+        AnalyticsPortsIn --> AnalyticsApp
+        AnalyticsApp --> AnalyticsDomain
+        AnalyticsApp --> AnalyticsPortsOut
+        AnalyticsPortsOut --> AnalyticsAdapterOut
+    end
+    
+    %% Databases
+    AdminDB[(MongoDB<br/>admin database<br/>Users, Configs, Sessions)]
+    BotDB[(MongoDB<br/>bot database<br/>Conversations, Messages, Users)]
+    AIDB[(MongoDB<br/>ai database<br/>Models, Processing Logs)]
+    AnalyticsDB[(MongoDB<br/>analytics database<br/>Events, Metrics, Reports)]
+    
+    %% Message Queue
+    RabbitMQ[RabbitMQ<br/>Message Queue<br/>analytics.events]
+    
+    %% AI Model Providers
+    Ollama[Ollama<br/>Self-Hosted LLMs<br/>Llama 2, Mistral, etc.]
+    ExternalAI[External AI APIs<br/>OpenAI, Anthropic, etc.]
+    
+    %% User Connections
+    Users -->|HTTP| AdminAdapterIn
+    
+    %% Viber API Connection
+    ViberAPI -->|Webhook| ViberAdapterIn
+    
+    %% REST API Communications (Admin to other services)
+    AdminAdapterOut -->|REST API<br/>Configuration, Control| ViberAdapterIn
+    AdminAdapterOut -->|REST API<br/>Model Config, Training| AIAdapterIn
+    AdminAdapterOut -->|REST API<br/>Dashboard, Reports| AnalyticsAdapterIn
+    
+    %% gRPC Communication (Viber to AI)
+    ViberAdapterOut -->|gRPC<br/>Message Processing<br/>Intent Detection| AIAdapterIn
+    
+    %% RabbitMQ Communication (Viber to Analytics)
+    ViberAdapterOut -->|RabbitMQ<br/>Async Events<br/>analytics.events| RabbitMQ
+    RabbitMQ -->|Consume Events| AnalyticsAdapterIn
+    
+    %% Database Connections
+    AdminAdapterOut -->|Read/Write| AdminDB
+    ViberAdapterOut -->|Read/Write| BotDB
+    AIAdapterOut -->|Read/Write| AIDB
+    AnalyticsAdapterOut -->|Read/Write| AnalyticsDB
+    
+    %% AI Model Provider Connections
+    AIAdapterOut -->|HTTP API<br/>Local Models| Ollama
+    AIAdapterOut -->|REST API<br/>Cloud Models| ExternalAI
+    
+    %% Shared Package Dependencies
+    SharedPackage -.->|Imports| AdminApp
+    SharedPackage -.->|Imports| ViberApp
+    SharedPackage -.->|Imports| AIApp
+    SharedPackage -.->|Imports| AnalyticsApp
+    
+    %% Styling
+    classDef serviceBox fill:#4ECDC4,stroke:#333,stroke-width:3px,color:#000
+    classDef dbBox fill:#95E1D3,stroke:#333,stroke-width:2px,color:#000
+    classDef mqBox fill:#F38181,stroke:#333,stroke-width:2px,color:#000
+    classDef externalBox fill:#AA96DA,stroke:#333,stroke-width:2px,color:#000
+    classDef sharedBox fill:#FCBAD3,stroke:#333,stroke-width:2px,color:#000
+    classDef layerBox fill:#FFF9CA,stroke:#333,stroke-width:1px,color:#000
+    
+    class AdminService,ViberService,AIService,AnalyticsService serviceBox
+    class AdminDB,BotDB,AIDB,AnalyticsDB dbBox
+    class RabbitMQ mqBox
+    class ViberAPI,Users,ExternalAI externalBox
+    class Ollama serviceBox
+    class SharedPackage sharedBox
+    class AdminAdapterIn,AdminPortsIn,AdminApp,AdminDomain,AdminPortsOut,AdminAdapterOut layerBox
+    class ViberAdapterIn,ViberPortsIn,ViberApp,ViberDomain,ViberPortsOut,ViberAdapterOut layerBox
+    class AIAdapterIn,AIPortsIn,AIApp,AIDomain,AIPortsOut,AIAdapterOut layerBox
+    class AnalyticsAdapterIn,AnalyticsPortsIn,AnalyticsApp,AnalyticsDomain,AnalyticsPortsOut,AnalyticsAdapterOut layerBox
+

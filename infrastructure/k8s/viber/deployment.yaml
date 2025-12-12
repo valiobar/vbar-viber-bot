@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: viber-service
+  namespace: vbar-viber-bot
+  labels:
+    app: viber-service
+    component: viber
+    service: viber
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: viber-service
+  template:
+    metadata:
+      labels:
+        app: viber-service
+        component: viber
+        service: viber
+    spec:
+      containers:
+      - name: viber
+        image: vbar-viber:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 3001
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: vbar-config
+              key: NODE_ENV
+        - name: PORT
+          value: "3001"
+        - name: MONGODB_URI
+          valueFrom:
+            configMapKeyRef:
+              name: vbar-config
+              key: MONGODB_BOT_URI
+        - name: RABBITMQ_URL
+          valueFrom:
+            configMapKeyRef:
+              name: vbar-config
+              key: RABBITMQ_URL
+        - name: VIBER_BOT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: vbar-secrets
+              key: VIBER_BOT_TOKEN
+        - name: VIBER_WEBHOOK_URL
+          valueFrom:
+            secretKeyRef:
+              name: vbar-secrets
+              key: VIBER_WEBHOOK_URL
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3001
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3001
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 3001
+          initialDelaySeconds: 0
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 12
+      restartPolicy: Always
+

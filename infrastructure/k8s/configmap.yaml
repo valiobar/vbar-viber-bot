@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vbar-config
+  namespace: vbar-viber-bot
+  labels:
+    app: vbar-viber-bot
+data:
+  # Node Environment
+  NODE_ENV: "production"
+  
+  # MongoDB Connection Strings
+  MONGODB_ADMIN_URI: "mongodb://mongodb-admin:27017/admin"
+  MONGODB_BOT_URI: "mongodb://mongodb-bot:27017/bot"
+  MONGODB_AI_URI: "mongodb://mongodb-ai:27017/ai"
+  MONGODB_ANALYTICS_URI: "mongodb://mongodb-analytics:27017/analytics"
+  
+  # RabbitMQ Connection
+  RABBITMQ_URL: "amqp://admin:admin@rabbitmq:5672"
+  
+  # Ollama Configuration
+  OLLAMA_URL: "http://ollama:11434"
+  AI_MODEL_PROVIDER: "ollama"
+  AI_MODEL_NAME: "llama2"
+  
+  # Service Ports
+  ADMIN_PORT: "3000"
+  VIBER_PORT: "3001"
+  AI_PORT: "3002"
+  ANALYTICS_PORT: "3003"
+

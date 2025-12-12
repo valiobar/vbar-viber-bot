@@ -1,0 +1,33 @@
+{
+  "name": "@vbar/analytics",
+  "version": "1.0.0",
+  "description": "Analytics service for Viber bot - Node.js Express service",
+  "private": true,
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "lint": "eslint src --ext .ts",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@vbar/shared": "*",
+    "express": "^4.18.2",
+    "mongodb": "^6.0.0",
+    "amqplib": "^0.10.3",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.0.0",
+    "@types/amqplib": "^0.10.4",
+    "typescript": "^5.0.0",
+    "tsx": "^4.7.0",
+    "eslint": "^8.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0"
+  }
+}
+

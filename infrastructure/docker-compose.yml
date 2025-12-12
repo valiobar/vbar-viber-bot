@@ -1,0 +1,257 @@
+version: '3.8'
+
+services:
+  # Admin Service (Next.js)
+  admin:
+    build:
+      context: ..
+      dockerfile: infrastructure/docker/Dockerfile.admin
+    container_name: vbar-admin
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - MONGODB_URI=${MONGODB_ADMIN_URI:-mongodb://mongodb-admin:27017/admin}
+      - RABBITMQ_URL=${RABBITMQ_URL:-amqp://admin:admin@rabbitmq:5672}
+    depends_on:
+      mongodb-admin:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - vbar-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Viber Service (Node.js Express)
+  viber:
+    build:
+      context: ..
+      dockerfile: infrastructure/docker/Dockerfile.viber
+    container_name: vbar-viber
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - MONGODB_URI=${MONGODB_BOT_URI:-mongodb://mongodb-bot:27017/bot}
+      - RABBITMQ_URL=${RABBITMQ_URL:-amqp://admin:admin@rabbitmq:5672}
+      - VIBER_BOT_TOKEN=${VIBER_BOT_TOKEN:-}
+      - VIBER_WEBHOOK_URL=${VIBER_WEBHOOK_URL:-}
+    depends_on:
+      mongodb-bot:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - vbar-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # AI Service (Node.js Express)
+  ai:
+    build:
+      context: ..
+      dockerfile: infrastructure/docker/Dockerfile.ai
+    container_name: vbar-ai
+    ports:
+      - "3002:3002"
+    environment:
+      - NODE_ENV=production
+      - PORT=3002
+      - MONGODB_URI=${MONGODB_AI_URI:-mongodb://mongodb-ai:27017/ai}
+      - RABBITMQ_URL=${RABBITMQ_URL:-amqp://admin:admin@rabbitmq:5672}
+      - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434}
+      - AI_MODEL_PROVIDER=${AI_MODEL_PROVIDER:-ollama}
+      - AI_MODEL_NAME=${AI_MODEL_NAME:-llama2}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    depends_on:
+      mongodb-ai:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - vbar-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Analytics Service (Node.js Express)
+  analytics:
+    build:
+      context: ..
+      dockerfile: infrastructure/docker/Dockerfile.analytics
+    container_name: vbar-analytics
+    ports:
+      - "3003:3003"
+    environment:
+      - NODE_ENV=production
+      - PORT=3003
+      - MONGODB_URI=${MONGODB_ANALYTICS_URI:-mongodb://mongodb-analytics:27017/analytics}
+      - RABBITMQ_URL=${RABBITMQ_URL:-amqp://admin:admin@rabbitmq:5672}
+    depends_on:
+      mongodb-analytics:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - vbar-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # MongoDB Instances
+  mongodb-admin:
+    image: mongo:7
+    container_name: vbar-mongodb-admin
+    environment:
+      - MONGO_INITDB_DATABASE=admin
+    volumes:
+      - mongodb-admin-data:/data/db
+    restart: unless-stopped
+    networks:
+      - vbar-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  mongodb-bot:
+    image: mongo:7
+    container_name: vbar-mongodb-bot
+    environment:
+      - MONGO_INITDB_DATABASE=bot
+    volumes:
+      - mongodb-bot-data:/data/db
+    restart: unless-stopped
+    networks:
+      - vbar-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  mongodb-ai:
+    image: mongo:7
+    container_name: vbar-mongodb-ai
+    environment:
+      - MONGO_INITDB_DATABASE=ai
+    volumes:
+      - mongodb-ai-data:/data/db
+    restart: unless-stopped
+    networks:
+      - vbar-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  mongodb-analytics:
+    image: mongo:7
+    container_name: vbar-mongodb-analytics
+    environment:
+      - MONGO_INITDB_DATABASE=analytics
+    volumes:
+      - mongodb-analytics-data:/data/db
+    restart: unless-stopped
+    networks:
+      - vbar-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # RabbitMQ Message Queue
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: vbar-rabbitmq
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:-admin}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASS:-admin}
+    ports:
+      - "5672:5672"   # AMQP port
+      - "15672:15672" # Management UI port
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    restart: unless-stopped
+    networks:
+      - vbar-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # Ollama (Self-hosted AI Models)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: vbar-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    restart: unless-stopped
+    networks:
+      - vbar-network
+    # Note: For GPU support, uncomment the deploy section below
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+# Networks
+networks:
+  vbar-network:
+    driver: bridge
+    name: vbar-network
+
+# Volumes
+volumes:
+  mongodb-admin-data:
+    name: vbar-mongodb-admin-data
+  mongodb-bot-data:
+    name: vbar-mongodb-bot-data
+  mongodb-ai-data:
+    name: vbar-mongodb-ai-data
+  mongodb-analytics-data:
+    name: vbar-mongodb-analytics-data
+  rabbitmq-data:
+    name: vbar-rabbitmq-data
+  ollama-data:
+    name: vbar-ollama-data
+

@@ -1,0 +1,520 @@
+---
+description: Whenever a plan or implementation plan is mentioned, use this rule for working with implementation plans, executing steps, and following structured development workflows.
+alwaysApply: false
+---
+
+# Implementation Plans Workflow
+
+## Plan Structure Understanding
+
+Implementation plans typically follow this structure:
+
+- **Overview**: High-level description of what needs to be implemented
+- **Current State Analysis**: What exists (✅) and what's missing (❌)
+- **Implementation Steps**: Numbered, sequential steps with specific file locations and code changes
+- **UI/UX Considerations**: Design and user experience guidelines
+- **Files to Modify**: List of files that will be changed
+- **Implementation Order**: Recommended sequence for executing steps
+
+## Plan File Management
+
+### Plan File Location
+
+- **Default Location**: All implementation plans should be stored in the `plans/` folder at the root of the project
+- **File Naming**: Use descriptive names in UPPERCASE with hyphens and the `.plan.md` extension (e.g., `BACK_BUTTON_IMPLEMENTATION_PLAN.plan.md`)
+- **Create Folder if Missing**: If the `plans/` folder doesn't exist, create it before creating plan files
+
+### Creating New Plans
+
+When creating a new implementation plan:
+
+1. **Review Documentation**: Before creating the plan, review `documentation/architecture.md` to understand service structure, `documentation/api.md` for API contracts, and other relevant documentation
+2. **Check Shared Package**: Review `packages/shared/src/types/`, `packages/shared/src/utils/`, and `packages/shared/src/config/` to identify existing types, utilities, and configurations that should be referenced in the plan
+3. **Check for Plans Folder**: Verify `plans/` folder exists at project root
+4. **Create Folder if Needed**: If it doesn't exist, create the `plans/` directory
+5. **Create Plan File**: Create a new `.plan.md` file in the `plans/` folder with a descriptive name (e.g., `FEATURE_NAME_IMPLEMENTATION_PLAN.plan.md`)
+6. **Follow Plan Structure**: Use the standard plan structure (Overview, Current State, Steps, etc.)
+7. **Reference Shared Resources**: In the plan, explicitly reference which types from `@shared` should be used, which utilities are available, and which configuration patterns to follow
+
+### Updating Existing Plans
+
+When updating implementation plans:
+
+1. **Mark Completed Steps**: Add checkmarks (✅) to steps that are fully implemented
+2. **Mark Modified Files**: Add checkmarks (✅) to files in the "Files to Modify" section that have been changed
+3. **Mark Completed Missing Components**: When a missing component from the "❌ Missing Components" section is implemented, mark it with ✅ and add a note indicating which step completed it (e.g., "✅ Logic to determine element state - **COMPLETED in Step 1**")
+4. **Update Progress**: Keep the plan file synchronized with actual implementation status
+
+## Working with Implementation Plans
+
+### When a Plan is Referenced
+
+1. **Read the Full Plan**: Understand the complete context before starting
+2. **Review Documentation**: Check `documentation/architecture.md` for service structure and patterns, `documentation/api.md` for API contracts, and other relevant documentation
+3. **Check Shared Package**: Review `packages/shared/src/types/` for existing types, `packages/shared/src/utils/` for utilities, and `packages/shared/src/config/` for configuration helpers that should be used
+4. **Identify Current Step**: Determine which step(s) the user wants to execute
+5. **Check Prerequisites**: Verify previous steps are completed
+6. **Follow Step Details**: Execute exactly as specified in the plan, using shared resources where applicable
+
+### Executing Plan Steps
+
+#### Step Execution Protocol
+
+1. **Read the Step Details**:
+
+   - File path(s) to modify
+   - Specific changes required
+   - Code location hints (line numbers, function names, etc.)
+   - Dependencies on other steps
+
+2. **Consult Documentation and Shared Resources**:
+
+   - **Review Documentation**: Check `documentation/architecture.md` for service structure, `documentation/api.md` for API contracts, and other relevant docs
+   - **Check Shared Package**: Review `packages/shared/src/types/` for existing types, `packages/shared/src/utils/` for utilities, and `packages/shared/src/config/` for configuration helpers
+   - **Verify Patterns**: Ensure the implementation follows documented architectural patterns and uses existing shared resources
+
+3. **Verify Current State**:
+
+   - Read the target file(s) to understand current implementation
+   - Check if prerequisites from previous steps are in place
+   - Identify exact locations for changes
+   - Check if the file already imports from `@shared` package
+
+4. **Implement Changes**:
+
+   - Make changes exactly as specified in the plan
+   - **Use Shared Types**: Import types from `@shared` instead of creating new ones (e.g., `ApiResponse`, `BaseEntity`, service-specific types)
+   - **Use Shared Utilities**: Import utilities from `@shared` when available (e.g., `ConsoleLogger`, validation helpers)
+   - **Use Shared Config**: Use `ConfigHelper` and configuration patterns from `@shared`
+   - Follow code style guidelines from other rules
+   - Preserve existing functionality not mentioned in the step
+   - Add necessary imports and dependencies
+
+5. **Verify Implementation**:
+
+   - Check for linting errors
+   - Ensure code compiles/runs
+   - Verify the change matches the step description
+   - Verify imports from `@shared` are correct
+
+6. **Update Documentation if Needed**:
+   - **Check if documentation needs updates**: After implementing changes, determine if the implementation affects any documentation in `documentation/`
+   - **Update Architecture Docs** (`documentation/architecture.md`): If service structure, communication patterns, or architectural patterns changed
+   - **Update API Docs** (`documentation/api.md`): If API endpoints, request/response formats, or API contracts changed
+   - **Update Deployment Docs** (`documentation/deployment.md`): If deployment configurations, environment variables, or infrastructure requirements changed
+   - **Update Setup Docs** (`documentation/setup.md`): If development setup, local development requirements, or setup procedures changed
+   - **Keep Documentation Synchronized**: Ensure documentation accurately reflects the current implementation state
+
+#### Multiple Steps Execution
+
+When executing multiple steps:
+
+- **Execute in Order**: Follow the implementation order specified in the plan
+- **Complete Each Step Fully**: Don't partially implement steps
+- **Verify After Each Step**: Check for errors before moving to the next step
+- **Update Documentation After Each Step**: After each step, check if documentation in `documentation/` needs updates and update it immediately to keep documentation synchronized
+- **Update Progress**: Mark completed steps if the plan has a checklist
+
+### Plan Step Format
+
+Steps typically include:
+
+```
+### Step N: [Title]
+
+**File**: `path/to/file.ts`
+
+**Changes**:
+- Specific change 1
+- Specific change 2
+- Code location hints
+
+**Code Location**: Around line X or in function Y
+```
+
+### Common Step Types
+
+#### 1. Type/Interface Updates
+
+- Add properties to types
+- Update function signatures
+- Add new type definitions
+
+#### 2. Hook/Store Updates
+
+- Expose new functions/values
+- Add callbacks with useCallback
+- Update return objects
+
+#### 3. Component Updates
+
+- Add new UI elements
+- Import new dependencies
+- Update props/events handling
+- Add conditional rendering logic
+
+#### 4. Style Updates
+
+- Add new CSS classes
+- Update existing styles
+- Add responsive breakpoints
+- Match design system patterns
+
+#### 5. Logic Implementation
+
+- Add event handlers
+- Implement business logic
+- Connect to store/state
+- Handle edge cases
+
+### Reference Documentation and Shared Resources
+
+**CRITICAL**: Before creating or executing any implementation plan, you MUST consult the project documentation and existing shared resources to ensure consistency, avoid duplication, and follow established patterns.
+
+#### Documentation Reference (`documentation/`)
+
+When planning or executing implementation steps, **ALWAYS** refer to the following documentation files:
+
+1. **`documentation/architecture.md`**:
+
+   - System architecture overview
+   - Service descriptions and responsibilities
+   - Database schemas
+   - Communication patterns (REST, gRPC, RabbitMQ)
+   - Hexagonal Architecture details
+   - Service-specific structure guidelines
+   - **Use this to understand**: How services are structured, what each service does, how they communicate, and architectural patterns to follow
+
+2. **`documentation/api.md`**:
+
+   - API endpoint specifications
+   - Request/response formats
+   - Authentication requirements
+   - Error handling patterns
+   - **Use this to understand**: API contracts, endpoint details, and integration requirements
+
+3. **`documentation/deployment.md`**:
+
+   - Deployment configurations
+   - Environment variables
+   - Infrastructure requirements
+   - **Use this to understand**: Deployment patterns, environment setup, and infrastructure needs
+
+4. **`documentation/setup.md`**:
+   - Development setup instructions
+   - Local development requirements
+   - **Use this to understand**: Development environment setup and local testing procedures
+
+**When to Reference Documentation**:
+
+- **Before creating a plan**: Review relevant documentation to understand system architecture and patterns
+- **During plan creation**: Ensure the plan aligns with documented architecture and patterns
+- **During execution**: Verify implementation matches documented specifications and patterns
+- **When unsure**: Check documentation before making assumptions about system behavior
+
+#### Shared Package Reference (`packages/shared/`)
+
+When planning or executing implementation steps, **ALWAYS** check the shared package for existing types, utilities, and configurations to avoid duplication and ensure consistency.
+
+**Location**: `packages/shared/src/`
+
+**Available Resources**:
+
+1. **Types** (`packages/shared/src/types/`):
+
+   - **`common.ts`**: Base types (BaseEntity, ApiResponse, PaginationParams, MessageQueueEvent, HealthCheckResponse, etc.)
+   - **`admin.ts`**: Admin service types (User, Config)
+   - **`viber.ts`**: Viber service types (Message, SendMessageRequest, SendMessageResponse)
+   - **`ai.ts`**: AI service types (ProcessMessageRequest, ProcessMessageResponse, DetectIntentRequest, etc.)
+   - **`index.ts`**: Re-exports all types
+   - **Use this to**: Import existing types instead of creating new ones, ensure type consistency across services
+
+2. **Utilities** (`packages/shared/src/utils/`):
+
+   - Logger interface and ConsoleLogger implementation
+   - Validation helpers
+   - Date/time utilities
+   - Error handling utilities
+   - **Use this to**: Leverage existing utility functions instead of reimplementing them
+
+3. **Configuration** (`packages/shared/src/config/`):
+   - EnvironmentConfig interface
+   - ConfigHelper class for environment variable management
+   - Configuration validation utilities
+   - **Use this to**: Use existing configuration patterns and helpers
+
+**When to Reference Shared Package**:
+
+- **Before creating types**: Check if types already exist in `packages/shared/src/types/`
+- **Before implementing utilities**: Check if utility functions already exist in `packages/shared/src/utils/`
+- **Before configuring services**: Check if configuration helpers exist in `packages/shared/src/config/`
+- **During implementation**: Import from `@shared` package instead of creating duplicate code
+- **When adding new shared code**: Add to `packages/shared/` if it will be used by multiple services
+
+**Import Pattern**:
+
+```typescript
+// Import types
+import { User, Message, ApiResponse } from "@shared";
+
+// Import utilities
+import { ConsoleLogger, validateEmail } from "@shared";
+
+// Import configuration
+import { ConfigHelper, EnvironmentConfig } from "@shared";
+```
+
+**Best Practices for Shared Package**:
+
+- **DO**: Use existing types and utilities from `@shared`
+- **DO**: Add new shared types/utilities to `packages/shared/` if used by multiple services
+- **DON'T**: Duplicate types or utilities that already exist in `@shared`
+- **DON'T**: Create service-specific types in `@shared` (use service-specific type files)
+- **DO**: Organize new shared types by service (e.g., `types/admin.ts`, `types/viber.ts`, `types/ai.ts`)
+
+### Best Practices
+
+#### Before Starting
+
+- **Read Documentation**: Review relevant files in `documentation/` to understand architecture, APIs, and patterns
+- **Check Shared Package**: Review `packages/shared/` for existing types, utilities, and configurations
+- Read the entire plan to understand the full scope
+- Identify all files that will be modified
+- Understand dependencies between steps
+- Check if any prerequisites are needed
+
+#### During Implementation
+
+- Follow the exact file paths and locations specified
+- Maintain code style consistency
+- Add proper TypeScript types
+- Include accessibility attributes where needed
+- Add data-testid attributes for testing
+
+#### After Implementation
+
+- Run linters to check for errors
+- Verify the implementation matches the step description
+- Check if the change integrates with existing code
+- **Update Documentation**: **CRITICAL** - After each step execution, check if the implementation requires updates to documentation in `documentation/`:
+  - **`documentation/architecture.md`**: Update if service structure, database schemas, communication patterns, or architectural patterns changed
+  - **`documentation/api.md`**: Update if API endpoints, request/response formats, authentication, or error handling changed
+  - **`documentation/deployment.md`**: Update if deployment configurations, environment variables, Docker/Kubernetes configs, or infrastructure requirements changed
+  - **`documentation/setup.md`**: Update if development setup, installation steps, local development requirements, or setup procedures changed
+- **Documentation Sync**: Ensure all documentation files accurately reflect the current implementation state - documentation should always be up-to-date with the codebase
+
+### Documentation Maintenance
+
+**CRITICAL**: Documentation in `documentation/` must be kept synchronized with the codebase at all times.
+
+#### When to Update Documentation
+
+After executing any step, **ALWAYS** check if the implementation requires documentation updates:
+
+1. **Architecture Changes** (`documentation/architecture.md`):
+
+   - Service structure modifications
+   - Database schema changes
+   - Communication pattern changes (REST, gRPC, RabbitMQ)
+   - Hexagonal Architecture layer changes
+   - New services or service removal
+
+2. **API Changes** (`documentation/api.md`):
+
+   - New API endpoints
+   - Modified request/response formats
+   - Authentication/authorization changes
+   - Error response format changes
+   - API versioning changes
+
+3. **Deployment Changes** (`documentation/deployment.md`):
+
+   - Environment variable additions/modifications
+   - Docker configuration changes
+   - Kubernetes manifest updates
+   - Infrastructure requirements changes
+   - Deployment procedure modifications
+
+4. **Setup Changes** (`documentation/setup.md`):
+   - Development environment requirements
+   - Installation steps
+   - Local development setup procedures
+   - Dependency changes
+   - Configuration file changes
+
+#### Documentation Update Process
+
+1. **After Each Step**: Immediately after implementing a step, assess if documentation needs updates
+2. **Identify Affected Docs**: Determine which documentation file(s) are affected by the changes
+3. **Update Documentation**: Make necessary updates to keep documentation accurate
+4. **Verify Accuracy**: Ensure documentation reflects the current implementation state
+5. **Maintain Consistency**: Keep all documentation files consistent with each other
+
+#### Documentation Update Checklist
+
+When updating documentation:
+
+- [ ] Identify which documentation file(s) need updates
+- [ ] Review the current documentation content
+- [ ] Update affected sections with new/changed information
+- [ ] Remove outdated information
+- [ ] Verify documentation accuracy against implementation
+- [ ] Ensure cross-references between documentation files are still valid
+- [ ] Check that examples and code snippets are up-to-date
+
+### Handling Plan Updates
+
+If the plan needs to be updated:
+
+- **Document Changes**: Note what was different from the plan
+- **Update Plan File**: If the plan is a markdown file, update it to reflect actual implementation
+- **Note Deviations**: Explain why changes were made if they differ from the plan
+
+### Plan Execution Checklist
+
+When executing steps from a plan:
+
+- [ ] **Review Documentation**: Check `documentation/architecture.md`, `documentation/api.md`, and other relevant docs for context
+- [ ] **Check Shared Package**: Review `packages/shared/src/types/`, `packages/shared/src/utils/`, and `packages/shared/src/config/` for existing resources
+- [ ] Read and understand the full plan context
+- [ ] Identify which step(s) to execute
+- [ ] Verify prerequisites are met
+- [ ] Read target file(s) to understand current state
+- [ ] **Verify Shared Resources**: Check if types/utilities from `@shared` should be used instead of creating new ones
+- [ ] Implement changes as specified
+- [ ] **Use Shared Imports**: Import from `@shared` package where applicable
+- [ ] Check for linting/compilation errors
+- [ ] Verify implementation matches step description
+- [ ] **Update Documentation**: Check if implementation requires updates to `documentation/` files and update accordingly:
+  - [ ] `documentation/architecture.md` (if architecture/structure changed)
+  - [ ] `documentation/api.md` (if APIs changed)
+  - [ ] `documentation/deployment.md` (if deployment config changed)
+  - [ ] `documentation/setup.md` (if setup procedures changed)
+- [ ] Test the changes if possible
+- [ ] Mark step as complete in plan with ✅ checkmark
+- [ ] Mark modified files in "Files to Modify" section with ✅ checkmark
+- [ ] Mark completed missing components in "❌ Missing Components" section with ✅ checkmark and note which step completed it
+
+### Common Patterns in Plans
+
+#### File Location Hints
+
+- "around line X" - approximate location
+- "after function Y" - relative to existing code
+- "in useMemo/useEffect" - within specific hook
+- "add to imports" - at top of file
+
+#### Change Descriptions
+
+- "Add X to Y" - append to existing structure
+- "Update X to Y" - modify existing code
+- "Create X" - new code to add
+- "Extract X from Y" - destructure or separate
+
+#### Conditional Logic
+
+- "Only show when X" - conditional rendering
+- "Disable when Y" - conditional disabled state
+- "Hide if Z" - conditional visibility
+
+### Error Handling
+
+If a step cannot be executed as written:
+
+1. **Identify the Issue**: What prevents following the plan exactly?
+2. **Check Context**: Is there missing information or changed code?
+3. **Ask for Clarification**: Request guidance if the plan is unclear
+4. **Propose Alternative**: Suggest an alternative approach if needed
+5. **Document Deviation**: Note any changes from the original plan
+
+### Hexagonal Architecture Principles
+
+**ALL implementation plans MUST follow Hexagonal Architecture (Ports and Adapters) principles** when creating or modifying service code. This ensures separation of concerns, testability, and independence from external frameworks.
+
+#### Architecture Layers
+
+When implementing service code, structure must follow these layers:
+
+1. **Domain Layer** (`src/domain/`):
+
+   - Core business logic, entities, and domain rules (innermost layer)
+   - Domain entities and value objects
+   - Domain services
+   - Business rules and validations
+   - **MUST NOT** depend on external frameworks or infrastructure
+
+2. **Application Layer** (`src/application/`):
+
+   - Use cases and application services
+   - Orchestration logic
+   - DTOs (Data Transfer Objects)
+   - Application-specific interfaces
+   - **MUST NOT** depend on infrastructure adapters
+
+3. **Ports (Interfaces)**:
+
+   - **Input Ports** (`src/ports/in/`): Interfaces for incoming operations (use cases)
+   - **Output Ports** (`src/ports/out/`): Interfaces for outgoing operations (repositories, message publishers, external services)
+   - Define contracts, not implementations
+
+4. **Adapters (Infrastructure)**:
+   - **Input Adapters** (`src/adapters/in/`): HTTP controllers, message queue consumers, WebSocket handlers
+   - **Output Adapters** (`src/adapters/out/`): Database repositories, message queue publishers, external API clients
+   - Implement ports/interfaces defined in the ports layer
+
+#### Key Principles
+
+When creating or executing implementation plans:
+
+- **Dependency Rule**: Dependencies point inward - Domain has no dependencies, Application depends only on Domain, Adapters depend on Ports and Application
+- **Interface Segregation**: Define ports (interfaces) before implementing adapters
+- **Dependency Inversion**: Depend on abstractions (ports/interfaces), not concrete implementations
+- **Separation of Concerns**: Business logic stays in Domain/Application layers, infrastructure details in Adapters
+- **Testability**: Domain and Application layers should be testable without external dependencies (mocks/stubs for ports)
+
+#### Implementation Guidelines
+
+When implementing plan steps:
+
+1. **For New Features**:
+
+   - Start with Domain entities and business rules
+   - Define use cases in Application layer
+   - Create port interfaces (input/output)
+   - Implement adapters last
+
+2. **For Service Structure**:
+
+   - Follow the directory structure: `domain/`, `application/`, `ports/in/`, `ports/out/`, `adapters/in/`, `adapters/out/`
+   - Keep layers physically separated in different directories
+
+3. **For Dependencies**:
+
+   - Domain layer: No external dependencies
+   - Application layer: Only domain dependencies
+   - Adapters: Can depend on frameworks (Express, MongoDB drivers, etc.)
+
+4. **For Next.js Services**:
+   - Adapt Hexagonal Architecture to Next.js structure
+   - Use Next.js App Router as input adapter
+   - Keep business logic in domain/application layers
+
+#### Plan Step Requirements
+
+When creating implementation plans that involve service code:
+
+- Specify which layer each file belongs to (domain, application, ports, adapters)
+- Ensure dependency direction is correct (inward dependencies only)
+- Include port interfaces before adapter implementations
+- Document any deviations from hexagonal architecture with justification
+
+### Integration with Other Rules
+
+When executing plan steps:
+
+- **Follow Code Style Rules**: Apply general coding guidelines
+- **Use TypeScript**: All code must be TypeScript
+- **Follow React Patterns**: Use hooks, functional components, etc. (for frontend/Next.js)
+- **Apply Testing Standards**: Add test IDs and consider testability
+- **Maintain Accessibility**: Include ARIA labels and keyboard support (for UI components)
+- **Follow Hexagonal Architecture**: Structure all service code according to Hexagonal Architecture principles (see above)

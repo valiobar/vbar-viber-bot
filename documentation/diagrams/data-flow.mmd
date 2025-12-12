@@ -1,0 +1,91 @@
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#ff6b6b','primaryTextColor':'#fff','primaryBorderColor':'#7C0000','lineColor':'#F8B229','secondaryColor':'#006100','tertiaryColor':'#fff'}}}%%
+graph TB
+    %% External Entities
+    User[User<br/>Viber App]
+    AdminUser[Admin User<br/>Dashboard]
+    ViberAPI[Viber API<br/>External Service]
+    ExternalAI[External AI APIs<br/>OpenAI, Anthropic, etc.]
+    Ollama[Ollama<br/>Self-Hosted LLMs]
+    
+    %% Services
+    AdminService[Admin Service<br/>Next.js]
+    ViberService[Viber Service<br/>Express]
+    AIService[AI Service<br/>Express]
+    AnalyticsService[Analytics Service<br/>Express]
+    
+    %% Databases
+    AdminDB[(MongoDB<br/>admin)]
+    BotDB[(MongoDB<br/>bot)]
+    AIDB[(MongoDB<br/>ai)]
+    AnalyticsDB[(MongoDB<br/>analytics)]
+    
+    %% Message Queue
+    RabbitMQ[RabbitMQ<br/>Message Queue]
+    
+    %% Flow 1: User Message Processing (Main Flow)
+    User -->|1. User sends message| ViberAPI
+    ViberAPI -->|2. Webhook POST<br/>HTTP| ViberService
+    ViberService -->|3. Save incoming message<br/>Write| BotDB
+    ViberService -->|4. gRPC Request<br/>Process Message| AIService
+    AIService -->|5. Read model config<br/>Read| AIDB
+    AIService -->|6. AI Processing<br/>HTTP API| ExternalAI
+    AIService -->|7. AI Processing<br/>Alternative<br/>HTTP API| Ollama
+    AIService -->|8. Save processing log<br/>Write| AIDB
+    AIService -->|9. gRPC Response<br/>AI Result| ViberService
+    ViberService -->|10. Generate & save response<br/>Write| BotDB
+    ViberService -->|11. Send response<br/>HTTP| ViberAPI
+    ViberAPI -->|12. Deliver message| User
+    ViberService -->|13. Publish analytics event<br/>Async| RabbitMQ
+    
+    %% Flow 2: Analytics Event Processing (Asynchronous)
+    RabbitMQ -->|14. Consume event<br/>Async| AnalyticsService
+    AnalyticsService -->|15. Process & aggregate<br/>Write| AnalyticsDB
+    AnalyticsService -->|16. Update metrics<br/>Write| AnalyticsDB
+    
+    %% Flow 3: Admin Dashboard - Authentication
+    AdminUser -->|17. Login request<br/>HTTP| AdminService
+    AdminService -->|18. Authenticate user<br/>Read| AdminDB
+    AdminService -->|19. Create session<br/>Write| AdminDB
+    AdminService -->|20. Return JWT token| AdminUser
+    
+    %% Flow 4: Admin Dashboard - View Analytics
+    AdminUser -->|21. Request analytics<br/>HTTP| AdminService
+    AdminService -->|22. REST API Request| AnalyticsService
+    AnalyticsService -->|23. Query analytics data<br/>Read| AnalyticsDB
+    AnalyticsService -->|24. REST API Response| AdminService
+    AdminService -->|25. Display dashboard| AdminUser
+    
+    %% Flow 5: Admin Dashboard - Configure Bot
+    AdminUser -->|26. Update bot config<br/>HTTP| AdminService
+    AdminService -->|27. REST API Request| ViberService
+    ViberService -->|28. Update configuration<br/>Write| BotDB
+    ViberService -->|29. REST API Response| AdminService
+    AdminService -->|30. Confirm update| AdminUser
+    
+    %% Flow 6: Admin Dashboard - Configure AI
+    AdminUser -->|31. Update AI model<br/>HTTP| AdminService
+    AdminService -->|32. REST API Request| AIService
+    AIService -->|33. Update model config<br/>Write| AIDB
+    AIService -->|34. REST API Response| AdminService
+    AdminService -->|35. Confirm update| AdminUser
+    
+    %% Flow 7: Admin Dashboard - Generate Report
+    AdminUser -->|36. Request report<br/>HTTP| AdminService
+    AdminService -->|37. REST API Request| AnalyticsService
+    AnalyticsService -->|38. Generate report<br/>Read/Aggregate| AnalyticsDB
+    AnalyticsService -->|39. REST API Response| AdminService
+    AdminService -->|40. Display report| AdminUser
+    
+    %% Styling
+    classDef userBox fill:#AA96DA,stroke:#333,stroke-width:2px,color:#000
+    classDef serviceBox fill:#4ECDC4,stroke:#333,stroke-width:3px,color:#000
+    classDef dbBox fill:#95E1D3,stroke:#333,stroke-width:2px,color:#000
+    classDef mqBox fill:#F38181,stroke:#333,stroke-width:2px,color:#000
+    classDef externalBox fill:#FFD93D,stroke:#333,stroke-width:2px,color:#000
+    
+    class User,AdminUser userBox
+    class AdminService,ViberService,AIService,AnalyticsService serviceBox
+    class AdminDB,BotDB,AIDB,AnalyticsDB dbBox
+    class RabbitMQ mqBox
+    class ViberAPI,ExternalAI,Ollama externalBox
+
