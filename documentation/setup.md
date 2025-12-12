@@ -105,7 +105,8 @@ cp services/analytics/.env.example services/analytics/.env
 
 ```env
 # Database
-MONGODB_URI=mongodb://localhost:27017/admin
+# Format: mongodb://username:password@host:port/database
+MONGODB_URI=mongodb://admin:admin123@localhost:27017/admin
 MONGODB_DB_NAME=admin
 
 # Next.js
@@ -131,7 +132,8 @@ PORT=3001
 NODE_ENV=development
 
 # Database
-MONGODB_URI=mongodb://localhost:27017/bot
+# Format: mongodb://username:password@host:port/database
+MONGODB_URI=mongodb://bot:bot123@localhost:27018/bot
 MONGODB_DB_NAME=bot
 
 # Message Queue
@@ -155,7 +157,8 @@ PORT=3002
 NODE_ENV=development
 
 # Database
-MONGODB_URI=mongodb://localhost:27017/ai
+# Format: mongodb://username:password@host:port/database
+MONGODB_URI=mongodb://ai:ai123@localhost:27019/ai
 MONGODB_DB_NAME=ai
 
 # Message Queue
@@ -184,7 +187,8 @@ PORT=3003
 NODE_ENV=development
 
 # Database
-MONGODB_URI=mongodb://localhost:27017/analytics
+# Format: mongodb://username:password@host:port/database
+MONGODB_URI=mongodb://analytics:analytics123@localhost:27020/analytics
 MONGODB_DB_NAME=analytics
 
 # Message Queue
@@ -205,25 +209,38 @@ This approach allows you to run services separately for development and debuggin
 First, start the required infrastructure services using Docker Compose:
 
 ```bash
-# Start MongoDB, RabbitMQ, and Ollama
-docker compose -f infrastructure/docker-compose.dev.yml up -d
+# Start MongoDB and RabbitMQ
+docker compose -f infrastructure/docker-compose.infrastructure.yml up -d
 ```
 
 This starts:
 
-- MongoDB instances (one per service) on ports 27017-27020
+- MongoDB instances (one per service) on ports 27017-27020 with authentication enabled
+  - Admin DB: `mongodb://admin:admin123@localhost:27017/admin`
+  - Bot DB: `mongodb://bot:bot123@localhost:27018/bot`
+  - AI DB: `mongodb://ai:ai123@localhost:27019/ai`
+  - Analytics DB: `mongodb://analytics:analytics123@localhost:27020/analytics`
 - RabbitMQ on port 5672 (management UI on port 15672)
-- Ollama on port 11434 (for self-hosted AI models)
+  - Default credentials: `admin/admin`
 
-**Note**: After starting Ollama, you may want to pull a model:
+**Note**: MongoDB authentication is enabled by default. You can customize credentials by setting environment variables:
+
+- `MONGO_ADMIN_USER`, `MONGO_ADMIN_PASS`
+- `MONGO_BOT_USER`, `MONGO_BOT_PASS`
+- `MONGO_AI_USER`, `MONGO_AI_PASS`
+- `MONGO_ANALYTICS_USER`, `MONGO_ANALYTICS_PASS`
+
+**Important**: When starting MongoDB for the first time with authentication, the databases will be initialized with the root users. If you need to reset the databases (e.g., after changing credentials), you'll need to remove the volumes:
 
 ```bash
-# Pull a model (e.g., Llama 2)
-docker exec -it ollama ollama pull llama2
+# Stop containers
+docker compose -f infrastructure/docker-compose.infrastructure.yml down
 
-# Or pull other models
-docker exec -it ollama ollama pull mistral
-docker exec -it ollama ollama pull codellama
+# Remove volumes (WARNING: This deletes all data)
+docker volume rm vbar-mongodb-admin-data vbar-mongodb-bot-data vbar-mongodb-ai-data vbar-mongodb-analytics-data
+
+# Start again with new credentials
+docker compose -f infrastructure/docker-compose.infrastructure.yml up -d
 ```
 
 #### Run Services in Development Mode
@@ -299,18 +316,33 @@ docker compose -f infrastructure/docker-compose.yml down
 
 #### MongoDB Setup
 
-MongoDB instances are automatically created when using Docker Compose. For manual setup:
+MongoDB instances are automatically created when using Docker Compose with authentication enabled. For manual setup:
 
 ```bash
-# Start MongoDB container
+# Start MongoDB container with authentication
 docker run -d \
   --name mongodb-admin \
   -p 27017:27017 \
   -e MONGO_INITDB_DATABASE=admin \
+  -e MONGO_INITDB_ROOT_USERNAME=admin \
+  -e MONGO_INITDB_ROOT_PASSWORD=admin123 \
   mongo:latest
 
 # Repeat for other databases (bot, ai, analytics) on different ports
+# Remember to use different usernames and passwords for each instance
 ```
+
+**Connection String Format**: `mongodb://username:password@host:port/database`
+
+**MongoDB Compass Connection**:
+
+- Connection String: `mongodb://admin:admin123@localhost:27017/admin`
+- Or use the form:
+  - Host: `localhost`
+  - Port: `27017`
+  - Username: `admin`
+  - Password: `admin123`
+  - Authentication Database: `admin`
 
 #### Database Migrations
 
@@ -583,14 +615,15 @@ All services support hot reload in development mode:
 4. **Configure AI Model Provider**:
 
    **Option A: Using Ollama (Self-Hosted - Recommended for Development)**:
-   
+
    ```env
    AI_MODEL_PROVIDER=ollama
    OLLAMA_URL=http://localhost:11434
    AI_MODEL_NAME=llama2
    ```
-   
+
    Ensure Ollama is running (via Docker Compose or local installation):
+
    ```bash
    # Pull a model if not already done
    ollama pull llama2
@@ -599,14 +632,15 @@ All services support hot reload in development mode:
    ```
 
    **Option B: Using External AI APIs**:
-   
+
    ```env
    AI_MODEL_PROVIDER=openai
    OPENAI_API_KEY=your-openai-api-key
    AI_MODEL_NAME=gpt-4
    ```
-   
+
    Or for Anthropic:
+
    ```env
    AI_MODEL_PROVIDER=anthropic
    ANTHROPIC_API_KEY=your-anthropic-api-key
@@ -620,6 +654,7 @@ All services support hot reload in development mode:
    ```
 
 6. Verify service is running:
+
    ```bash
    curl http://localhost:3002/health
    ```
@@ -642,6 +677,7 @@ All services support hot reload in development mode:
 **AI Provider Switching**:
 
 The AI Service supports dynamic provider switching. You can:
+
 - Use Ollama for development and testing (no API costs)
 - Use external APIs for production or specific use cases
 - Configure fallback providers for reliability
@@ -739,16 +775,20 @@ taskkill /PID <PID> /F
    docker ps | grep mongo
    ```
 
-2. Check MongoDB connection string in `.env`:
+2. Check MongoDB connection string in `.env` (must include credentials):
 
    ```env
-   MONGODB_URI=mongodb://localhost:27017/admin
+   MONGODB_URI=mongodb://admin:admin123@localhost:27017/admin
    ```
 
 3. Test connection:
 
    ```bash
-   docker exec -it mongodb-admin mongosh
+   # Connect with authentication
+   docker exec -it vbar-mongodb-admin mongosh -u admin -p admin123 --authenticationDatabase admin
+
+   # Or test from host
+   mongosh "mongodb://admin:admin123@localhost:27017/admin"
    ```
 
 4. Check MongoDB logs:
@@ -779,10 +819,17 @@ taskkill /PID <PID> /F
    docker ps | grep rabbitmq
    ```
 
-2. Check RabbitMQ connection URL:
+2. Check RabbitMQ connection URL (includes credentials):
 
    ```env
    RABBITMQ_URL=amqp://admin:admin@localhost:5672
+   ```
+
+   Or use environment variables:
+
+   ```env
+   RABBITMQ_USER=admin
+   RABBITMQ_PASS=admin
    ```
 
 3. Access RabbitMQ Management UI to verify:

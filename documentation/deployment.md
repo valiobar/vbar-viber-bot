@@ -17,6 +17,7 @@
 Each service uses a multi-stage Dockerfile for optimized production images:
 
 **Example Structure** (Node.js Express services):
+
 ```dockerfile
 # Stage 1: Dependencies
 FROM node:18-alpine AS dependencies
@@ -44,6 +45,7 @@ CMD ["node", "dist/index.js"]
 ```
 
 **Next.js Service Structure**:
+
 ```dockerfile
 # Stage 1: Dependencies
 FROM node:18-alpine AS deps
@@ -99,9 +101,10 @@ docker compose -f infrastructure/docker-compose.yml build --no-cache
 
 ### Docker Compose Configuration
 
-**Development Configuration** (`infrastructure/docker-compose.dev.yml`):
+**Infrastructure Configuration** (`infrastructure/docker-compose.infrastructure.yml`):
+
 ```yaml
-version: '3.8'
+version: "3.8"
 
 services:
   mongodb-admin:
@@ -110,6 +113,8 @@ services:
       - "27017:27017"
     environment:
       MONGO_INITDB_DATABASE: admin
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ADMIN_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ADMIN_PASS:-admin123}
     volumes:
       - mongodb-admin-data:/data/db
 
@@ -119,6 +124,8 @@ services:
       - "27018:27017"
     environment:
       MONGO_INITDB_DATABASE: bot
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_BOT_USER:-bot}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_BOT_PASS:-bot123}
     volumes:
       - mongodb-bot-data:/data/db
 
@@ -128,6 +135,8 @@ services:
       - "27019:27017"
     environment:
       MONGO_INITDB_DATABASE: ai
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_AI_USER:-ai}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_AI_PASS:-ai123}
     volumes:
       - mongodb-ai-data:/data/db
 
@@ -137,6 +146,8 @@ services:
       - "27020:27017"
     environment:
       MONGO_INITDB_DATABASE: analytics
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ANALYTICS_USER:-analytics}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ANALYTICS_PASS:-analytics123}
     volumes:
       - mongodb-analytics-data:/data/db
 
@@ -178,8 +189,9 @@ volumes:
 ```
 
 **Production Configuration** (`infrastructure/docker-compose.yml`):
+
 ```yaml
-version: '3.8'
+version: "3.8"
 
 services:
   admin:
@@ -311,13 +323,16 @@ volumes:
 Environment variables can be set in multiple ways:
 
 1. **Environment File**:
+
    ```bash
    docker compose --env-file .env up
    ```
 
 2. **Inline**:
+
    ```bash
-   docker run -e MONGODB_URI=mongodb://... vbar-admin:latest
+   # MongoDB connection string must include authentication credentials
+   docker run -e MONGODB_URI=mongodb://admin:admin123@mongodb-admin:27017/admin vbar-admin:latest
    ```
 
 3. **Docker Compose**:
@@ -363,11 +378,13 @@ services:
 ### Running with Docker Compose
 
 **Start all services**:
+
 ```bash
 docker compose -f infrastructure/docker-compose.yml up -d
 ```
 
 **View logs**:
+
 ```bash
 # All services
 docker compose -f infrastructure/docker-compose.yml logs -f
@@ -377,11 +394,13 @@ docker compose -f infrastructure/docker-compose.yml logs -f admin
 ```
 
 **Stop services**:
+
 ```bash
 docker compose -f infrastructure/docker-compose.yml down
 ```
 
 **Stop and remove volumes**:
+
 ```bash
 docker compose -f infrastructure/docker-compose.yml down -v
 ```
@@ -405,6 +424,7 @@ curl http://localhost:3003/health
 ```
 
 **Docker health checks**:
+
 ```yaml
 services:
   admin:
@@ -419,21 +439,25 @@ services:
 ### Logs and Debugging
 
 **View real-time logs**:
+
 ```bash
 docker compose -f infrastructure/docker-compose.yml logs -f --tail=100
 ```
 
 **View logs for specific service**:
+
 ```bash
 docker compose -f infrastructure/docker-compose.yml logs admin
 ```
 
 **Execute commands in container**:
+
 ```bash
 docker compose -f infrastructure/docker-compose.yml exec admin sh
 ```
 
 **Inspect container**:
+
 ```bash
 docker inspect <container-id>
 ```
@@ -441,21 +465,25 @@ docker inspect <container-id>
 ### Stopping and Cleaning Up
 
 **Stop services**:
+
 ```bash
 docker compose -f infrastructure/docker-compose.yml stop
 ```
 
 **Remove containers**:
+
 ```bash
 docker compose -f infrastructure/docker-compose.yml down
 ```
 
 **Remove containers and volumes**:
+
 ```bash
 docker compose -f infrastructure/docker-compose.yml down -v
 ```
 
 **Remove images**:
+
 ```bash
 docker compose -f infrastructure/docker-compose.yml down --rmi all
 ```
@@ -477,6 +505,7 @@ metadata:
 ```
 
 Apply:
+
 ```bash
 kubectl apply -f infrastructure/k8s/namespace.yaml
 ```
@@ -484,6 +513,7 @@ kubectl apply -f infrastructure/k8s/namespace.yaml
 ### Deployment Manifests
 
 **Admin Service Deployment** (`k8s/deployments/admin-deployment.yaml`):
+
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -503,47 +533,54 @@ spec:
         app: admin-service
     spec:
       containers:
-      - name: admin
-        image: vbar-admin:latest
-        ports:
-        - containerPort: 3000
-        env:
-        - name: NODE_ENV
-          value: "production"
-        - name: MONGODB_URI
-          valueFrom:
-            configMapKeyRef:
-              name: admin-config
-              key: mongodb-uri
-        - name: RABBITMQ_URL
-          valueFrom:
-            secretKeyRef:
-              name: rabbitmq-secret
-              key: url
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "250m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
-        livenessProbe:
-          httpGet:
-            path: /api/health
-            port: 3000
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /api/health
-            port: 3000
-          initialDelaySeconds: 10
-          periodSeconds: 5
+        - name: admin
+          image: vbar-admin:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: MONGODB_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: admin-config
+                  key: mongodb-uri
+            # Alternative: Use secrets for MongoDB credentials
+            # - name: MONGODB_URI
+            #   value: "mongodb://$(MONGO_USER):$(MONGO_PASS)@mongodb-admin:27017/admin"
+            # envFrom:
+            # - secretRef:
+            #     name: mongodb-secret
+            - name: RABBITMQ_URL
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-secret
+                  key: url
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5
 ```
 
 ### Service Definitions
 
 **Admin Service** (`k8s/services/admin-service.yaml`):
+
 ```yaml
 apiVersion: v1
 kind: Service
@@ -554,15 +591,16 @@ spec:
   selector:
     app: admin-service
   ports:
-  - protocol: TCP
-    port: 80
-    targetPort: 3000
+    - protocol: TCP
+      port: 80
+      targetPort: 3000
   type: ClusterIP
 ```
 
 ### ConfigMaps and Secrets
 
 **ConfigMap Example** (`k8s/configmaps/admin-config.yaml`):
+
 ```yaml
 apiVersion: v1
 kind: ConfigMap
@@ -570,12 +608,21 @@ metadata:
   name: admin-config
   namespace: vbar-viber-bot
 data:
-  mongodb-uri: "mongodb://mongodb-admin:27017/admin"
+  # Note: MongoDB URI should include credentials from secrets in production
+  # Format: mongodb://username:password@host:port/database
+  mongodb-uri: "mongodb://admin:admin123@mongodb-admin:27017/admin"
   node-env: "production"
   port: "3000"
 ```
 
+**Important**: In production, store MongoDB credentials in Kubernetes Secrets, not ConfigMaps. Use the format:
+
+```yaml
+mongodb-uri: "mongodb://$(MONGO_USER):$(MONGO_PASS)@mongodb-admin:27017/admin"
+```
+
 **Secret Example** (`k8s/secrets/rabbitmq-secret.yaml`):
+
 ```yaml
 apiVersion: v1
 kind: Secret
@@ -594,6 +641,7 @@ stringData:
 ### Ingress Configuration
 
 **Ingress** (`k8s/ingress/ingress.yaml`):
+
 ```yaml
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -605,45 +653,46 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-  - host: admin.vbar.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: admin-service
-            port:
-              number: 80
-  - host: api.vbar.local
-    http:
-      paths:
-      - path: /viber
-        pathType: Prefix
-        backend:
-          service:
-            name: viber-service
-            port:
-              number: 80
-      - path: /ai
-        pathType: Prefix
-        backend:
-          service:
-            name: ai-service
-            port:
-              number: 80
-      - path: /analytics
-        pathType: Prefix
-        backend:
-          service:
-            name: analytics-service
-            port:
-              number: 80
+    - host: admin.vbar.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: admin-service
+                port:
+                  number: 80
+    - host: api.vbar.local
+      http:
+        paths:
+          - path: /viber
+            pathType: Prefix
+            backend:
+              service:
+                name: viber-service
+                port:
+                  number: 80
+          - path: /ai
+            pathType: Prefix
+            backend:
+              service:
+                name: ai-service
+                port:
+                  number: 80
+          - path: /analytics
+            pathType: Prefix
+            backend:
+              service:
+                name: analytics-service
+                port:
+                  number: 80
 ```
 
 ### StatefulSets for MongoDB
 
 **MongoDB StatefulSet** (`k8s/statefulsets/mongodb-admin.yaml`):
+
 ```yaml
 apiVersion: apps/v1
 kind: StatefulSet
@@ -662,29 +711,30 @@ spec:
         app: mongodb-admin
     spec:
       containers:
-      - name: mongodb
-        image: mongo:7
-        ports:
-        - containerPort: 27017
-        volumeMounts:
-        - name: mongodb-data
-          mountPath: /data/db
-        env:
-        - name: MONGO_INITDB_DATABASE
-          value: "admin"
+        - name: mongodb
+          image: mongo:7
+          ports:
+            - containerPort: 27017
+          volumeMounts:
+            - name: mongodb-data
+              mountPath: /data/db
+          env:
+            - name: MONGO_INITDB_DATABASE
+              value: "admin"
   volumeClaimTemplates:
-  - metadata:
-      name: mongodb-data
-    spec:
-      accessModes: [ "ReadWriteOnce" ]
-      resources:
-        requests:
-          storage: 10Gi
+    - metadata:
+        name: mongodb-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
 ```
 
 ### RabbitMQ Deployment
 
 **RabbitMQ Deployment** (`k8s/deployments/rabbitmq-deployment.yaml`):
+
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -702,34 +752,35 @@ spec:
         app: rabbitmq
     spec:
       containers:
-      - name: rabbitmq
-        image: rabbitmq:3-management-alpine
-        ports:
-        - containerPort: 5672
-        - containerPort: 15672
-        env:
-        - name: RABBITMQ_DEFAULT_USER
-          valueFrom:
-            secretKeyRef:
-              name: rabbitmq-secret
-              key: username
-        - name: RABBITMQ_DEFAULT_PASS
-          valueFrom:
-            secretKeyRef:
-              name: rabbitmq-secret
-              key: password
-        volumeMounts:
-        - name: rabbitmq-data
-          mountPath: /var/lib/rabbitmq
+        - name: rabbitmq
+          image: rabbitmq:3-management-alpine
+          ports:
+            - containerPort: 5672
+            - containerPort: 15672
+          env:
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-secret
+                  key: username
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-secret
+                  key: password
+          volumeMounts:
+            - name: rabbitmq-data
+              mountPath: /var/lib/rabbitmq
       volumes:
-      - name: rabbitmq-data
-        persistentVolumeClaim:
-          claimName: rabbitmq-pvc
+        - name: rabbitmq-data
+          persistentVolumeClaim:
+            claimName: rabbitmq-pvc
 ```
 
 ### Ollama Deployment
 
 **Ollama Deployment** (`k8s/deployments/ollama-deployment.yaml`):
+
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -747,34 +798,35 @@ spec:
         app: ollama
     spec:
       containers:
-      - name: ollama
-        image: ollama/ollama:latest
-        ports:
-        - containerPort: 11434
-        env:
-        - name: OLLAMA_HOST
-          value: "0.0.0.0"
-        volumeMounts:
-        - name: ollama-data
-          mountPath: /root/.ollama
-        resources:
-          requests:
-            memory: "4Gi"
-            cpu: "2"
-            # Uncomment for GPU support
-            # nvidia.com/gpu: 1
-          limits:
-            memory: "8Gi"
-            cpu: "4"
-            # Uncomment for GPU support
-            # nvidia.com/gpu: 1
+        - name: ollama
+          image: ollama/ollama:latest
+          ports:
+            - containerPort: 11434
+          env:
+            - name: OLLAMA_HOST
+              value: "0.0.0.0"
+          volumeMounts:
+            - name: ollama-data
+              mountPath: /root/.ollama
+          resources:
+            requests:
+              memory: "4Gi"
+              cpu: "2"
+              # Uncomment for GPU support
+              # nvidia.com/gpu: 1
+            limits:
+              memory: "8Gi"
+              cpu: "4"
+              # Uncomment for GPU support
+              # nvidia.com/gpu: 1
       volumes:
-      - name: ollama-data
-        persistentVolumeClaim:
-          claimName: ollama-pvc
+        - name: ollama-data
+          persistentVolumeClaim:
+            claimName: ollama-pvc
 ```
 
 **Ollama Service** (`k8s/services/ollama-service.yaml`):
+
 ```yaml
 apiVersion: v1
 kind: Service
@@ -785,13 +837,14 @@ spec:
   selector:
     app: ollama
   ports:
-  - protocol: TCP
-    port: 11434
-    targetPort: 11434
+    - protocol: TCP
+      port: 11434
+      targetPort: 11434
   type: ClusterIP
 ```
 
 **Ollama PersistentVolumeClaim** (`k8s/pvc/ollama-pvc.yaml`):
+
 ```yaml
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -803,7 +856,7 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 50Gi  # Adjust based on model sizes
+      storage: 50Gi # Adjust based on model sizes
   storageClassName: fast-ssd
 ```
 
@@ -826,6 +879,7 @@ spec:
 ### Environment Configuration
 
 **Production Environment Variables**:
+
 - Use Kubernetes Secrets for sensitive data
 - Use ConfigMaps for non-sensitive configuration
 - Never commit secrets to version control
@@ -834,6 +888,7 @@ spec:
 ### Secrets Management
 
 **Using kubectl**:
+
 ```bash
 # Create secret from file
 kubectl create secret generic app-secrets \
@@ -847,6 +902,7 @@ kubectl create secret generic app-secrets \
 ```
 
 **Using Sealed Secrets** (recommended):
+
 ```bash
 # Install kubeseal
 kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.18.0/controller.yaml
@@ -859,6 +915,7 @@ kubectl apply -f sealed-secret.yaml
 ### Resource Limits and Requests
 
 **Example Resource Configuration**:
+
 ```yaml
 resources:
   requests:
@@ -870,6 +927,7 @@ resources:
 ```
 
 **Guidelines**:
+
 - Set requests based on typical usage
 - Set limits to prevent resource exhaustion
 - Monitor and adjust based on actual usage
@@ -878,6 +936,7 @@ resources:
 ### Scaling Strategies
 
 **Horizontal Pod Autoscaler** (`k8s/hpa/admin-hpa.yaml`):
+
 ```yaml
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
@@ -892,21 +951,22 @@ spec:
   minReplicas: 2
   maxReplicas: 10
   metrics:
-  - type: Resource
-    resource:
-      name: cpu
-      target:
-        type: Utilization
-        averageUtilization: 70
-  - type: Resource
-    resource:
-      name: memory
-      target:
-        type: Utilization
-        averageUtilization: 80
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
 ```
 
 **Manual Scaling**:
+
 ```bash
 kubectl scale deployment admin-service --replicas=5 -n vbar-viber-bot
 ```
@@ -941,12 +1001,14 @@ readinessProbe:
 ### MongoDB StatefulSets
 
 **StatefulSet Benefits**:
+
 - Stable network identities
 - Ordered deployment and scaling
 - Persistent storage per pod
 - Stable persistent storage
 
 **Deployment**:
+
 ```bash
 kubectl apply -f infrastructure/k8s/statefulsets/mongodb-admin.yaml
 ```
@@ -954,6 +1016,7 @@ kubectl apply -f infrastructure/k8s/statefulsets/mongodb-admin.yaml
 ### Persistent Volumes
 
 **PersistentVolumeClaim** (`k8s/pvc/mongodb-pvc.yaml`):
+
 ```yaml
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -972,6 +1035,7 @@ spec:
 ### Backup Strategies
 
 **MongoDB Backup**:
+
 ```bash
 # Manual backup
 kubectl exec -it mongodb-admin-0 -n vbar-viber-bot -- \
@@ -995,7 +1059,21 @@ spec:
             command:
             - mongodump
             - --host=mongodb-admin
+            - --username=admin
+            - --password=admin123
+            - --authenticationDatabase=admin
             - --out=/backup
+            env:
+            - name: MONGO_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secret
+                  key: username
+            - name: MONGO_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secret
+                  key: password
             volumeMounts:
             - name: backup-storage
               mountPath: /backup
@@ -1009,34 +1087,49 @@ spec:
 ### Database Initialization
 
 **Init Containers** for database setup:
+
 ```yaml
 initContainers:
-- name: init-db
-  image: mongo:7
-  command:
-  - sh
-  - -c
-  - |
-    mongosh mongodb-admin:27017/admin --eval "
-      db.createUser({
-        user: 'admin',
-        pwd: 'password',
-        roles: ['readWrite']
-      })
-    "
+  - name: init-db
+    image: mongo:7
+    command:
+      - sh
+      - -c
+      - |
+        # Note: MongoDB authentication is configured via MONGO_INITDB_ROOT_USERNAME
+        # and MONGO_INITDB_ROOT_PASSWORD environment variables in the StatefulSet
+        # This init container can be used for additional setup if needed
+        mongosh mongodb-admin:27017/admin \
+          -u admin -p admin123 --authenticationDatabase admin \
+          --eval "db.getUsers()"
+    env:
+      - name: MONGO_USER
+        valueFrom:
+          secretKeyRef:
+            name: mongodb-secret
+            key: username
+      - name: MONGO_PASS
+        valueFrom:
+          secretKeyRef:
+            name: mongodb-secret
+            key: password
 ```
+
+**Note**: MongoDB authentication is automatically configured when using the official MongoDB Docker image with `MONGO_INITDB_ROOT_USERNAME` and `MONGO_INITDB_ROOT_PASSWORD` environment variables. The root user is created in the `admin` database with full administrative privileges.
 
 ## Message Queue Deployment
 
 ### RabbitMQ Deployment
 
 **Deployment Configuration**:
+
 - Use StatefulSet for stable network identity
 - Configure persistent storage
 - Set up clustering for high availability
 - Configure resource limits
 
 **High Availability Setup**:
+
 ```yaml
 apiVersion: apps/v1
 kind: StatefulSet
@@ -1051,16 +1144,18 @@ spec:
 ### Queue Configuration
 
 **Queue Declaration** (in application code or init container):
+
 ```typescript
 // Queue configuration
 const queues = [
-  { name: 'viber.messages', durable: true },
-  { name: 'ai.processed', durable: true },
-  { name: 'analytics.events', durable: true }
+  { name: "viber.messages", durable: true },
+  { name: "ai.processed", durable: true },
+  { name: "analytics.events", durable: true },
 ];
 ```
 
 **RabbitMQ Policies**:
+
 ```bash
 kubectl exec -it rabbitmq-0 -n vbar-viber-bot -- \
   rabbitmqctl set_policy ha-all ".*" '{"ha-mode":"all"}'
@@ -1071,6 +1166,7 @@ kubectl exec -it rabbitmq-0 -n vbar-viber-bot -- \
 ### Log Aggregation
 
 **Fluentd DaemonSet** for log collection:
+
 ```yaml
 apiVersion: apps/v1
 kind: DaemonSet
@@ -1086,6 +1182,7 @@ spec:
 ### Health Monitoring
 
 **Prometheus ServiceMonitor**:
+
 ```yaml
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
@@ -1097,18 +1194,20 @@ spec:
     matchLabels:
       app: admin-service
   endpoints:
-  - port: http
-    path: /metrics
+    - port: http
+      path: /metrics
 ```
 
 ### Performance Metrics
 
 **Metrics Endpoints**:
+
 - Each service exposes `/metrics` endpoint
 - Prometheus scrapes metrics
 - Grafana dashboards for visualization
 
 **Key Metrics**:
+
 - Request rate and latency
 - Error rates
 - Resource utilization (CPU, memory)
@@ -1166,4 +1265,3 @@ kubectl logs <pod-name> -n vbar-viber-bot
 - [Setup Guide](./setup.md) - Development environment setup
 - [Architecture Documentation](./architecture.md) - System architecture
 - [API Documentation](./api.md) - API contracts and endpoints
-

@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   # MongoDB Instances
@@ -6,16 +6,30 @@ services:
     image: mongo:7
     container_name: vbar-mongodb-admin
     ports:
-      - "27017:27017"  # Expose for local access
+      - "27017:27017" # Expose for local access
     environment:
       - MONGO_INITDB_DATABASE=admin
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ADMIN_USER:-admin}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ADMIN_PASS:-admin123}
     volumes:
       - mongodb-admin-data:/data/db
     restart: unless-stopped
     networks:
       - vbar-network
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test:
+        [
+          "CMD",
+          "mongosh",
+          "-u",
+          "${MONGO_ADMIN_USER:-admin}",
+          "-p",
+          "${MONGO_ADMIN_PASS:-admin123}",
+          "--authenticationDatabase",
+          "admin",
+          "--eval",
+          "db.adminCommand('ping')",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -25,16 +39,30 @@ services:
     image: mongo:7
     container_name: vbar-mongodb-bot
     ports:
-      - "27018:27017"  # Expose for local access
+      - "27018:27017" # Expose for local access
     environment:
       - MONGO_INITDB_DATABASE=bot
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_BOT_USER:-bot}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_BOT_PASS:-bot123}
     volumes:
       - mongodb-bot-data:/data/db
     restart: unless-stopped
     networks:
       - vbar-network
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test:
+        [
+          "CMD",
+          "mongosh",
+          "-u",
+          "${MONGO_BOT_USER:-bot}",
+          "-p",
+          "${MONGO_BOT_PASS:-bot123}",
+          "--authenticationDatabase",
+          "admin",
+          "--eval",
+          "db.adminCommand('ping')",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -44,16 +72,30 @@ services:
     image: mongo:7
     container_name: vbar-mongodb-ai
     ports:
-      - "27019:27017"  # Expose for local access
+      - "27019:27017" # Expose for local access
     environment:
       - MONGO_INITDB_DATABASE=ai
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_AI_USER:-ai}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_AI_PASS:-ai123}
     volumes:
       - mongodb-ai-data:/data/db
     restart: unless-stopped
     networks:
       - vbar-network
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test:
+        [
+          "CMD",
+          "mongosh",
+          "-u",
+          "${MONGO_AI_USER:-ai}",
+          "-p",
+          "${MONGO_AI_PASS:-ai123}",
+          "--authenticationDatabase",
+          "admin",
+          "--eval",
+          "db.adminCommand('ping')",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -63,16 +105,30 @@ services:
     image: mongo:7
     container_name: vbar-mongodb-analytics
     ports:
-      - "27020:27017"  # Expose for local access
+      - "27020:27017" # Expose for local access
     environment:
       - MONGO_INITDB_DATABASE=analytics
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ANALYTICS_USER:-analytics}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ANALYTICS_PASS:-analytics123}
     volumes:
       - mongodb-analytics-data:/data/db
     restart: unless-stopped
     networks:
       - vbar-network
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test:
+        [
+          "CMD",
+          "mongosh",
+          "-u",
+          "${MONGO_ANALYTICS_USER:-analytics}",
+          "-p",
+          "${MONGO_ANALYTICS_PASS:-analytics123}",
+          "--authenticationDatabase",
+          "admin",
+          "--eval",
+          "db.adminCommand('ping')",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -86,7 +142,7 @@ services:
       - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:-admin}
       - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASS:-admin}
     ports:
-      - "5672:5672"   # AMQP port
+      - "5672:5672" # AMQP port
       - "15672:15672" # Management UI port
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
@@ -99,28 +155,6 @@ services:
       timeout: 10s
       retries: 5
       start_period: 60s
-
-  # Ollama (Optional - for self-hosted AI)
-  ollama:
-    image: ollama/ollama:latest
-    container_name: vbar-ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama-data:/root/.ollama
-    environment:
-      - OLLAMA_HOST=0.0.0.0
-    restart: unless-stopped
-    networks:
-      - vbar-network
-    # Note: For GPU support, uncomment the deploy section below
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
 
 networks:
   vbar-network:
@@ -138,6 +172,3 @@ volumes:
     name: vbar-mongodb-analytics-data
   rabbitmq-data:
     name: vbar-rabbitmq-data
-  ollama-data:
-    name: vbar-ollama-data
-
