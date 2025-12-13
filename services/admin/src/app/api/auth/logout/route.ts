@@ -85,13 +85,18 @@ export async function POST(
     // Execute logout use case
     const logoutResponse = await logoutUseCase.execute(logoutRequest);
 
-    // Return success response
-    return NextResponse.json<ApiResponse<LogoutResponse>>(
+    // Create response
+    const response = NextResponse.json<ApiResponse<LogoutResponse>>(
       {
         data: logoutResponse,
       },
       { status: 200 }
     );
+
+    // Clear access token cookie
+    response.cookies.delete("accessToken");
+
+    return response;
   } catch (error) {
     // Handle other errors
     return NextResponse.json<ApiResponse<LogoutResponse>>(

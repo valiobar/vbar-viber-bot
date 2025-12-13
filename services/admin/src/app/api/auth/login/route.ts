@@ -128,13 +128,28 @@ export async function POST(
     // Execute login use case
     const loginResponse = await loginUseCase.execute(loginRequest);
 
-    // Return success response with tokens and user data
-    return NextResponse.json<ApiResponse<LoginResponse>>(
+    // Create response with tokens and user data
+    const response = NextResponse.json<ApiResponse<LoginResponse>>(
       {
         data: loginResponse,
       },
       { status: 200 }
     );
+
+    // Set access token in HTTP-only cookie for middleware authentication
+    // The cookie is accessible to server-side middleware but not to client-side JavaScript
+    // This allows the middleware to verify authentication on protected routes
+    if (loginResponse.accessToken) {
+      response.cookies.set("accessToken", loginResponse.accessToken, {
+        httpOnly: true, // Prevents JavaScript access (XSS protection)
+        secure: process.env.NODE_ENV === "production", // HTTPS only in production
+        sameSite: "lax", // CSRF protection
+        maxAge: 60 * 60 * 24, // 24 hours (matches token expiration)
+        path: "/", // Available for all routes
+      });
+    }
+
+    return response;
   } catch (error) {
     // Handle AuthenticationError from use case
     if (

@@ -90,8 +90,8 @@ export async function POST(
       refreshTokenRequest
     );
 
-    // Return success response with new tokens
-    return NextResponse.json<ApiResponse<RefreshTokenResponse>>(
+    // Create response with new tokens
+    const response = NextResponse.json<ApiResponse<RefreshTokenResponse>>(
       {
         data: refreshTokenResponse,
       },
@@ -133,4 +133,3 @@ export async function POST(
     );
   }
 }
-

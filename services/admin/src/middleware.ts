@@ -13,8 +13,19 @@ import { verifyToken } from "./domains/user/lib/jwt";
 
 /**
  * Public routes that don't require authentication
+ *
+ * These routes are accessible without authentication:
+ * - `/login` - Login page (frontend route, excluded from auth checks)
+ * - `/api/auth/login` - Login API endpoint
+ * - `/api/auth/refresh` - Token refresh endpoint
+ * - `/api/health` - Health check endpoint
  */
-const PUBLIC_ROUTES = ["/api/auth/login", "/api/auth/refresh", "/api/health"];
+const PUBLIC_ROUTES = [
+  "/api/auth/login",
+  "/api/auth/refresh",
+  "/api/health",
+  "/login", // Frontend login page - explicitly excluded from authentication
+];
 
 /**
  * Protected API routes that require authentication
@@ -168,31 +179,29 @@ export async function middleware(request: NextRequest) {
   }
 
   // For frontend routes (non-API), check authentication and redirect if needed
-  // Note: Frontend routes are not yet defined, so we'll allow them for now
-  // When frontend routes are added, uncomment and modify the code below:
-  /*
+  // This handles all frontend routes like `/`, `/dashboard`, etc.
   const token = extractToken(request);
-  
+
   if (!token) {
     // Redirect to login page for unauthenticated users
+    // Preserve intended destination via redirect query parameter
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("redirect", pathname);
     return NextResponse.redirect(loginUrl);
   }
 
   try {
+    // Verify token for frontend routes
     await verifyAuthToken(token);
+    // Token is valid, allow request to proceed
     return NextResponse.next();
   } catch (error) {
-    // Redirect to login page if token is invalid
+    // Redirect to login page if token is invalid or expired
+    // Preserve intended destination via redirect query parameter
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("redirect", pathname);
     return NextResponse.redirect(loginUrl);
   }
-  */
-
-  // Allow all other routes to proceed (frontend routes will be handled later)
-  return NextResponse.next();
 }
 
 /**
@@ -200,6 +209,16 @@ export async function middleware(request: NextRequest) {
  *
  * Specifies which routes the middleware should run on.
  * Using matcher to optimize performance by only running middleware on specific routes.
+ *
+ * The matcher includes:
+ * - All frontend routes (e.g., `/`, `/login`, `/dashboard`) - for redirect logic
+ * - All API routes (e.g., `/api/auth/login`, `/api/users`) - for authentication checks
+ *
+ * The matcher excludes:
+ * - _next/static (static files)
+ * - _next/image (image optimization files)
+ * - favicon.ico (favicon file)
+ * - public files (files in public folder with image extensions)
  */
 export const config = {
   matcher: [

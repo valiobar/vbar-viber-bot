@@ -1,3 +1,10 @@
+/**
+ * Home Page Component
+ *
+ * Displays the admin dashboard home page.
+ * Authentication is handled by AuthProvider in the layout.
+ */
+
 export default function Home() {
   return (
     <main className="container">
