@@ -164,14 +164,14 @@ The Admin Service provides endpoints for administrative operations, user managem
 
 #### POST /api/auth/login
 
-Authenticate user and receive JWT token.
+Authenticate user and receive JWT tokens.
 
 **Request**:
 
 ```typescript
 interface LoginRequest {
-  email: string;
-  password: string;
+  username: string; // Username (lowercase letters, numbers, underscores only, 3-50 characters)
+  password: string; // User password
 }
 ```
 
@@ -180,56 +180,91 @@ interface LoginRequest {
 ```typescript
 interface LoginResponse {
   data: {
-    token: string;
+    accessToken: string; // JWT access token
+    refreshToken: string; // JWT refresh token (stored in database)
     user: {
       id: string;
+      username: string;
       email: string;
       name: string;
       role: "admin" | "user" | "viewer";
+      createdAt: string;
+      updatedAt: string;
+      lastLoginAt?: string;
     };
-    expiresIn: number; // seconds
   };
 }
 ```
 
 **Error Codes**:
 
-- `AUTH_001` - Invalid credentials
-- `AUTH_002` - Account locked
-- `AUTH_003` - Account disabled
+- `AUTH_001` - Invalid credentials, missing username/password, or validation error
+- `AUTH_002` - Account locked (if implemented)
+- `AUTH_003` - Account disabled (if implemented)
+
+**Validation Rules**:
+
+- Username: 3-50 characters, lowercase letters, numbers, and underscores only
+- Password: Required, non-empty string
 
 #### POST /api/auth/logout
 
-Invalidate current session.
+Invalidate current session by deleting refresh token from database.
 
-**Headers**: `Authorization: Bearer <token>`
+**Request**:
+
+```typescript
+interface LogoutRequest {
+  refreshToken: string; // Refresh token to invalidate
+}
+```
+
+**Note**: The refresh token can also be provided in the `Authorization` header as a fallback, but it's recommended to send it in the request body.
 
 **Response** (`200 OK`):
 
 ```typescript
-{
+interface LogoutResponse {
   data: {
-    message: "Logged out successfully";
-  }
+    message: string; // Success message (e.g., "Logged out successfully")
+    success: boolean; // Always true on success
+  };
 }
 ```
+
+**Error Codes**:
+
+- `AUTH_001` - Missing or invalid refresh token
 
 #### POST /api/auth/refresh
 
-Refresh JWT token.
+Refresh JWT access token using a valid refresh token. The refresh token is rotated (old one deleted, new one generated) for security.
 
-**Headers**: `Authorization: Bearer <token>`
+**Request**:
+
+```typescript
+interface RefreshTokenRequest {
+  refreshToken: string; // Refresh token to exchange for new access token
+}
+```
+
+**Note**: The refresh token can also be provided in the `Authorization` header as a fallback, but it's recommended to send it in the request body.
 
 **Response** (`200 OK`):
 
 ```typescript
-{
+interface RefreshTokenResponse {
   data: {
-    token: string;
-    expiresIn: number;
-  }
+    accessToken: string; // New JWT access token
+    refreshToken?: string; // New JWT refresh token (if token rotation is enabled)
+  };
 }
 ```
+
+**Error Codes**:
+
+- `AUTH_004` - Token expired
+- `AUTH_005` - Token invalid or missing
 
 ### User Management Endpoints
 

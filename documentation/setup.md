@@ -115,8 +115,19 @@ NODE_ENV=development
 PORT=3000
 
 # Authentication
-JWT_SECRET=your-secret-key-here
+# JWT_SECRET: Secret key for signing JWT tokens (required, minimum 32 characters)
+# Example: JWT_SECRET=your-super-secret-key-minimum-32-characters-long-for-security
+JWT_SECRET=your-secret-key-here-min-32-chars
+
+# JWT_EXPIRES_IN: Access token expiration time (default: "7d")
+# Format: number followed by unit (s=seconds, m=minutes, h=hours, d=days)
+# Examples: "1h", "24h", "7d", "30d"
 JWT_EXPIRES_IN=7d
+
+# JWT_REFRESH_EXPIRES_IN: Refresh token expiration time (default: "30d")
+# Format: number followed by unit (s=seconds, m=minutes, h=hours, d=days)
+# Examples: "7d", "30d", "90d"
+JWT_REFRESH_EXPIRES_IN=30d
 
 # Other services
 VIBER_SERVICE_URL=http://localhost:3001

@@ -7,7 +7,10 @@
 import mongoose from "mongoose";
 import { ConfigHelper } from "@vbar/shared";
 
-const uri = ConfigHelper.getEnv("MONGODB_URI", "mongodb://localhost:27017");
+const uri = ConfigHelper.getEnv(
+  "MONGODB_URI",
+  "mongodb://analytics:analytics123@localhost:27020/analytics"
+);
 const dbName = ConfigHelper.getEnv("MONGODB_DB_NAME", "analytics");
 
 if (!uri) {
