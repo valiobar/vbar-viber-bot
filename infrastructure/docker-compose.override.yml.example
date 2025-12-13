@@ -1,6 +1,11 @@
 # Docker Compose Override Example
 # Copy this file to docker-compose.override.yml and customize for your local development environment
 # This file is automatically loaded by docker-compose when present
+#
+# Security Model:
+# - Admin and Viber services: Publicly accessible (0.0.0.0) - Admin for user access, Viber for webhooks
+# - AI and Analytics services: Localhost only (127.0.0.1) - Internal services, not exposed externally
+# - Services within Docker network communicate using service names regardless of port binding
 
 version: '3.8'
 
@@ -22,6 +27,10 @@ services:
     # command: npm run dev
 
   # Viber Service Development Overrides
+  # Note: Viber service must remain publicly accessible (0.0.0.0:3001:3001) in main docker-compose.yml
+  # because Viber API sends webhook events from external networks. The service cannot receive webhooks
+  # if bound to localhost only. Services within Docker network can communicate using service name
+  # (http://viber:3001).
   viber:
     build:
       context: ..
@@ -33,6 +42,10 @@ services:
       - RABBITMQ_URL=amqp://admin:admin@rabbitmq:5672
       - VIBER_BOT_TOKEN=${VIBER_BOT_TOKEN:-your-viber-bot-token}
       - VIBER_WEBHOOK_URL=${VIBER_WEBHOOK_URL:-http://localhost:3001}
+    # Port binding follows main docker-compose.yml (publicly accessible for webhooks)
+    # Override only if you need different binding for development
+    # ports:
+    #   - "3001:3001"  # Publicly accessible (required for Viber webhook callbacks)
     # Uncomment for hot reload
     # volumes:
     #   - ../services/viber:/app
@@ -41,6 +54,10 @@ services:
     # command: npm run dev
 
   # AI Service Development Overrides
+  # Note: In main docker-compose.yml, AI service is bound to localhost only (127.0.0.1:3002:3002)
+  # for security. This ensures the service is accessible from the host machine for local development
+  # but not from external networks. Services within Docker network can still communicate using
+  # the service name (http://ai:3002).
   ai:
     build:
       context: ..
@@ -53,6 +70,10 @@ services:
       - OLLAMA_URL=http://ollama:11434
       - AI_MODEL_PROVIDER=ollama
       - AI_MODEL_NAME=llama2
+    # Port binding follows main docker-compose.yml (localhost-only for security)
+    # Override only if you need different binding for development
+    # ports:
+    #   - "127.0.0.1:3002:3002"  # Localhost only (default in main config)
     # Uncomment for hot reload
     # volumes:
     #   - ../services/ai:/app
@@ -61,6 +82,10 @@ services:
     # command: npm run dev
 
   # Analytics Service Development Overrides
+  # Note: In main docker-compose.yml, Analytics service is bound to localhost only (127.0.0.1:3003:3003)
+  # for security. This ensures the service is accessible from the host machine for local development
+  # but not from external networks. Services within Docker network can still communicate using
+  # the service name (http://analytics:3003).
   analytics:
     build:
       context: ..
@@ -70,6 +95,10 @@ services:
       - PORT=3003
       - MONGODB_URI=mongodb://mongodb-analytics:27017/analytics
       - RABBITMQ_URL=amqp://admin:admin@rabbitmq:5672
+    # Port binding follows main docker-compose.yml (localhost-only for security)
+    # Override only if you need different binding for development
+    # ports:
+    #   - "127.0.0.1:3003:3003"  # Localhost only (default in main config)
     # Uncomment for hot reload
     # volumes:
     #   - ../services/analytics:/app

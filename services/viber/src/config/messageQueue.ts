@@ -20,21 +20,22 @@ export async function getConnection(): Promise<Connection> {
     return connection;
   }
 
-  connection = await amqp.connect(uri);
-  
-  connection.on("error", (err) => {
+  const newConnection = (await amqp.connect(uri)) as unknown as Connection;
+  connection = newConnection;
+
+  newConnection.on("error", (err) => {
     console.error("RabbitMQ connection error:", err);
     connection = null;
     channel = null;
   });
 
-  connection.on("close", () => {
+  newConnection.on("close", () => {
     console.log("RabbitMQ connection closed");
     connection = null;
     channel = null;
   });
 
-  return connection;
+  return newConnection;
 }
 
 /**
@@ -46,22 +47,23 @@ export async function getChannel(): Promise<Channel> {
   }
 
   const conn = await getConnection();
-  channel = await conn.createChannel();
+  const newChannel = (await (conn as any).createChannel()) as Channel;
+  channel = newChannel;
 
   // Assert exchange
-  await channel.assertExchange(exchangeName, "topic", {
+  await newChannel.assertExchange(exchangeName, "topic", {
     durable: true,
   });
 
   // Assert queue
-  await channel.assertQueue(queueName, {
+  await newChannel.assertQueue(queueName, {
     durable: true,
   });
 
   // Bind queue to exchange
-  await channel.bindQueue(queueName, exchangeName, "analytics.*");
+  await newChannel.bindQueue(queueName, exchangeName, "analytics.*");
 
-  return channel;
+  return newChannel;
 }
 
 /**
@@ -74,7 +76,7 @@ export async function publishMessage(
   try {
     const ch = await getChannel();
     const messageBuffer = Buffer.from(JSON.stringify(message));
-    
+
     return ch.publish(exchangeName, routingKey, messageBuffer, {
       persistent: true,
     });
@@ -89,12 +91,19 @@ export async function publishMessage(
  */
 export async function closeMessageQueue(): Promise<void> {
   if (channel) {
-    await channel.close();
+    try {
+      await channel.close();
+    } catch (error) {
+      console.error("Error closing channel:", error);
+    }
     channel = null;
   }
   if (connection) {
-    await connection.close();
+    try {
+      await (connection as any).close();
+    } catch (error) {
+      console.error("Error closing connection:", error);
+    }
     connection = null;
   }
 }
-

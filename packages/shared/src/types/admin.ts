@@ -8,6 +8,7 @@ import { BaseEntity } from "./common";
  * User interface
  */
 export interface User extends BaseEntity {
+  username: string;
   email: string;
   name: string;
   role: "admin" | "user" | "viewer";

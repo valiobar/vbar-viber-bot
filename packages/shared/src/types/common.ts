@@ -80,5 +80,6 @@ export interface HealthCheckResponse {
   dependencies?: {
     database?: "connected" | "disconnected";
     messageQueue?: "connected" | "disconnected";
+    [key: string]: "connected" | "disconnected" | undefined;
   };
 }

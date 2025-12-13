@@ -68,7 +68,7 @@ Communication Protocols:
 
 ### Admin Service
 
-**Technology Stack**: Next.js 14+ (App Router), TypeScript, MongoDB
+**Technology Stack**: Next.js 14+ (App Router), TypeScript, MongoDB, Mongoose
 
 **Purpose and Responsibilities**:
 
@@ -96,7 +96,7 @@ Communication Protocols:
 
 ### Viber Service
 
-**Technology Stack**: Node.js, Express.js, TypeScript, MongoDB
+**Technology Stack**: Node.js, Express.js, TypeScript, MongoDB, Mongoose
 
 **Purpose and Responsibilities**:
 
@@ -124,9 +124,53 @@ Communication Protocols:
 - MongoDB repositories as output adapters
 - Message queue publishers for async communication
 
+**Security Architecture**:
+
+The Viber Service implements a comprehensive security middleware layer following Hexagonal Architecture principles:
+
+- **Security Middleware Layer** (`src/adapters/in/middleware/`): All security middleware is located in the Input Adapters layer, as it handles HTTP request security concerns
+  - **Webhook Signature Verification** (`webhookSignature.ts`): Verifies HMAC-SHA256 signatures for Viber webhook requests
+  - **Service-to-Service Authentication** (`serviceAuth.ts`): Validates service tokens for internal service communication
+  - **Rate Limiting** (`rateLimiters.ts`): Implements different rate limits for different route types
+- **Security Configuration** (`src/config/security.ts`): Centralized security configuration helper for service tokens and rate limit settings
+- **Middleware Order**: Security middleware is applied in a specific order to ensure proper request processing:
+  1. Raw body preservation (for webhook signature verification)
+  2. JSON/URL parsing
+  3. Request logging
+  4. General rate limiting (base layer)
+  5. Route-specific middleware (webhook verification, service auth, specific rate limits)
+  6. Route handlers
+  7. Error handling
+
+**Authentication Flow**:
+
+1. **Webhook Requests**:
+
+   - Extract `X-Viber-Content-Signature` header
+   - Calculate expected signature using HMAC-SHA256 with bot token
+   - Compare signatures using timing-safe comparison
+   - Reject if invalid (401 Unauthorized)
+
+2. **Service-to-Service Requests** (for future API routes):
+   - Extract `X-Service-Token` header
+   - Validate token against configured service tokens
+   - Optional `X-Service-Name` header for logging
+   - Reject if invalid (401 Unauthorized)
+
+**Rate Limiting Strategy**:
+
+The service implements a multi-tier rate limiting strategy:
+
+- **General Routes** (`/`): 100 requests/minute per IP (base layer)
+- **Health Check** (`/health`): 10 requests/minute per IP (strict, prevents abuse)
+- **Webhook** (`/webhook/viber`): 1000 requests/minute per IP (higher limit for Viber events)
+- **API Routes** (`/api/*`): 5000 requests/minute per service token (when implemented)
+
+Rate limit information is included in all responses via standard headers (`RateLimit-*`) and legacy headers (`X-RateLimit-*`).
+
 ### AI Service
 
-**Technology Stack**: Node.js, Express.js, TypeScript, MongoDB
+**Technology Stack**: Node.js, Express.js, TypeScript, MongoDB, Mongoose
 
 **Purpose and Responsibilities**:
 
@@ -185,7 +229,7 @@ The AI Service can dynamically switch between providers based on configuration, 
 
 ### Analytics Service
 
-**Technology Stack**: Node.js, Express.js, TypeScript, MongoDB
+**Technology Stack**: Node.js, Express.js, TypeScript, MongoDB, Mongoose
 
 **Purpose and Responsibilities**:
 
@@ -482,9 +526,11 @@ All services follow the **Hexagonal Architecture (Ports and Adapters)** pattern 
 
 ### Architecture Layers
 
-#### Domain Layer (`src/domain/`)
+#### Domain Layer (`src/domains/`)
 
 **Purpose**: Core business logic, entities, and domain rules (innermost layer)
+
+**Structure**: Organized by domain with subfolders for each domain (e.g., `user/`, `auth/`, `config/`)
 
 **Contents**:
 
@@ -494,12 +540,31 @@ All services follow the **Hexagonal Architecture (Ports and Adapters)** pattern 
 - Business rules and validations
 - Domain events
 
+**Organization**:
+
+Each domain has its own folder structure:
+
+```
+domains/
+├── user/
+│   ├── entities/
+│   ├── value-objects/
+│   ├── services/
+│   └── events/
+├── auth/
+│   ├── entities/
+│   ├── value-objects/
+│   └── services/
+└── [other-domains]/
+```
+
 **Rules**:
 
 - **MUST NOT** depend on external frameworks
 - **MUST NOT** depend on infrastructure
 - Contains pure business logic
 - Framework-agnostic
+- Each domain should be self-contained with minimal coupling to other domains
 
 #### Application Layer (`src/application/`)
 
@@ -551,7 +616,7 @@ All services follow the **Hexagonal Architecture (Ports and Adapters)** pattern 
 
 **Output Adapters** (`src/adapters/out/`):
 
-- Database repositories (MongoDB implementations)
+- Database repositories (MongoDB implementations using Mongoose ODM)
 - Message queue publishers (RabbitMQ)
 - External API clients (Viber API, AI services)
 - File system adapters
@@ -560,7 +625,7 @@ All services follow the **Hexagonal Architecture (Ports and Adapters)** pattern 
 **Rules**:
 
 - Implement ports/interfaces
-- **CAN** depend on frameworks (Express, MongoDB drivers, etc.)
+- **CAN** depend on frameworks (Express, Mongoose, RabbitMQ, etc.)
 - Translate between external world and application
 
 ### Dependency Direction
@@ -568,7 +633,7 @@ All services follow the **Hexagonal Architecture (Ports and Adapters)** pattern 
 ```
 ┌─────────────────────────────────────┐
 │      Infrastructure Adapters        │
-│  (Express, MongoDB, RabbitMQ)       │
+│  (Express, Mongoose, RabbitMQ)       │
 └──────────────┬──────────────────────┘
                │ depends on
 ┌──────────────▼──────────────────────┐
@@ -601,11 +666,17 @@ All services follow the **Hexagonal Architecture (Ports and Adapters)** pattern 
 ```
 service/
 ├── src/
-│   ├── domain/              # Domain layer
-│   │   ├── entities/
-│   │   ├── value-objects/
-│   │   ├── services/
-│   │   └── events/
+│   ├── domains/             # Domain layer (organized by domain)
+│   │   ├── user/
+│   │   │   ├── entities/
+│   │   │   ├── value-objects/
+│   │   │   ├── services/
+│   │   │   └── events/
+│   │   ├── auth/
+│   │   │   ├── entities/
+│   │   │   ├── value-objects/
+│   │   │   └── services/
+│   │   └── [other-domains]/
 │   ├── application/         # Application layer
 │   │   ├── use-cases/
 │   │   ├── services/
@@ -627,7 +698,15 @@ admin/
 │   ├── app/                  # Next.js App Router (acts as input adapter)
 │   │   ├── api/              # API routes (input adapters)
 │   │   └── (pages)/          # Pages
-│   ├── domain/               # Domain layer
+│   ├── domains/              # Domain layer (organized by domain)
+│   │   ├── user/
+│   │   │   ├── entities/
+│   │   │   ├── value-objects/
+│   │   │   └── services/
+│   │   ├── auth/
+│   │   │   ├── entities/
+│   │   │   └── services/
+│   │   └── [other-domains]/
 │   ├── application/          # Application layer
 │   ├── ports/
 │   │   ├── in/
@@ -704,9 +783,11 @@ Each service has its own MongoDB database instance:
 
 **Configuration**:
 
-- Each service connects to its own database
+- Each service connects to its own database using **Mongoose ODM**
 - Connection strings configured via environment variables
 - Database names: `admin`, `bot`, `ai`, `analytics`
+- **Connection Pattern**: Singleton pattern with connection caching to reuse connections across requests
+- **Connection Management**: Services use `connectToDatabase()` function that implements connection pooling and reuse
 
 ### RabbitMQ Message Queue
 
@@ -961,8 +1042,8 @@ Kubernetes deployment architecture showing container structure, service pods and
 
 %%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#ff6b6b','primaryTextColor':'#fff','primaryBorderColor':'#7C0000','lineColor':'#F8B229','secondaryColor':'#006100','tertiaryColor':'#fff'}}}%%
 graph TB
-    %% External
-    Internet[Internet<br/>External Traffic]
+%% External
+Internet[Internet<br/>External Traffic]
 
     %% Kubernetes Namespace
     subgraph K8sNamespace["Kubernetes Namespace: vbar-production"]
@@ -1204,6 +1285,7 @@ graph TB
     class AdminMongoPod1,AdminMongoPod2,AdminMongoPod3,BotMongoPod1,BotMongoPod2,BotMongoPod3,AIMongoPod1,AIMongoPod2,AnalyticsMongoPod1,AnalyticsMongoPod2,AnalyticsMongoPod3 dbBox
     class AdminMongoPV1,AdminMongoPV2,AdminMongoPV3,BotMongoPV1,BotMongoPV2,BotMongoPV3,AIMongoPV1,AIMongoPV2,AnalyticsMongoPV1,AnalyticsMongoPV2,AnalyticsMongoPV3,RabbitMQPV1,RabbitMQPV2,RabbitMQPV3,OllamaPV1,OllamaPV2 pvBox
     class Internet externalBox
+
 ```
 
 **Source file**: [deployment.mmd](./diagrams/deployment.mmd)
@@ -1213,3 +1295,4 @@ graph TB
 - [Setup Guide](./setup.md) - Development environment setup
 - [Deployment Guide](./deployment.md) - Docker and Kubernetes deployment
 - [API Documentation](./api.md) - API contracts and endpoints
+```

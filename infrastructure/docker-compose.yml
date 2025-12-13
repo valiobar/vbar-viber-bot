@@ -65,7 +65,7 @@ services:
       dockerfile: infrastructure/docker/Dockerfile.ai
     container_name: vbar-ai
     ports:
-      - "3002:3002"
+      - "127.0.0.1:3002:3002"  # Localhost only
     environment:
       - NODE_ENV=production
       - PORT=3002
@@ -100,7 +100,7 @@ services:
       dockerfile: infrastructure/docker/Dockerfile.analytics
     container_name: vbar-analytics
     ports:
-      - "3003:3003"
+      - "127.0.0.1:3003:3003"  # Localhost only
     environment:
       - NODE_ENV=production
       - PORT=3003

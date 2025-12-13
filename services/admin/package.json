@@ -12,18 +12,23 @@
   },
   "dependencies": {
     "@vbar/shared": "*",
+    "bcrypt": "^6.0.0",
+    "jose": "^6.1.3",
+    "mongodb": "^6.0.0",
+    "mongoose": "^9.0.1",
     "next": "^14.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "mongodb": "^6.0.0"
+    "zustand": "^5.0.9"
   },
   "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "@types/mongoose": "^5.11.96",
     "@types/node": "^20.0.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
-    "typescript": "^5.0.0",
     "eslint": "^8.0.0",
-    "eslint-config-next": "^14.0.0"
+    "eslint-config-next": "^15.0.0",
+    "typescript": "^5.0.0"
   }
 }
-

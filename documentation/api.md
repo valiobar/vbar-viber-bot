@@ -443,11 +443,119 @@ Service health check.
 
 The Viber Service handles Viber bot webhooks, message processing, and bot configuration. The Viber Service communicates with the AI Service using **gRPC** for high-performance message processing and intent detection.
 
+### Security Overview
+
+The Viber Service implements comprehensive security measures:
+
+- **Webhook Signature Verification**: All webhook requests must include valid HMAC-SHA256 signatures
+- **Rate Limiting**: Different rate limits for different route types (general, health check, webhook, API)
+- **Service-to-Service Authentication**: Service tokens for internal service communication (for future API routes)
+- **Security Headers**: Rate limit information included in all responses
+
+### Webhook Signature Verification
+
+Viber webhook requests must include a valid signature in the `X-Viber-Content-Signature` header. The signature is verified using HMAC-SHA256 with the Viber bot token as the secret.
+
+**Signature Calculation**:
+
+- Algorithm: HMAC-SHA256
+- Secret: Viber bot token (from `VIBER_BOT_TOKEN` environment variable)
+- Payload: Raw request body (before JSON parsing, must be Buffer)
+
+**Verification Process**:
+
+1. Extract signature from `X-Viber-Content-Signature` header
+2. Calculate expected signature using HMAC-SHA256 with bot token and raw body
+3. Compare signatures using timing-safe comparison (prevents timing attacks)
+4. Reject requests with invalid or missing signatures
+
+**Error Responses**:
+
+- `401 Unauthorized` (AUTH_001): Missing webhook signature
+- `401 Unauthorized` (AUTH_002): Invalid webhook signature
+- `500 Internal Server Error` (SVC_002): Server configuration error (raw body not available)
+
+### Service-to-Service Authentication
+
+For API routes (when implemented), the service supports service-to-service authentication using service tokens.
+
+**Headers**:
+
+- `X-Service-Token` (required): Service token for authentication
+- `X-Service-Name` (optional): Service name for logging and identification
+
+**Service Tokens**:
+Service tokens are configured via environment variables:
+
+- `SERVICE_TOKEN`: General service token
+- `ADMIN_SERVICE_TOKEN`: Admin service specific token
+- `AI_SERVICE_TOKEN`: AI service specific token
+- `ANALYTICS_SERVICE_TOKEN`: Analytics service specific token
+
+**Token Validation**:
+
+- Tokens are validated using timing-safe comparison
+- Invalid or missing tokens return `401 Unauthorized`
+- Authentication attempts are logged for security monitoring
+
+**Error Responses**:
+
+- `401 Unauthorized` (AUTH_001): Missing service token
+- `401 Unauthorized` (AUTH_002): Invalid service token
+- `500 Internal Server Error` (SVC_002): Server configuration error (service tokens not configured)
+
+### Rate Limiting
+
+The service implements different rate limits for different route types:
+
+| Route Type                 | Limit         | Window   | Identification |
+| -------------------------- | ------------- | -------- | -------------- |
+| General Routes (`/`)       | 100 requests  | 1 minute | IP address     |
+| Health Check (`/health`)   | 10 requests   | 1 minute | IP address     |
+| Webhook (`/webhook/viber`) | 1000 requests | 1 minute | IP address     |
+| API Routes (`/api/*`)      | 5000 requests | 1 minute | Service token  |
+
+**Rate Limit Headers**:
+
+All responses include rate limit information:
+
+- `X-RateLimit-Limit`: Maximum requests allowed
+- `X-RateLimit-Remaining`: Remaining requests in window
+- `X-RateLimit-Reset`: Unix timestamp when limit resets
+- `RateLimit-Limit`: Standard header (draft standard)
+- `RateLimit-Remaining`: Standard header (draft standard)
+- `RateLimit-Reset`: Standard header (draft standard)
+
+**Rate Limit Exceeded Response**:
+
+```http
+HTTP/1.1 429 Too Many Requests
+Content-Type: application/json
+
+{
+  "error": {
+    "code": "SVC_003",
+    "message": "Too many requests, please try again later"
+  }
+}
+```
+
 ### Webhook Endpoints
 
 #### POST /webhook/viber
 
 Viber webhook endpoint for receiving events from Viber.
+
+**Security Requirements**:
+
+- **Signature Verification**: Required - Requests must include valid `X-Viber-Content-Signature` header
+- **Rate Limiting**: 1000 requests per minute per IP
+- **Authentication**: No service token required (public endpoint for Viber servers)
+
+**Headers**:
+
+- `X-Viber-Content-Signature` (required): HMAC-SHA256 signature of the request body
+- `Content-Type`: `application/json`
 
 **Request** (Viber Webhook Format):
 
@@ -497,11 +605,23 @@ interface ViberWebhookEvent {
 }
 ```
 
-**Note**: This endpoint is called by Viber's servers and requires proper webhook verification.
+**Note**: This endpoint is called by Viber's servers and requires proper webhook verification. The signature is verified using HMAC-SHA256 with the Viber bot token.
+
+**Error Responses**:
+
+- `401 Unauthorized`: Missing or invalid webhook signature
+- `429 Too Many Requests`: Rate limit exceeded
+- `500 Internal Server Error`: Server configuration error (e.g., raw body not available)
 
 #### GET /webhook/viber
 
 Webhook verification endpoint (Viber requirement).
+
+**Security Requirements**:
+
+- **Rate Limiting**: 1000 requests per minute per IP
+- **Authentication**: No authentication required (public endpoint for Viber servers)
+- **Signature Verification**: Not required for GET requests (only for POST)
 
 **Query Parameters**:
 
@@ -524,7 +644,16 @@ Webhook verification endpoint (Viber requirement).
 
 Send message to Viber user.
 
-**Headers**: `Authorization: Bearer <token>` or `X-Service-Token: <service_token>`
+**Security Requirements**:
+
+- **Authentication**: Required - `X-Service-Token` header with valid service token
+- **Rate Limiting**: 5000 requests per minute per service token
+- **Service Name**: Optional `X-Service-Name` header for logging
+
+**Headers**:
+
+- `X-Service-Token` (required): Service token for authentication
+- `X-Service-Name` (optional): Service name for logging
 
 **Request**:
 
@@ -633,7 +762,16 @@ Get message by ID.
 
 Get bot configuration.
 
-**Headers**: `Authorization: Bearer <token>` or `X-Service-Token: <service_token>`
+**Security Requirements**:
+
+- **Authentication**: Required - `X-Service-Token` header with valid service token
+- **Rate Limiting**: 5000 requests per minute per service token
+- **Service Name**: Optional `X-Service-Name` header for logging
+
+**Headers**:
+
+- `X-Service-Token` (required): Service token for authentication
+- `X-Service-Name` (optional): Service name for logging
 
 **Response** (`200 OK`):
 
@@ -653,7 +791,16 @@ Get bot configuration.
 
 Update bot configuration.
 
-**Headers**: `Authorization: Bearer <token>` or `X-Service-Token: <service_token>`
+**Security Requirements**:
+
+- **Authentication**: Required - `X-Service-Token` header with valid service token
+- **Rate Limiting**: 5000 requests per minute per service token
+- **Service Name**: Optional `X-Service-Name` header for logging
+
+**Headers**:
+
+- `X-Service-Token` (required): Service token for authentication
+- `X-Service-Name` (optional): Service name for logging
 
 **Request**:
 
@@ -677,9 +824,15 @@ interface UpdateBotConfigRequest {
 
 ### Health Check
 
-#### GET /api/health
+#### GET /health
 
 Service health check.
+
+**Security Requirements**:
+
+- **Rate Limiting**: 10 requests per minute per IP (strict limit)
+- **Authentication**: No authentication required (public endpoint for monitoring)
+- **Information Disclosure**: Limited information in production mode (only status, timestamp, service name)
 
 **Response** (`200 OK`):
 
@@ -692,6 +845,16 @@ Service health check.
     messageQueue: "connected" | "disconnected";
     viberApi: "connected" | "disconnected";
   }
+}
+```
+
+**Production Response** (limited information):
+
+```typescript
+{
+  status: "ok" | "error";
+  timestamp: string;
+  service: "viber";
 }
 ```
 

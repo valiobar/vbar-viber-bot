@@ -416,9 +416,11 @@ All services follow the **Hexagonal Architecture (Ports and Adapters)** pattern 
 
 ### Architecture Layers
 
-#### Domain Layer (`src/domain/`)
+#### Domain Layer (`src/domains/`)
 
 **Purpose**: Core business logic, entities, and domain rules (innermost layer)
+
+**Structure**: Organized by domain with subfolders for each domain (e.g., `user/`, `auth/`, `config/`)
 
 **Contents**:
 
@@ -428,12 +430,31 @@ All services follow the **Hexagonal Architecture (Ports and Adapters)** pattern 
 - Business rules and validations
 - Domain events
 
+**Organization**:
+
+Each domain has its own folder structure:
+
+```
+domains/
+├── user/
+│   ├── entities/
+│   ├── value-objects/
+│   ├── services/
+│   └── events/
+├── auth/
+│   ├── entities/
+│   ├── value-objects/
+│   └── services/
+└── [other-domains]/
+```
+
 **Rules**:
 
 - **MUST NOT** depend on external frameworks
 - **MUST NOT** depend on infrastructure
 - Contains pure business logic
 - Framework-agnostic
+- Each domain should be self-contained with minimal coupling to other domains
 
 #### Application Layer (`src/application/`)
 
@@ -535,11 +556,17 @@ All services follow the **Hexagonal Architecture (Ports and Adapters)** pattern 
 ```
 service/
 ├── src/
-│   ├── domain/              # Domain layer
-│   │   ├── entities/
-│   │   ├── value-objects/
-│   │   ├── services/
-│   │   └── events/
+│   ├── domains/             # Domain layer (organized by domain)
+│   │   ├── user/
+│   │   │   ├── entities/
+│   │   │   ├── value-objects/
+│   │   │   ├── services/
+│   │   │   └── events/
+│   │   ├── auth/
+│   │   │   ├── entities/
+│   │   │   ├── value-objects/
+│   │   │   └── services/
+│   │   └── [other-domains]/
 │   ├── application/         # Application layer
 │   │   ├── use-cases/
 │   │   ├── services/
@@ -561,7 +588,15 @@ admin/
 │   ├── app/                  # Next.js App Router (acts as input adapter)
 │   │   ├── api/              # API routes (input adapters)
 │   │   └── (pages)/          # Pages
-│   ├── domain/               # Domain layer
+│   ├── domains/              # Domain layer (organized by domain)
+│   │   ├── user/
+│   │   │   ├── entities/
+│   │   │   ├── value-objects/
+│   │   │   └── services/
+│   │   ├── auth/
+│   │   │   ├── entities/
+│   │   │   └── services/
+│   │   └── [other-domains]/
 │   ├── application/          # Application layer
 │   ├── ports/
 │   │   ├── in/
