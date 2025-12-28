@@ -435,13 +435,16 @@ If a step cannot be executed as written:
 
 When implementing service code, structure must follow these layers:
 
-1. **Domain Layer** (`src/domain/`):
+1. **Domain Layer** (`src/domains/`):
 
    - Core business logic, entities, and domain rules (innermost layer)
+   - Organized by domain with subfolders for each domain (e.g., `user/`, `auth/`, `config/`)
+   - Each domain folder contains: `entities/`, `value-objects/`, `services/`, `events/`
    - Domain entities and value objects
    - Domain services
    - Business rules and validations
    - **MUST NOT** depend on external frameworks or infrastructure
+   - Each domain should be self-contained with minimal coupling to other domains
 
 2. **Application Layer** (`src/application/`):
 

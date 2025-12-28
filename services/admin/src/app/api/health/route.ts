@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { HealthCheckResponse } from "@vbar/shared";
-import { getDatabase } from "@/lib/mongodb";
+import { connectToDatabase } from "@/lib/mongodb";
+import mongoose from "mongoose";
 
 /**
  * Health check endpoint
@@ -9,8 +10,13 @@ import { getDatabase } from "@/lib/mongodb";
 export async function GET(): Promise<NextResponse<HealthCheckResponse>> {
   try {
     // Check MongoDB connection
-    const db = await getDatabase();
-    await db.admin().ping();
+    await connectToDatabase();
+    const db = mongoose.connection.db;
+    if (db) {
+      await db.admin().ping();
+    } else {
+      throw new Error("Database connection not available");
+    }
 
     return NextResponse.json({
       status: "ok",

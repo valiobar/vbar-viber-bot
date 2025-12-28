@@ -17,7 +17,7 @@ The Analytics Service provides data aggregation, analysis, and reporting capabil
 
 This service follows **Hexagonal Architecture (Ports and Adapters)** pattern:
 
-- **Domain Layer** (`src/domain/`): Core business logic, entities, and domain rules
+- **Domains Layer** (`src/domains/`): Core business logic, entities, and domain rules organized by domain
 - **Application Layer** (`src/application/`): Use cases and application services
 - **Ports** (`src/ports/`): Interfaces for input/output operations
 - **Adapters** (`src/adapters/`): HTTP controllers, database repositories, message queue consumers
@@ -174,7 +174,7 @@ services/analytics/
 │   │   └── out/             # Output adapters (MongoDB repos, message publishers)
 │   ├── application/         # Application layer (use cases)
 │   ├── config/              # Configuration (database, messageQueue)
-│   ├── domain/              # Domain layer (entities, business rules)
+│   ├── domains/             # Domains layer (organized by domain)
 │   ├── ports/
 │   │   ├── in/              # Input ports (use case interfaces)
 │   │   └── out/             # Output ports (repository interfaces)

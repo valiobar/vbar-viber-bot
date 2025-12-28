@@ -86,6 +86,9 @@ temp/
 .tern-port
 .vscode-test
 
+# Plans (implementation plans - typically not committed)
+plans/
+
 # Package manager lock files (optional - uncomment if you want to ignore)
 # package-lock.json
 # yarn.lock

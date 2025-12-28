@@ -1,8 +1,12 @@
+/**
+ * Home Page Component
+ *
+ * Redirects to the settings page by default.
+ * Authentication is handled by AuthProvider in the layout.
+ */
+
+import { redirect } from "next/navigation";
+
 export default function Home() {
-  return (
-    <main className="container">
-      <h1>Viber Bot Admin Dashboard</h1>
-      <p>Welcome to the administrative dashboard for the Viber bot system.</p>
-    </main>
-  );
+  redirect("/settings");
 }

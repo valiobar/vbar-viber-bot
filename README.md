@@ -1,6 +1,6 @@
 # vbar-viber-bot
 
-A microservices-based Viber bot platform with AI-powered message processing, analytics, and administrative dashboard. Built with Node.js, Next.js, TypeScript, MongoDB, and RabbitMQ, following Hexagonal Architecture (Ports and Adapters) principles.
+A microservices-based Viber bot platform with AI-powered message processing, analytics, and administrative dashboard. Built with Node.js, Next.js, TypeScript, MongoDB (Mongoose ODM), and RabbitMQ, following Hexagonal Architecture (Ports and Adapters) principles.
 
 ## 🏗️ Architecture Overview
 

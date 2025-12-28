@@ -1,68 +1,151 @@
 /**
- * MongoDB connection utility for Admin Service
- * 
+ * MongoDB connection utility for Admin Service using Mongoose
+ *
  * Uses singleton pattern to maintain a single connection across requests
  */
 
-import { MongoClient, Db } from "mongodb";
+import mongoose from "mongoose";
 import { ConfigHelper } from "@vbar/shared";
+import { seedAdminUser } from "./seed";
+// Import models to ensure they're registered
+import { UserModel } from "@/domains/user/adapters/out/models/UserModel";
+import { SessionModel } from "@/domains/user/adapters/out/models/SessionModel";
+import { KeyboardModel } from "@/domains/keyboard/adapters/out/models/KeyboardModel";
 
-let client: MongoClient | null = null;
-let clientPromise: Promise<MongoClient> | null = null;
+// Default database name - using 'admin_service' to avoid conflicts with MongoDB's 'admin' auth database
+const dbName = ConfigHelper.getEnv("MONGODB_DB_NAME", "admin_service");
 
-const uri = ConfigHelper.getEnv("MONGODB_URI", "mongodb://localhost:27017");
-const dbName = ConfigHelper.getEnv("MONGODB_DB_NAME", "admin");
+// Build connection URI with authSource to authenticate against 'admin' database
+// but use a different database for application data
+const defaultUri = `mongodb://admin:admin123@localhost:27017/${dbName}?authSource=admin`;
+let uri = ConfigHelper.getEnv("MONGODB_URI", defaultUri);
+
+// Ensure authSource is included if not already present (for custom URIs)
+if (uri && !uri.includes("authSource=")) {
+  const separator = uri.includes("?") ? "&" : "?";
+  uri = `${uri}${separator}authSource=admin`;
+}
 
 if (!uri) {
   throw new Error("Please add your Mongo URI to the .env file");
 }
 
 /**
- * Get MongoDB client instance
- * Reuses existing connection if available
+ * MongoDB connection state
  */
-export async function getMongoClient(): Promise<MongoClient> {
-  if (clientPromise) {
-    return clientPromise;
-  }
+interface MongooseCache {
+  conn: typeof mongoose | null;
+  promise: Promise<typeof mongoose> | null;
+}
 
-  if (process.env.NODE_ENV === "development") {
-    // In development mode, use a global variable so that the value
-    // is preserved across module reloads caused by HMR (Hot Module Replacement).
-    const globalWithMongo = global as typeof globalThis & {
-      _mongoClientPromise?: Promise<MongoClient>;
-    };
+const globalForMongoose = global as typeof globalThis & {
+  mongoose?: MongooseCache;
+  seeded?: boolean;
+};
 
-    if (!globalWithMongo._mongoClientPromise) {
-      client = new MongoClient(uri);
-      globalWithMongo._mongoClientPromise = client.connect();
-    }
-    clientPromise = globalWithMongo._mongoClientPromise;
-  } else {
-    // In production mode, it's best to not use a global variable.
-    client = new MongoClient(uri);
-    clientPromise = client.connect();
-  }
+let cached: MongooseCache = globalForMongoose.mongoose || {
+  conn: null,
+  promise: null,
+};
 
-  return clientPromise;
+if (!globalForMongoose.mongoose) {
+  globalForMongoose.mongoose = cached;
 }
 
 /**
- * Get MongoDB database instance
+ * Connect to MongoDB using Mongoose
+ * Reuses existing connection if available
  */
-export async function getDatabase(): Promise<Db> {
-  const client = await getMongoClient();
-  return client.db(dbName);
+export async function connectToDatabase(): Promise<typeof mongoose> {
+  if (cached.conn) {
+    console.log("Using existing MongoDB connection");
+    // Check if seeding is needed even with existing connection
+    if (!globalForMongoose.seeded) {
+      globalForMongoose.seeded = true;
+      console.log("Starting database seeding process (existing connection)...");
+      seedAdminUser()
+        .then(() => {
+          console.log("✅ Database seeding completed successfully");
+        })
+        .catch((error) => {
+          console.error("❌ Failed to seed admin user:", error);
+          if (error instanceof Error) {
+            console.error("Error message:", error.message);
+            console.error("Error stack:", error.stack);
+          }
+        });
+    }
+    return cached.conn;
+  }
+
+  if (!cached.promise) {
+    console.log("Creating new MongoDB connection...");
+    const opts = {
+      bufferCommands: false,
+      dbName,
+    };
+
+    cached.promise = mongoose.connect(uri, opts).then(async (mongoose) => {
+      console.log("MongoDB connection established");
+
+      // Ensure indexes are created from model definitions
+      // This ensures indexes exist even if models haven't been used yet
+      try {
+        await UserModel.ensureIndexes();
+        await SessionModel.ensureIndexes();
+        await KeyboardModel.ensureIndexes();
+        console.log("✅ Database indexes verified/created");
+      } catch (error) {
+        console.error("⚠️  Failed to ensure database indexes:", error);
+        // Don't throw - indexes might already exist
+      }
+
+      return mongoose;
+    });
+  }
+
+  try {
+    cached.conn = await cached.promise;
+    console.log(
+      "MongoDB connection ready, seeded flag:",
+      globalForMongoose.seeded
+    );
+
+    // Seed admin user on first connection (only once)
+    if (!globalForMongoose.seeded) {
+      globalForMongoose.seeded = true;
+      console.log("Starting database seeding process...");
+      // Run seeding asynchronously without blocking the connection
+      // But ensure it completes to create collections
+      seedAdminUser()
+        .then(() => {
+          console.log("✅ Database seeding completed successfully");
+        })
+        .catch((error) => {
+          console.error("❌ Failed to seed admin user:", error);
+          if (error instanceof Error) {
+            console.error("Error message:", error.message);
+            console.error("Error stack:", error.stack);
+          }
+        });
+    } else {
+      console.log("Database already seeded, skipping...");
+    }
+  } catch (e) {
+    cached.promise = null;
+    throw e;
+  }
+
+  return cached.conn;
 }
 
 /**
  * Close MongoDB connection
  */
 export async function closeConnection(): Promise<void> {
-  if (client) {
-    await client.close();
-    client = null;
-    clientPromise = null;
+  if (cached.conn) {
+    await mongoose.connection.close();
+    cached.conn = null;
+    cached.promise = null;
   }
 }
-

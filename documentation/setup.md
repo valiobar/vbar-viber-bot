@@ -115,8 +115,19 @@ NODE_ENV=development
 PORT=3000
 
 # Authentication
-JWT_SECRET=your-secret-key-here
+# JWT_SECRET: Secret key for signing JWT tokens (required, minimum 32 characters)
+# Example: JWT_SECRET=your-super-secret-key-minimum-32-characters-long-for-security
+JWT_SECRET=your-secret-key-here-min-32-chars
+
+# JWT_EXPIRES_IN: Access token expiration time (default: "7d")
+# Format: number followed by unit (s=seconds, m=minutes, h=hours, d=days)
+# Examples: "1h", "24h", "7d", "30d"
 JWT_EXPIRES_IN=7d
+
+# JWT_REFRESH_EXPIRES_IN: Refresh token expiration time (default: "30d")
+# Format: number followed by unit (s=seconds, m=minutes, h=hours, d=days)
+# Examples: "7d", "30d", "90d"
+JWT_REFRESH_EXPIRES_IN=30d
 
 # Other services
 VIBER_SERVICE_URL=http://localhost:3001
@@ -269,6 +280,8 @@ npm run dev
 cd services/ai
 npm run dev
 # Service runs on http://localhost:3002
+# Note: In Docker Compose, this service is bound to localhost only (127.0.0.1:3002)
+# for security - accessible from host machine but not from external networks
 ```
 
 **Terminal 4 - Analytics Service**:
@@ -277,6 +290,8 @@ npm run dev
 cd services/analytics
 npm run dev
 # Service runs on http://localhost:3003
+# Note: In Docker Compose, this service is bound to localhost only (127.0.0.1:3003)
+# for security - accessible from host machine but not from external networks
 ```
 
 #### Using Root Scripts
@@ -312,6 +327,41 @@ docker compose -f infrastructure/docker-compose.yml logs -f
 docker compose -f infrastructure/docker-compose.yml down
 ```
 
+#### Service Port Binding and Access
+
+The Docker Compose configuration uses a security model that restricts internal services to localhost-only access:
+
+- **Publicly Accessible Services**:
+
+  - **Admin Service**: `http://localhost:3000` (publicly accessible for user access)
+  - **Viber Service**: `http://localhost:3001` (publicly accessible - required for Viber webhook callbacks)
+
+- **Localhost-Only Services** (internal services, not accessible from external networks):
+  - **AI Service**: `http://localhost:3002` (localhost only - accessible from host machine)
+  - **Analytics Service**: `http://localhost:3003` (localhost only - accessible from host machine)
+
+**Service Communication Patterns**:
+
+**When services run locally** (`pnpm dev`):
+
+- Services connect via `http://localhost:3001/3002/3003`
+- Works because ports are bound to localhost (AI, Analytics) or public (Admin, Viber)
+
+**When services run in Docker**:
+
+- Services communicate via Docker network hostnames: `http://viber:3001`, `http://ai:3002`, `http://analytics:3003`
+- External access: Admin and Viber accessible, AI and Analytics blocked
+- Services within Docker network can communicate using service names regardless of port binding
+
+**Why Localhost-Only Binding for Internal Services?**:
+
+- **Security**: AI and Analytics services don't need to be accessible from external networks
+- **Local Development**: Services remain accessible from the host machine for local development and testing
+- **Docker Network**: Services within Docker can still communicate using service names (e.g., `http://ai:3002`)
+
+**Viber Service Must Remain Public**:
+The Viber service must remain publicly accessible because Viber API sends webhook events from external networks. The service cannot receive webhooks if bound to localhost only.
+
 ### Database Setup and Migrations
 
 #### MongoDB Setup
@@ -333,6 +383,14 @@ docker run -d \
 ```
 
 **Connection String Format**: `mongodb://username:password@host:port/database`
+
+**Note**: All services use **Mongoose ODM** for MongoDB connections. Mongoose provides:
+
+- Schema-based data modeling
+- Built-in validation
+- Connection pooling and management
+- Singleton pattern for connection reuse across requests
+- Type-safe database operations
 
 **MongoDB Compass Connection**:
 
@@ -490,6 +548,7 @@ All services support hot reload in development mode:
 - Next.js 14+ (App Router)
 - TypeScript
 - MongoDB
+- Mongoose (ODM)
 
 **Setup Steps**:
 
@@ -539,6 +598,7 @@ All services support hot reload in development mode:
 - Express.js
 - TypeScript
 - MongoDB
+- Mongoose (ODM)
 
 **Setup Steps**:
 
@@ -572,11 +632,13 @@ All services support hot reload in development mode:
    curl http://localhost:3001/health
    ```
 
+**Note**: The Viber service must remain publicly accessible in Docker Compose configuration because Viber API sends webhook events from external networks. The service cannot receive webhooks if bound to localhost only.
+
 **Development Features**:
 
 - Hot reload with `nodemon` or `ts-node-dev`
 - TypeScript compilation
-- MongoDB connection pooling
+- MongoDB connection management with Mongoose (singleton pattern with connection caching)
 - RabbitMQ message queue integration
 
 ### AI Service Setup
@@ -589,6 +651,7 @@ All services support hot reload in development mode:
 - Express.js
 - TypeScript
 - MongoDB
+- Mongoose (ODM)
 - Multi-provider AI support (Ollama, OpenAI, Anthropic, etc.)
 
 **Setup Steps**:
@@ -659,6 +722,12 @@ All services support hot reload in development mode:
    curl http://localhost:3002/health
    ```
 
+**Note**: In Docker Compose configuration, the AI service is bound to localhost only (`127.0.0.1:3002:3002`) for security. This means:
+
+- ✅ Accessible from the host machine at `http://localhost:3002`
+- ❌ **NOT** accessible from external networks (security)
+- ✅ Accessible from other Docker containers using service name: `http://ai:3002`
+
 7. Test AI processing:
    ```bash
    curl -X POST http://localhost:3002/api/ai/process \
@@ -693,6 +762,7 @@ The AI Service supports dynamic provider switching. You can:
 - Express.js
 - TypeScript
 - MongoDB
+- Mongoose (ODM)
 
 **Setup Steps**:
 
@@ -725,6 +795,12 @@ The AI Service supports dynamic provider switching. You can:
    ```bash
    curl http://localhost:3003/health
    ```
+
+**Note**: In Docker Compose configuration, the Analytics service is bound to localhost only (`127.0.0.1:3003:3003`) for security. This means:
+
+- ✅ Accessible from the host machine at `http://localhost:3003`
+- ❌ **NOT** accessible from external networks (security)
+- ✅ Accessible from other Docker containers using service name: `http://analytics:3003`
 
 **Development Features**:
 

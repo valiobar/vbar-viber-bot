@@ -28,14 +28,13 @@ services/admin/
 │   │   ├── api/                # API routes (input adapters)
 │   │   ├── layout.tsx          # Root layout
 │   │   └── page.tsx            # Home page
-│   ├── domain/                 # Domain layer (business logic)
-│   ├── application/            # Application layer (use cases)
-│   ├── ports/                  # Ports (interfaces)
-│   │   ├── in/                 # Input ports
-│   │   └── out/                # Output ports
-│   ├── adapters/               # Adapters (infrastructure)
-│   │   ├── in/                 # Input adapters
-│   │   └── out/                # Output adapters (MongoDB repos, etc.)
+│   ├── domains/                # Domains layer (organized by domain)
+│   │   └── user/               # User domain
+│   │       ├── entities/      # Domain entities
+│   │       ├── adapters/      # Domain adapters (in/out)
+│   │       ├── application/   # Use cases
+│   │       ├── ports/         # Ports (interfaces)
+│   │       └── lib/           # Domain utilities (auth, jwt, password)
 │   ├── lib/                    # Shared utilities
 │   │   └── mongodb.ts          # MongoDB connection
 │   └── types/                  # Service-specific types
@@ -49,13 +48,16 @@ services/admin/
 
 ## Hexagonal Architecture
 
-The Admin Service follows Hexagonal Architecture principles:
+The Admin Service follows Hexagonal Architecture principles organized by domain:
 
 - **Next.js App Router** serves as the input adapter (HTTP layer)
-- **Domain Layer** contains business logic and entities
-- **Application Layer** orchestrates use cases
-- **Ports** define interfaces for input/output operations
-- **Adapters** implement infrastructure concerns (MongoDB, external APIs)
+- **Domains Layer** contains business logic, entities, use cases, ports, and adapters organized by domain (e.g., `user/`)
+- Each domain contains:
+  - **Entities**: Domain models and business logic
+  - **Application**: Use cases and application services
+  - **Ports**: Interfaces for input/output operations
+  - **Adapters**: Infrastructure implementations (repositories, API routes)
+  - **Lib**: Domain-specific utilities
 
 ## Setup
 

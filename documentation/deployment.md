@@ -101,6 +101,43 @@ docker compose -f infrastructure/docker-compose.yml build --no-cache
 
 ### Docker Compose Configuration
 
+#### Port Binding Security Model
+
+The Docker Compose configuration implements a security model that restricts internal services to localhost-only access:
+
+- **Public Services** (accessible from external networks):
+
+  - **Admin Service** (`3000:3000`): Publicly accessible for user access
+  - **Viber Service** (`3001:3001`): Publicly accessible - **required** for Viber API webhook callbacks
+
+- **Internal Services** (localhost-only, not accessible from external networks):
+  - **AI Service** (`127.0.0.1:3002:3002`): Localhost only - accessible from host machine for local development, but not from external networks
+  - **Analytics Service** (`127.0.0.1:3003:3003`): Localhost only - accessible from host machine for local development, but not from external networks
+
+**Port Binding Behavior**:
+
+- `"3000:3000"` → Binds to `0.0.0.0:3000` (all network interfaces, publicly accessible)
+- `"127.0.0.1:3002:3002"` → Binds to `127.0.0.1:3002` (localhost only, not externally accessible)
+
+**Service Communication**:
+
+- **When services run locally** (`pnpm dev`): Services connect via `http://localhost:3001/3002/3003`
+- **When services run in Docker**: Services communicate via Docker network hostnames: `http://viber:3001`, `http://ai:3002`, `http://analytics:3003`
+- Services within the Docker network can communicate using service names regardless of port binding configuration
+
+**Security Impact**:
+
+- **Before**: All services accessible from external networks
+- **After**: Admin and Viber services accessible externally (Admin for users, Viber for webhooks); AI and Analytics restricted to localhost
+
+**Viber Webhook Requirement**:
+The Viber service must remain publicly accessible because:
+
+- Viber API sends webhook events via HTTPS POST requests
+- Webhook URL must be internet-accessible (e.g., `https://your-domain.com/api/viber/webhook`)
+- Viber requires valid SSL certificate (not self-signed)
+- Webhook endpoint typically at `/webhook` or `/api/viber/webhook` route
+
 **Infrastructure Configuration** (`infrastructure/docker-compose.infrastructure.yml`):
 
 ```yaml
@@ -199,7 +236,7 @@ services:
       context: .
       dockerfile: infrastructure/docker/Dockerfile.admin
     ports:
-      - "3000:3000"
+      - "3000:3000" # Publicly accessible (for user access)
     environment:
       - NODE_ENV=production
       - MONGODB_URI=${MONGODB_ADMIN_URI}
@@ -214,7 +251,7 @@ services:
       context: .
       dockerfile: infrastructure/docker/Dockerfile.viber
     ports:
-      - "3001:3001"
+      - "3001:3001" # Publicly accessible (required for Viber webhook callbacks)
     environment:
       - NODE_ENV=production
       - MONGODB_URI=${MONGODB_BOT_URI}
@@ -229,7 +266,7 @@ services:
       context: .
       dockerfile: infrastructure/docker/Dockerfile.ai
     ports:
-      - "3002:3002"
+      - "127.0.0.1:3002:3002" # Localhost only (internal service, not exposed externally)
     environment:
       - NODE_ENV=production
       - MONGODB_URI=${MONGODB_AI_URI}
@@ -267,7 +304,7 @@ services:
       context: .
       dockerfile: infrastructure/docker/Dockerfile.analytics
     ports:
-      - "3003:3003"
+      - "127.0.0.1:3003:3003" # Localhost only (internal service, not exposed externally)
     environment:
       - NODE_ENV=production
       - MONGODB_URI=${MONGODB_ANALYTICS_URI}
@@ -410,18 +447,24 @@ docker compose -f infrastructure/docker-compose.yml down -v
 Verify services are running:
 
 ```bash
-# Admin service
+# Admin service (publicly accessible)
 curl http://localhost:3000/api/health
 
-# Viber service
+# Viber service (publicly accessible)
 curl http://localhost:3001/health
 
-# AI service
+# AI service (localhost only - accessible from host machine)
 curl http://localhost:3002/health
 
-# Analytics service
+# Analytics service (localhost only - accessible from host machine)
 curl http://localhost:3003/health
 ```
+
+**Note**: AI and Analytics services are bound to localhost only (`127.0.0.1`), so they are:
+
+- ✅ Accessible from the host machine at `http://localhost:3002` and `http://localhost:3003`
+- ❌ **NOT** accessible from external networks (e.g., `http://<server-ip>:3002` will fail)
+- ✅ Accessible from other Docker containers using service names: `http://ai:3002` and `http://analytics:3003`
 
 **Docker health checks**:
 

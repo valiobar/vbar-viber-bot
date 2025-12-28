@@ -6,8 +6,9 @@
 
 import { Router, Request, Response } from "express";
 import { HealthCheckResponse } from "@vbar/shared";
-import { getDatabase } from "../../../config/database";
+import { connectToDatabase } from "../../../config/database";
 import { getConnection } from "../../../config/messageQueue";
+import mongoose from "mongoose";
 
 const router = Router();
 
@@ -28,8 +29,15 @@ router.get("/", async (req: Request, res: Response) => {
 
   // Check MongoDB connection
   try {
-    await getDatabase();
-    health.dependencies!.database = "connected";
+    await connectToDatabase();
+    const db = mongoose.connection.db;
+    if (db) {
+      await db.admin().ping();
+      health.dependencies!.database = "connected";
+    } else {
+      health.status = "error";
+      health.dependencies!.database = "disconnected";
+    }
   } catch (error) {
     health.status = "error";
     health.dependencies!.database = "disconnected";
@@ -49,4 +57,3 @@ router.get("/", async (req: Request, res: Response) => {
 });
 
 export default router;
-
