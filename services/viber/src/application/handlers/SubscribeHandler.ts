@@ -9,11 +9,14 @@
 import { Bot } from "viber-bot";
 import { IEventHandler } from "./IEventHandler";
 import { ConsoleLogger, Logger } from "@vbar/shared";
+import { IUserRepository } from "../../ports/out/IUserRepository";
 
 export class SubscribeHandler implements IEventHandler {
   private logger: Logger;
+  private userRepository: IUserRepository;
 
-  constructor(logger?: Logger) {
+  constructor(userRepository: IUserRepository, logger?: Logger) {
+    this.userRepository = userRepository;
     this.logger = logger || new ConsoleLogger("SubscribeHandler");
   }
 
@@ -51,17 +54,26 @@ export class SubscribeHandler implements IEventHandler {
         timestamp: new Date().toISOString(),
       });
 
-      // TODO: In future steps, initialize user via IUserRepository port
-      // const userRepository = this.userRepository;
-      // await userRepository.createOrUpdate({
-      //   viberUserId: userId,
-      //   name: userName,
-      //   avatar,
-      //   language,
-      //   country,
-      //   subscribed: true,
-      //   subscribedAt: new Date(),
-      // });
+      // Create or update user with subscription status
+      try {
+        await this.userRepository.createOrUpdate({
+          viberId: userId,
+          name: userName,
+          avatar,
+          language,
+          country,
+          apiVersion: userProfile.apiVersion,
+          subscribed: true,
+          subscribedAt: new Date(),
+        });
+        this.logger.info("User created/updated in database", { userId });
+      } catch (error) {
+        this.logger.error("Failed to create/update user", {
+          error: error instanceof Error ? error.message : String(error),
+          userId,
+        });
+        // Don't throw - Viber requires quick response
+      }
 
       // TODO: In future steps, send welcome message via message sender
       // const messageSender = this.messageSender;

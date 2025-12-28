@@ -21,6 +21,8 @@ import { SubscribeHandler } from "./application/handlers/SubscribeHandler";
 import { UnsubscribeHandler } from "./application/handlers/UnsubscribeHandler";
 import { ConversationStartedHandler } from "./application/handlers/ConversationStartedHandler";
 import { DeliveryHandler } from "./application/handlers/DeliveryHandler";
+import { IUserRepository } from "./ports/out/IUserRepository";
+import { MongooseUserRepository } from "./adapters/out/MongooseUserRepository";
 
 // Load environment variables
 dotenv.config();
@@ -138,6 +140,10 @@ async function initialize(): Promise<void> {
     await getDatabase();
     console.log("MongoDB connected");
 
+    // Initialize user repository
+    const userRepository: IUserRepository = new MongooseUserRepository();
+    console.log("User repository initialized");
+
     // Initialize RabbitMQ connection
     console.log("Connecting to RabbitMQ...");
     await getConnection();
@@ -162,10 +168,12 @@ async function initialize(): Promise<void> {
 
       // Create and register event handlers
       try {
-        const messageHandler = new MessageHandler();
-        const subscribeHandler = new SubscribeHandler();
-        const unsubscribeHandler = new UnsubscribeHandler();
-        const conversationStartedHandler = new ConversationStartedHandler();
+        const messageHandler = new MessageHandler(userRepository);
+        const subscribeHandler = new SubscribeHandler(userRepository);
+        const unsubscribeHandler = new UnsubscribeHandler(userRepository);
+        const conversationStartedHandler = new ConversationStartedHandler(
+          userRepository
+        );
         const deliveryHandler = new DeliveryHandler();
         // MessageSentHandler is optional and not yet implemented
         // const messageSentHandler = new MessageSentHandler();

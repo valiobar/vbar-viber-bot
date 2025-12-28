@@ -9,11 +9,14 @@
 import { Bot } from "viber-bot";
 import { IEventHandler } from "./IEventHandler";
 import { ConsoleLogger, Logger } from "@vbar/shared";
+import { IUserRepository } from "../../ports/out/IUserRepository";
 
 export class ConversationStartedHandler implements IEventHandler {
   private logger: Logger;
+  private userRepository: IUserRepository;
 
-  constructor(logger?: Logger) {
+  constructor(userRepository: IUserRepository, logger?: Logger) {
+    this.userRepository = userRepository;
     this.logger = logger || new ConsoleLogger("ConversationStartedHandler");
   }
 
@@ -54,6 +57,34 @@ export class ConversationStartedHandler implements IEventHandler {
     try {
       const userId = userProfile.id;
       const userName = userProfile.name;
+
+      // Ensure user exists in database
+      try {
+        let user = await this.userRepository.findByViberId(userId);
+        if (!user) {
+          // Create user if doesn't exist
+          user = await this.userRepository.createOrUpdate({
+            viberId: userId,
+            name: userName,
+            avatar: userProfile.avatar,
+            language: userProfile.language,
+            country: userProfile.country,
+            apiVersion: userProfile.apiVersion,
+            subscribed: isSubscribed,
+            subscribedAt: isSubscribed ? new Date() : undefined,
+          });
+          this.logger.info("User created on conversation start", { userId });
+        } else if (isSubscribed && !user.subscribed) {
+          // Update subscription status if user is now subscribed
+          await this.userRepository.updateSubscriptionStatus(userId, true);
+        }
+      } catch (error) {
+        this.logger.error("Failed to ensure user exists", {
+          error: error instanceof Error ? error.message : String(error),
+          userId,
+        });
+        // Don't throw - continue processing conversation start
+      }
 
       // Log conversation start
       this.logger.info("Conversation started", {

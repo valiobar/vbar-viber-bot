@@ -19,9 +19,11 @@ import {
   StickerMessageHandler,
   UrlMessageHandler,
 } from "./message-handlers";
+import { IUserRepository } from "../../ports/out/IUserRepository";
 
 export class MessageHandler implements IEventHandler {
   private logger: Logger;
+  private userRepository: IUserRepository;
   private textHandler: TextMessageHandler;
   private locationHandler: LocationMessageHandler;
   private contactHandler: ContactMessageHandler;
@@ -31,7 +33,8 @@ export class MessageHandler implements IEventHandler {
   private stickerHandler: StickerMessageHandler;
   private urlHandler: UrlMessageHandler;
 
-  constructor(logger?: Logger) {
+  constructor(userRepository: IUserRepository, logger?: Logger) {
+    this.userRepository = userRepository;
     this.logger = logger || new ConsoleLogger("MessageHandler");
     // Initialize message type handlers
     this.textHandler = new TextMessageHandler(this.logger);
@@ -65,6 +68,49 @@ export class MessageHandler implements IEventHandler {
       const userProfile = response.userProfile;
       const userId = userProfile.id;
       const userName = userProfile.name;
+
+      // Ensure user exists in database (create on first message if not exists)
+      try {
+        let user = await this.userRepository.findByViberId(userId);
+        if (!user) {
+          // Create user on first message
+          user = await this.userRepository.createOrUpdate({
+            viberId: userId,
+            name: userName,
+            avatar: userProfile.avatar,
+            language: userProfile.language,
+            country: userProfile.country,
+            apiVersion: userProfile.apiVersion,
+            subscribed: false, // Not subscribed yet (no subscribe event received)
+          });
+          this.logger.info("User created on first message", { userId });
+        } else {
+          // Update profile if it has changed
+          const profileChanged =
+            user.name !== userName ||
+            user.avatar !== userProfile.avatar ||
+            user.language !== userProfile.language ||
+            user.country !== userProfile.country ||
+            user.apiVersion !== userProfile.apiVersion;
+
+          if (profileChanged) {
+            await this.userRepository.updateProfile(userId, {
+              name: userName,
+              avatar: userProfile.avatar,
+              language: userProfile.language,
+              country: userProfile.country,
+              apiVersion: userProfile.apiVersion,
+            });
+            this.logger.debug("User profile updated", { userId });
+          }
+        }
+      } catch (error) {
+        this.logger.error("Failed to ensure user exists", {
+          error: error instanceof Error ? error.message : String(error),
+          userId,
+        });
+        // Don't throw - continue processing message
+      }
 
       // Log message receipt
       this.logger.info("Message received", {
