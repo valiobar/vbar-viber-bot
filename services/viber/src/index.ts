@@ -11,13 +11,20 @@ import { getDatabase, closeConnection } from "./config/database";
 import { getConnection, closeMessageQueue } from "./config/messageQueue";
 import { getViberConfig } from "./config/viber";
 import routes from "./adapters/in/routes";
-import { generalRateLimiter } from "./adapters/in/middleware";
+import {
+  generalRateLimiter,
+  webhookRateLimiter,
+} from "./adapters/in/middleware";
+import { ViberBotService } from "./application/services/ViberBotService";
 
 // Load environment variables
 dotenv.config();
 
 const app: Express = express();
 const port = ConfigHelper.getEnvNumber("PORT", ServiceConfig.ports.viber);
+
+// Store ViberBotService instance globally for middleware access
+let viberBotService: ViberBotService | null = null;
 
 // Middleware to preserve raw body for webhook signature verification
 // This must be applied before JSON parsing for webhook routes
@@ -51,6 +58,24 @@ app.use((req, res, next) => {
 // 5. Route handlers (below)
 // Apply general rate limiting to all routes (base layer)
 app.use(generalRateLimiter);
+
+// POST /webhook/viber - ViberBot middleware integration
+// This route uses viber-bot middleware to handle webhook events automatically
+// The middleware routes events to registered event handlers
+// Note: This is applied before general routes to ensure proper event handling
+// Rate limiting is applied via webhookRateLimiter middleware
+app.post("/webhook/viber", webhookRateLimiter, (req, res, next) => {
+  if (!viberBotService || !viberBotService.isInitialized()) {
+    return res.status(503).json({
+      error: {
+        code: "SVC_003",
+        message: "Bot service not available",
+      },
+    });
+  }
+  const bot = viberBotService.getBot();
+  return bot.middleware()(req, res, next);
+});
 
 // Routes
 app.use("/", routes);
@@ -112,6 +137,47 @@ async function initialize(): Promise<void> {
     console.log("Connecting to RabbitMQ...");
     await getConnection();
     console.log("RabbitMQ connected");
+
+    // Initialize Viber Bot
+    console.log("Initializing Viber Bot...");
+    try {
+      viberBotService = new ViberBotService();
+      await viberBotService.initializeBot();
+      console.log("Viber Bot initialized successfully");
+
+      // Register webhook with Viber API
+      try {
+        await viberBotService.registerWebhook();
+        console.log("Webhook registered with Viber API");
+      } catch (error) {
+        console.error("Failed to register webhook:", error);
+        // Continue startup - webhook can be registered later
+        // In production, you may want to exit if webhook registration is critical
+      }
+
+      // Register event handlers
+      // TODO: After Steps 3-9 are complete, create and register handlers here:
+      // const messageHandler = new MessageHandler();
+      // const subscribeHandler = new SubscribeHandler();
+      // const unsubscribeHandler = new UnsubscribeHandler();
+      // const conversationStartedHandler = new ConversationStartedHandler();
+      // const deliveryHandler = new DeliveryHandler();
+      // const messageSentHandler = new MessageSentHandler();
+      // const handlers = [
+      //   messageHandler,
+      //   subscribeHandler,
+      //   unsubscribeHandler,
+      //   conversationStartedHandler,
+      //   deliveryHandler,
+      //   messageSentHandler,
+      // ];
+      // viberBotService.registerEventHandlers(handlers);
+      // console.log("Event handlers registered successfully");
+    } catch (error) {
+      console.error("Failed to initialize Viber Bot:", error);
+      // Continue without bot - bot may be optional for service startup
+      // In production, you may want to exit if bot initialization is critical
+    }
 
     // Validate Viber configuration
     const viberConfig = getViberConfig();

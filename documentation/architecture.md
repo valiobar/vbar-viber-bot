@@ -86,6 +86,7 @@ Communication Protocols:
 - **Configurations**: System-wide settings and bot configurations
 - **Sessions**: User authentication sessions
 - **Audit Logs**: Administrative actions and system events
+- **BotSettings**: Global bot configuration (singleton pattern - only one settings document exists)
 
 **Hexagonal Architecture Adaptation**:
 
@@ -301,7 +302,27 @@ interface AuditLog {
   details: Record<string, any>;
   timestamp: Date;
 }
+
+// BotSettings Collection (Singleton Pattern)
+interface BotSettings {
+  _id: ObjectId;
+  avatarURL: string | null;
+  botName: string;
+  botViberName: string | null;
+  status: "active" | "inactive" | "maintenance";
+  buttonsBackground: string | null; // Hex color code
+  buttonsTextColor: string | null; // Hex color code
+  buttonsPrefix: string | null;
+  welcomeStepId: ObjectId | null; // Reference to Step collection
+  GAKey: string | null; // Google Analytics key
+  createdAt: Date;
+  updatedAt: Date;
+}
 ```
+
+**Note**: BotSettings follows a **singleton pattern** - only one settings document exists in the collection. The repository uses `findOne()` to retrieve the single settings document, and `findOneAndUpdate()` with upsert to ensure only one document exists.
+
+````
 
 ### Bot Database Schema
 
@@ -351,7 +372,7 @@ interface BotState {
   variables: Record<string, any>;
   updatedAt: Date;
 }
-```
+````
 
 ### AI Database Schema
 

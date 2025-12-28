@@ -453,6 +453,113 @@ interface UpdateConfigRequest {
 }
 ```
 
+### Bot Settings Endpoints
+
+Bot Settings follow a **singleton pattern** - only one settings document exists in the database. The endpoints manage global bot configuration including bot identity, default button styles, welcome step reference, and analytics configuration.
+
+#### GET /api/bot-settings
+
+Get bot settings (singleton).
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Response** (`200 OK`):
+
+```typescript
+{
+  data: {
+    id: string;
+    avatarURL: string | null;
+    botName: string;
+    botViberName: string | null;
+    status: "active" | "inactive" | "maintenance";
+    buttonsBackground: string | null; // Hex color code (e.g., "#FFFFFF")
+    buttonsTextColor: string | null; // Hex color code (e.g., "#000000")
+    buttonsPrefix: string | null;
+    welcomeStepId: string | null; // Step ID reference
+    GAKey: string | null; // Google Analytics key
+    createdAt: string; // ISO 8601 date string
+    updatedAt: string; // ISO 8601 date string
+  }
+}
+```
+
+**Error Codes**:
+
+- `BOT_SETTINGS_001` - Bot settings not found (404) or internal server error (500)
+
+**Note**: If no settings exist, the endpoint returns a 404 error. The first update via PUT will create the initial settings document.
+
+#### PUT /api/bot-settings
+
+Update bot settings (singleton). Supports partial updates - only provided fields will be updated.
+
+**Headers**: `Authorization: Bearer <token>` (requires admin role)
+
+**Request**:
+
+```typescript
+interface UpdateBotSettingsRequest {
+  avatarURL?: string | null; // Valid URL or null
+  botName?: string; // Required if creating new settings, max 100 characters
+  botViberName?: string | null; // Max 100 characters
+  status?: "active" | "inactive" | "maintenance";
+  buttonsBackground?: string | null; // Hex color code (e.g., "#FFFFFF" or "#FFFFFFFF")
+  buttonsTextColor?: string | null; // Hex color code (e.g., "#000000" or "#000000FF")
+  buttonsPrefix?: string | null; // Max 50 characters
+  welcomeStepId?: string | null; // Valid Step ID or null
+  GAKey?: string | null; // Max 100 characters
+}
+```
+
+**Response** (`200 OK`):
+
+```typescript
+{
+  data: {
+    id: string;
+    avatarURL: string | null;
+    botName: string;
+    botViberName: string | null;
+    status: "active" | "inactive" | "maintenance";
+    buttonsBackground: string | null;
+    buttonsTextColor: string | null;
+    buttonsPrefix: string | null;
+    welcomeStepId: string | null;
+    GAKey: string | null;
+    createdAt: string;
+    updatedAt: string;
+  }
+}
+```
+
+**Validation Rules**:
+
+- `avatarURL`: Must be a valid URL format or null
+- `botName`: Required when creating new settings, must be non-empty, max 100 characters
+- `botViberName`: Optional, max 100 characters
+- `status`: Must be one of "active", "inactive", "maintenance"
+- `buttonsBackground`: Must be a valid hex color code (6 or 8 digits) or null (e.g., "#FFFFFF" or "#FFFFFFFF")
+- `buttonsTextColor`: Must be a valid hex color code (6 or 8 digits) or null
+- `buttonsPrefix`: Optional, max 50 characters
+- `welcomeStepId`: Must be a valid MongoDB ObjectId or null. If provided, the referenced Step must exist.
+- `GAKey`: Optional, max 100 characters
+
+**Error Codes**:
+
+- `BOT_SETTINGS_001` - Bot settings not found (for GET if no settings exist)
+- `BOT_SETTINGS_002` - Validation error (400) - Invalid field format or missing required field
+- `BOT_SETTINGS_003` - Referenced Step not found (400) - welcomeStepId references a non-existent Step
+- `BOT_SETTINGS_004` - Update failed (500) - Internal server error
+
+**Singleton Pattern Behavior**:
+
+- If no settings document exists, the first PUT request will create a new document with default values
+- Default `buttonsPrefix` is automatically generated as a 14-character string (13 random alphanumeric characters + "-" at the end) when creating initial settings
+- Default `status` is "active" if not provided
+- All subsequent PUT requests update the same single document
+- The repository ensures only one document exists using `findOneAndUpdate()` with upsert option
+
 ### Health Check
 
 #### GET /api/health
@@ -2151,6 +2258,13 @@ interface Config {
 - `ANALYTICS_003` - Report generation failed
 - `ANALYTICS_004` - Export failed
 - `ANALYTICS_005` - Invalid query parameters
+
+#### Bot Settings Errors
+
+- `BOT_SETTINGS_001` - Bot settings not found or internal server error
+- `BOT_SETTINGS_002` - Validation error (invalid field format or missing required field)
+- `BOT_SETTINGS_003` - Referenced Step not found (invalid welcomeStepId)
+- `BOT_SETTINGS_004` - Update failed (internal server error)
 
 #### General Errors
 
