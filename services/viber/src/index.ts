@@ -16,6 +16,11 @@ import {
   webhookRateLimiter,
 } from "./adapters/in/middleware";
 import { ViberBotService } from "./application/services/ViberBotService";
+import { MessageHandler } from "./application/handlers/MessageHandler";
+import { SubscribeHandler } from "./application/handlers/SubscribeHandler";
+import { UnsubscribeHandler } from "./application/handlers/UnsubscribeHandler";
+import { ConversationStartedHandler } from "./application/handlers/ConversationStartedHandler";
+import { DeliveryHandler } from "./application/handlers/DeliveryHandler";
 
 // Load environment variables
 dotenv.config();
@@ -155,24 +160,34 @@ async function initialize(): Promise<void> {
         // In production, you may want to exit if webhook registration is critical
       }
 
-      // Register event handlers
-      // TODO: After Steps 3-9 are complete, create and register handlers here:
-      // const messageHandler = new MessageHandler();
-      // const subscribeHandler = new SubscribeHandler();
-      // const unsubscribeHandler = new UnsubscribeHandler();
-      // const conversationStartedHandler = new ConversationStartedHandler();
-      // const deliveryHandler = new DeliveryHandler();
-      // const messageSentHandler = new MessageSentHandler();
-      // const handlers = [
-      //   messageHandler,
-      //   subscribeHandler,
-      //   unsubscribeHandler,
-      //   conversationStartedHandler,
-      //   deliveryHandler,
-      //   messageSentHandler,
-      // ];
-      // viberBotService.registerEventHandlers(handlers);
-      // console.log("Event handlers registered successfully");
+      // Create and register event handlers
+      try {
+        const messageHandler = new MessageHandler();
+        const subscribeHandler = new SubscribeHandler();
+        const unsubscribeHandler = new UnsubscribeHandler();
+        const conversationStartedHandler = new ConversationStartedHandler();
+        const deliveryHandler = new DeliveryHandler();
+        // MessageSentHandler is optional and not yet implemented
+        // const messageSentHandler = new MessageSentHandler();
+
+        const handlers = [
+          messageHandler,
+          subscribeHandler,
+          unsubscribeHandler,
+          conversationStartedHandler,
+          deliveryHandler,
+          // messageSentHandler, // Optional - can be added when implemented
+        ];
+
+        viberBotService.registerEventHandlers(handlers);
+        console.log(
+          `Event handlers registered successfully (${handlers.length} handlers)`
+        );
+      } catch (error) {
+        console.error("Failed to register event handlers:", error);
+        // Continue startup - handlers can be registered later
+        // In production, you may want to exit if handler registration is critical
+      }
     } catch (error) {
       console.error("Failed to initialize Viber Bot:", error);
       // Continue without bot - bot may be optional for service startup

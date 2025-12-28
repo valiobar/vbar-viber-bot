@@ -65,9 +65,33 @@ RABBITMQ_URI=amqp://localhost:5672
 VIBER_BOT_TOKEN=your_viber_bot_token_here
 VIBER_BOT_WEBHOOK_URL=https://your-domain.com/api/viber/webhook
 
+# Admin Service Configuration
+# Base URL for the admin service (used to fetch bot settings)
+# Default: http://localhost:3000
+ADMIN_SERVICE_URL=http://localhost:3000
+
 # Security Configuration
 # Service tokens for service-to-service authentication
 # Used for API routes (when implemented) to authenticate requests from other services
+#
+# How to generate service tokens:
+# Service tokens are simple secret strings. Generate them using one of these methods:
+#
+# Using OpenSSL (recommended):
+#   openssl rand -hex 32
+#
+# Using Node.js:
+#   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+#
+# Using Python:
+#   python3 -c "import secrets; print(secrets.token_hex(32))"
+#
+# Best practices:
+# - Use at least 32 bytes (64 hex characters) for security
+# - Use different tokens for each service
+# - Store tokens securely (never commit to version control)
+# - Rotate tokens periodically
+#
 SERVICE_TOKEN=your_service_token_here
 ADMIN_SERVICE_TOKEN=your_admin_service_token_here
 AI_SERVICE_TOKEN=your_ai_service_token_here

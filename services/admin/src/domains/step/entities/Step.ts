@@ -21,6 +21,7 @@ export class Step {
   public readonly content: string[]; // Array of Message IDs
   public readonly keyboard: string | null; // Optional Keyboard ID
   public readonly hidden: boolean;
+  public readonly isAi: boolean;
   public readonly createdAt: string;
   public readonly updatedAt: string;
 
@@ -37,6 +38,7 @@ export class Step {
     content: string[];
     keyboard?: string | null;
     hidden?: boolean;
+    isAi?: boolean;
     createdAt: string;
     updatedAt: string;
   }) {
@@ -49,6 +51,7 @@ export class Step {
     this.content = this.validateContent(params.content);
     this.keyboard = params.keyboard ?? null;
     this.hidden = params.hidden ?? false;
+    this.isAi = params.isAi ?? false;
     this.createdAt = params.createdAt;
     this.updatedAt = params.updatedAt;
   }
@@ -200,6 +203,7 @@ export class Step {
     content: string[] | { toString(): string }[];
     keyboard?: string | { toString(): string } | null;
     hidden?: boolean;
+    isAi?: boolean;
     createdAt: Date | string;
     updatedAt: Date | string;
   }): Step {
@@ -237,6 +241,7 @@ export class Step {
       content,
       keyboard,
       hidden: doc.hidden,
+      isAi: doc.isAi,
       createdAt,
       updatedAt,
     });
@@ -254,6 +259,7 @@ export class Step {
     content: string[];
     keyboard?: string | null;
     hidden?: boolean;
+    isAi?: boolean;
   }): Step {
     const now = new Date().toISOString();
 
@@ -267,6 +273,7 @@ export class Step {
       content: params.content,
       keyboard: params.keyboard ?? null,
       hidden: params.hidden ?? false,
+      isAi: params.isAi ?? false,
       createdAt: now,
       updatedAt: now,
     });

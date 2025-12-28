@@ -67,6 +67,9 @@ export class UpdateStepUseCaseImpl implements UpdateStepUseCase {
     const updatedHidden =
       input.hidden !== undefined ? input.hidden : existingStep.hidden;
 
+    const updatedIsAi =
+      input.isAi !== undefined ? input.isAi : existingStep.isAi;
+
     // Validate all Message IDs exist (if content is being updated)
     if (input.content !== undefined) {
       for (const messageId of updatedContent) {
@@ -95,6 +98,7 @@ export class UpdateStepUseCaseImpl implements UpdateStepUseCase {
       content: updatedContent,
       keyboard: updatedKeyboard,
       hidden: updatedHidden,
+      isAi: updatedIsAi,
       createdAt: existingStep.createdAt,
       updatedAt: new Date().toISOString(),
     });

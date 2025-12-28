@@ -145,6 +145,9 @@ export async function PUT(
     if (body.hidden !== undefined) {
       input.hidden = body.hidden;
     }
+    if (body.isAi !== undefined) {
+      input.isAi = body.isAi;
+    }
 
     // Instantiate repositories
     const stepRepository = new MongoStepRepository(StepModel);
@@ -299,4 +302,3 @@ export async function DELETE(
     );
   }
 }
-

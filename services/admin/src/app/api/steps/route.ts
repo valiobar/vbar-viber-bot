@@ -173,6 +173,7 @@ export async function POST(
       content: body.content,
       keyboard: body.keyboard ?? null,
       hidden: body.hidden ?? false,
+      isAi: body.isAi ?? false,
     };
 
     // Instantiate repositories

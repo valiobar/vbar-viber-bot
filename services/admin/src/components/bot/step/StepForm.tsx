@@ -52,6 +52,7 @@ const StepForm = ({
   const [content, setContent] = useState<string[]>([]);
   const [keyboard, setKeyboard] = useState<string | null>(null);
   const [hidden, setHidden] = useState(false);
+  const [isAi, setIsAi] = useState(false);
 
   // UI state
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -110,6 +111,7 @@ const StepForm = ({
       setContent(initialData.content);
       setKeyboard(initialData.keyboard);
       setHidden(initialData.hidden);
+      setIsAi(initialData.isAi);
     }
   }, [initialData]);
 
@@ -210,6 +212,7 @@ const StepForm = ({
         content,
         keyboard: keyboard || null,
         hidden,
+        isAi,
       };
       await onSubmit(updateData);
     } else {
@@ -220,6 +223,7 @@ const StepForm = ({
         content,
         keyboard: keyboard || null,
         hidden,
+        isAi,
       };
       await onSubmit(createData);
     }
@@ -276,6 +280,23 @@ const StepForm = ({
               className="ml-2 block text-sm text-gray-700 dark:text-gray-300"
             >
               Hidden
+            </label>
+          </div>
+
+          {/* Is AI Toggle */}
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              id="isAi"
+              checked={isAi}
+              onChange={(e) => setIsAi(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600"
+            />
+            <label
+              htmlFor="isAi"
+              className="ml-2 block text-sm text-gray-700 dark:text-gray-300"
+            >
+              Is AI
             </label>
           </div>
         </div>

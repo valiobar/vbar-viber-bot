@@ -9,6 +9,7 @@
 import { Keyboard } from "../../entities/Keyboard";
 import { ButtonDTO } from "./ButtonDTO";
 import { InputFieldState } from "../../types";
+import type { KeyboardDTO as SharedKeyboardDTO } from "@vbar/shared";
 
 /**
  * Keyboard DTO (Data Transfer Object)
@@ -17,8 +18,9 @@ import { InputFieldState } from "../../types";
  * but without business logic or methods.
  * Buttons are represented as ButtonDTO[] instead of Button entities.
  * Provides static methods for converting between Keyboard entities and DTOs.
+ * Implements the shared KeyboardDTO interface for cross-service compatibility.
  */
-export class KeyboardDTO {
+export class KeyboardDTO implements SharedKeyboardDTO {
   public readonly id: string;
   public readonly type: "keyboard";
   public readonly Buttons: ButtonDTO[];
