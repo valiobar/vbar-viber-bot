@@ -38,6 +38,11 @@ declare module "viber-bot" {
     sendMessage(userProfile: any, messages: any[]): Promise<any>;
 
     /**
+     * Generic event handler - use this for MESSAGE_RECEIVED and other events
+     */
+    on(event: string, callback: (...args: any[]) => void): void;
+
+    /**
      * On conversation started event
      */
     onConversationStarted(
@@ -50,7 +55,7 @@ declare module "viber-bot" {
     ): void;
 
     /**
-     * On message received event
+     * On message received event (deprecated - use bot.on(Events.MESSAGE_RECEIVED, ...) instead)
      */
     onMessage(callback: (message: any, response: any) => void): void;
 
@@ -74,6 +79,21 @@ declare module "viber-bot" {
      */
     onError(callback: (error: Error) => void): void;
   }
+
+  /**
+   * Bot Events - use with bot.on(Events.EVENT_NAME, handler)
+   */
+  export const Events: {
+    readonly MESSAGE_RECEIVED: string;
+    readonly MESSAGE_SENT: string;
+    readonly SUBSCRIBED: string;
+    readonly UNSUBSCRIBED: string;
+    readonly CONVERSATION_STARTED: string;
+    readonly DELIVERED: string;
+    readonly SEEN: string;
+    readonly FAILED: string;
+    readonly ERROR: string;
+  };
 
   /**
    * Message types

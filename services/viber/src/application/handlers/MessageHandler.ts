@@ -7,7 +7,7 @@
  *
  * Location: Application Layer (Hexagonal Architecture)
  */
-import { Bot, Message } from "viber-bot";
+import { Bot, Message, Events } from "viber-bot";
 import { IEventHandler } from "./IEventHandler";
 import { ConsoleLogger, Logger } from "@vbar/shared";
 import {
@@ -68,7 +68,7 @@ export class MessageHandler implements IEventHandler {
   }
 
   register(bot: Bot): void {
-    bot.onMessage((message: any, response: any) => {
+    bot.on(Events.MESSAGE_RECEIVED, (message: any, response: any) => {
       this.handleMessage(message, response).catch((error) => {
         this.logger.error("Error handling message", { error });
         // Don't throw - we've already acknowledged to Viber
@@ -84,7 +84,8 @@ export class MessageHandler implements IEventHandler {
       const userProfile = response.userProfile;
       const userId = userProfile.id;
       const userName = userProfile.name;
-
+      console.log("userProfile", userProfile);
+      console.log("message", message);
       // Ensure user exists in database (create on first message if not exists)
       let isFirstMessage = false;
       try {

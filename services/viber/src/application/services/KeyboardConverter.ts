@@ -35,20 +35,32 @@ export class KeyboardConverter {
     buttonPrefix?: string | null
   ): any {
     try {
+      // Ensure InputFieldState is always set to a valid value
+      // Default to "hidden" if undefined, null, or empty string
+      // Valid values: "regular", "minimized", "hidden"
+      const validStates = ["regular", "minimized", "hidden"] as const;
+      const inputFieldState =
+        keyboardDTO.InputFieldState &&
+        validStates.includes(keyboardDTO.InputFieldState as any)
+          ? keyboardDTO.InputFieldState
+          : "hidden";
+
+      console.log("inputFieldState", inputFieldState);
       const viberKeyboard: any = {
         Type: keyboardDTO.type,
         Buttons: keyboardDTO.Buttons.map((button) =>
           this.convertButtonToViberFormat(button, buttonPrefix)
         ),
+
         DefaultHeight: keyboardDTO.DefaultHeight,
-        InputFieldState: keyboardDTO.InputFieldState,
+        InputFieldState: inputFieldState,
       };
 
       // Add optional BgColor field (only if not null)
       if (keyboardDTO.BgColor !== null) {
         viberKeyboard.BgColor = keyboardDTO.BgColor;
       }
-
+      console.log("viberKeyboard", viberKeyboard);
       return viberKeyboard;
     } catch (error) {
       const errorMessage =
@@ -75,14 +87,12 @@ export class KeyboardConverter {
     const viberButton: any = {
       Columns: buttonDTO.Columns,
       Rows: buttonDTO.Rows,
-      Text: this.normalizeButtonText(
-        buttonDTO.Text,
-        buttonDTO.TextColor,
-        buttonPrefix
-      ),
+      Text: this.normalizeButtonText(buttonDTO.Text, buttonDTO.TextColor),
       TextColor: buttonDTO.TextColor,
       ActionType: buttonDTO.ActionType,
-      ActionBody: buttonDTO.ActionBody,
+      ActionBody: buttonPrefix
+        ? `${buttonPrefix}${buttonDTO.ActionBody}`
+        : buttonDTO.ActionBody,
       TextVAlign: buttonDTO.TextVAlign,
       TextHAlign: buttonDTO.TextHAlign,
       TextSize: buttonDTO.TextSize,
@@ -117,23 +127,15 @@ export class KeyboardConverter {
    *
    * @param text - Button text to normalize
    * @param textColor - Text color to use in font tag
-   * @param buttonPrefix - Optional button prefix from bot settings
-   * @returns Normalized text with font tag and optional prefix
+   * @returns Normalized text with font tag
    */
-  private normalizeButtonText(
-    text: string,
-    textColor: string,
-    buttonPrefix?: string | null
-  ): string {
+  private normalizeButtonText(text: string, textColor: string): string {
     // If text already contains font tag, return as is
     if (text.includes("<font")) {
       return text;
     }
 
-    // Add button prefix if provided
-    const textWithPrefix = buttonPrefix ? `${buttonPrefix}${text}` : text;
-
     // Wrap text in font tag with TextColor
-    return `<font color="${textColor}">${textWithPrefix}</font>`;
+    return `<font color="${textColor}">${text}</font>`;
   }
 }

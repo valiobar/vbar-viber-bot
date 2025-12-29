@@ -29,12 +29,14 @@ export class MessageConverter {
    *
    * @param messageDTO - MessageDTO to convert
    * @param keyboard - Optional keyboard object to attach to the message
+   * @param minApiVersion - Optional minimum API version (required for InputFieldState support)
    * @returns Viber Message instance
    * @throws Error if message type is not supported or content is invalid
    */
   convertToViberMessage(
     messageDTO: MessageDTO,
-    keyboard?: any
+    keyboard?: any,
+    minApiVersion?: number
   ):
     | Message.Text
     | Message.Picture
@@ -45,32 +47,95 @@ export class MessageConverter {
     | Message.Sticker
     | Message.Url {
     const content = messageDTO.content as any;
+    // InputFieldState requires API version 7.2.0 or higher
+    // If keyboard has InputFieldState, ensure minApiVersion is at least 7.2
+    const requiredApiVersion =
+      keyboard?.InputFieldState && (!minApiVersion || minApiVersion < 7.2)
+        ? 7.2
+        : minApiVersion || 1;
 
     try {
+      let message:
+        | Message.Text
+        | Message.Picture
+        | Message.Video
+        | Message.File
+        | Message.Location
+        | Message.Contact
+        | Message.Sticker
+        | Message.Url;
+
+      // Pass minApiVersion as the last constructor parameter
+      // Constructor signature: (content, keyboard, trackingData, timestamp, token, minApiVersion)
+      // For InputFieldState support, we need minApiVersion >= 7.2
+      const apiVersionParam =
+        requiredApiVersion >= 7.2 ? requiredApiVersion : undefined;
+
       switch (messageDTO.type) {
         case "text": {
           const text = content?.text || "";
-          return new Message.Text(text, keyboard);
+          // Message.Text(text, keyboard, trackingData, timestamp, token, minApiVersion)
+          message = new (Message.Text as any)(
+            text,
+            keyboard,
+            null,
+            null,
+            null,
+            apiVersionParam
+          );
+          break;
         }
 
         case "picture": {
           const media = content?.media || "";
           const text = content?.text;
-          return new Message.Picture(media, text, keyboard);
+          // Message.Picture(media, text, keyboard, trackingData, timestamp, token, minApiVersion)
+          message = new (Message.Picture as any)(
+            media,
+            text,
+            keyboard,
+            null,
+            null,
+            null,
+            apiVersionParam
+          );
+          break;
         }
 
         case "video": {
           const media = content?.media || "";
           const size = content?.size;
           const text = content?.text;
-          return new Message.Video(media, size, text, keyboard);
+          // Message.Video(media, size, text, keyboard, trackingData, timestamp, token, minApiVersion)
+          message = new (Message.Video as any)(
+            media,
+            size,
+            text,
+            keyboard,
+            null,
+            null,
+            null,
+            apiVersionParam
+          );
+          break;
         }
 
         case "file": {
           const media = content?.media || "";
           const size = content?.size;
           const fileName = content?.file_name;
-          return new Message.File(media, size, fileName, keyboard);
+          // Message.File(media, size, fileName, keyboard, trackingData, timestamp, token, minApiVersion)
+          message = new (Message.File as any)(
+            media,
+            size,
+            fileName,
+            keyboard,
+            null,
+            null,
+            null,
+            apiVersionParam
+          );
+          break;
         }
 
         case "location": {
@@ -79,16 +144,31 @@ export class MessageConverter {
           if (lat === undefined || lon === undefined) {
             throw new Error("Location message requires lat and lon in content");
           }
-          return new Message.Location({ lat, lon }, keyboard);
+          // Message.Location(location, keyboard, trackingData, timestamp, token, minApiVersion)
+          message = new (Message.Location as any)(
+            { lat, lon },
+            keyboard,
+            null,
+            null,
+            null,
+            apiVersionParam
+          );
+          break;
         }
 
         case "contact": {
           const name = content?.name || "";
           const phoneNumber = content?.phone_number || "";
-          return new Message.Contact(
+          // Message.Contact(contact, keyboard, trackingData, timestamp, token, minApiVersion)
+          message = new (Message.Contact as any)(
             { name, phone_number: phoneNumber },
-            keyboard
+            keyboard,
+            null,
+            null,
+            null,
+            apiVersionParam
           );
+          break;
         }
 
         case "sticker": {
@@ -96,7 +176,16 @@ export class MessageConverter {
           if (stickerId === undefined) {
             throw new Error("Sticker message requires sticker_id in content");
           }
-          return new Message.Sticker(stickerId, keyboard);
+          // Message.Sticker(stickerId, keyboard, trackingData, timestamp, token, minApiVersion)
+          message = new (Message.Sticker as any)(
+            stickerId,
+            keyboard,
+            null,
+            null,
+            null,
+            apiVersionParam
+          );
+          break;
         }
 
         case "url": {
@@ -106,12 +195,23 @@ export class MessageConverter {
               "URL message requires url in content or messageDTO.url"
             );
           }
-          return new Message.Url(url, keyboard);
+          // Message.Url(url, keyboard, trackingData, timestamp, token, minApiVersion)
+          message = new (Message.Url as any)(
+            url,
+            keyboard,
+            null,
+            null,
+            null,
+            apiVersionParam
+          );
+          break;
         }
 
         default:
           throw new Error(`Unsupported message type: ${messageDTO.type}`);
       }
+
+      return message;
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
@@ -129,11 +229,13 @@ export class MessageConverter {
    *
    * @param messageDTOs - Array of MessageDTOs to convert
    * @param keyboard - Optional keyboard to attach to the last message
+   * @param minApiVersion - Optional minimum API version (required for InputFieldState support)
    * @returns Array of Viber Message instances
    */
   convertToViberMessages(
     messageDTOs: MessageDTO[],
-    keyboard?: any
+    keyboard?: any,
+    minApiVersion?: number
   ): Array<
     | Message.Text
     | Message.Picture
@@ -163,7 +265,8 @@ export class MessageConverter {
       try {
         const viberMessage = this.convertToViberMessage(
           messageDTO,
-          attachKeyboard
+          attachKeyboard,
+          minApiVersion
         );
         messages.push(viberMessage);
       } catch (error) {
