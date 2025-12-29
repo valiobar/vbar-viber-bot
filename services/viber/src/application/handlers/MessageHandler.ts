@@ -48,7 +48,12 @@ export class MessageHandler implements IEventHandler {
     this.logger = logger || new ConsoleLogger("MessageHandler");
     this.stepSender = new StepSender(userRepository, this.logger);
     // Initialize message type handlers
-    this.textHandler = new TextMessageHandler(this.logger);
+    this.textHandler = new TextMessageHandler(
+      this.logger,
+      this.viberBotService,
+      this.stepSender,
+      this.userRepository
+    );
     this.locationHandler = new LocationMessageHandler(this.logger);
     this.contactHandler = new ContactMessageHandler(this.logger);
     this.pictureHandler = new PictureMessageHandler(this.logger);
