@@ -70,11 +70,13 @@ The Admin Service follows Hexagonal Architecture principles organized by domain:
 ### Installation
 
 1. Install dependencies from the root:
+
    ```bash
    npm install
    ```
 
 2. Copy environment variables:
+
    ```bash
    cp .env.example .env
    ```
@@ -113,16 +115,44 @@ npm start
 
 ## Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `NODE_ENV` | Node environment | `development` |
-| `NEXT_PUBLIC_APP_URL` | Public app URL | `http://localhost:3000` |
-| `MONGODB_URI` | MongoDB connection string | `mongodb://localhost:27017` |
-| `MONGODB_DB_NAME` | MongoDB database name | `admin` |
-| `VIBER_SERVICE_URL` | Viber service URL | `http://localhost:3001` |
-| `AI_SERVICE_URL` | AI service URL | `http://localhost:3002` |
-| `ANALYTICS_SERVICE_URL` | Analytics service URL | `http://localhost:3003` |
-| `LOG_LEVEL` | Logging level | `info` |
+| Variable                  | Description                                                                        | Default                     |
+| ------------------------- | ---------------------------------------------------------------------------------- | --------------------------- |
+| `NODE_ENV`                | Node environment                                                                   | `development`               |
+| `NEXT_PUBLIC_APP_URL`     | Public app URL                                                                     | `http://localhost:3000`     |
+| `MONGODB_URI`             | MongoDB connection string                                                          | `mongodb://localhost:27017` |
+| `MONGODB_DB_NAME`         | MongoDB database name                                                              | `admin`                     |
+| `VIBER_SERVICE_URL`       | Viber service URL                                                                  | `http://localhost:3001`     |
+| `AI_SERVICE_URL`          | AI service URL                                                                     | `http://localhost:3002`     |
+| `ANALYTICS_SERVICE_URL`   | Analytics service URL                                                              | `http://localhost:3003`     |
+| `LOG_LEVEL`               | Logging level                                                                      | `info`                      |
+| `SERVICE_TOKEN`           | General service token for service-to-service authentication                        | -                           |
+| `VIBER_SERVICE_TOKEN`     | Viber service specific token (should match `ADMIN_SERVICE_TOKEN` in viber service) | -                           |
+| `AI_SERVICE_TOKEN`        | AI service specific token                                                          | -                           |
+| `ANALYTICS_SERVICE_TOKEN` | Analytics service specific token                                                   | -                           |
+
+### Service Token Authentication
+
+The admin service supports service-to-service authentication using service tokens. API routes that accept JWT tokens (for admin UI users) also accept service tokens (for service-to-service communication).
+
+**Service Token Headers**:
+
+- `X-Service-Token` (required): Service token for authentication
+- `X-Service-Name` (optional): Service name for logging and identification
+
+**Service Token Configuration**:
+
+- Service tokens are configured via environment variables
+- Multiple tokens can be configured for different services
+- Tokens should be long, random strings (recommended: 64 hex characters)
+- Generate tokens using: `openssl rand -hex 32` or `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
+
+**Routes Supporting Service Tokens**:
+
+- `/api/bot-settings` (GET)
+- `/api/steps` (GET)
+- `/api/messages` (GET)
+- `/api/keyboards` (GET)
+- All other `/api/*` routes that require authentication
 
 ## API Endpoints
 
@@ -170,4 +200,3 @@ docker build -t vbar-admin -f services/admin/Dockerfile .
 - [API Documentation](../../documentation/api.md)
 - [Deployment Guide](../../documentation/deployment.md)
 - [Setup Guide](../../documentation/setup.md)
-

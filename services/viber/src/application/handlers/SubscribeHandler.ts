@@ -53,7 +53,7 @@ export class SubscribeHandler implements IEventHandler {
         country,
         timestamp: new Date().toISOString(),
       });
-
+      console.log("userProfile", userProfile);
       // Create or update user with subscription status
       try {
         await this.userRepository.createOrUpdate({

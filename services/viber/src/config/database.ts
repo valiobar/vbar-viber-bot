@@ -7,11 +7,17 @@
 import mongoose from "mongoose";
 import { ConfigHelper } from "@vbar/shared";
 
-const uri = ConfigHelper.getEnv(
-  "MONGODB_URI",
-  "mongodb://bot:bot123@localhost:27018/bot"
-);
+// Build connection URI with authSource to authenticate against 'admin' database
+// but use a different database for application data
+const defaultUri = `mongodb://bot:bot123@localhost:27018/bot?authSource=admin`;
+let uri = ConfigHelper.getEnv("MONGODB_URI", defaultUri);
 const dbName = ConfigHelper.getEnv("MONGODB_DB_NAME", "bot");
+
+// Ensure authSource is included if not already present (for custom URIs)
+if (uri && !uri.includes("authSource=")) {
+  const separator = uri.includes("?") ? "&" : "?";
+  uri = `${uri}${separator}authSource=admin`;
+}
 
 if (!uri) {
   throw new Error("Please add your Mongo URI to the .env file");
@@ -25,7 +31,7 @@ interface MongooseCache {
   promise: Promise<typeof mongoose> | null;
 }
 
-const globalForMongoose = global as typeof globalThis & {
+const globalForMongoose = globalThis as typeof globalThis & {
   mongoose?: MongooseCache;
 };
 
@@ -51,7 +57,7 @@ export async function connectToDatabase(): Promise<typeof mongoose> {
     const opts = {
       bufferCommands: false,
       dbName,
-    };
+    } as mongoose.ConnectOptions;
 
     cached.promise = mongoose.connect(uri, opts).then((mongoose) => {
       return mongoose;

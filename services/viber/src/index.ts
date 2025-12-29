@@ -13,7 +13,6 @@ import { getViberConfig } from "./config/viber";
 import routes from "./adapters/in/routes";
 import {
   generalRateLimiter,
-  webhookRateLimiter,
 } from "./adapters/in/middleware";
 import { ViberBotService } from "./application/services/ViberBotService";
 import { MessageHandler } from "./application/handlers/MessageHandler";
@@ -71,7 +70,7 @@ app.use(generalRateLimiter);
 // The middleware routes events to registered event handlers
 // Note: This is applied before general routes to ensure proper event handling
 // Rate limiting is applied via webhookRateLimiter middleware
-app.post("/webhook/viber", webhookRateLimiter, (req, res, next) => {
+app.use("/webhook/viber", (req, res, next) => {
   if (!viberBotService || !viberBotService.isInitialized()) {
     return res.status(503).json({
       error: {
@@ -80,8 +79,9 @@ app.post("/webhook/viber", webhookRateLimiter, (req, res, next) => {
       },
     });
   }
+  console.log("Webhook received");
   const bot = viberBotService.getBot();
-  return bot.middleware()(req, res, next);
+   return bot.middleware()(req, res, next);
 });
 
 // Routes

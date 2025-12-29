@@ -35,6 +35,7 @@ export const generalRateLimiter: RateLimitRequestHandler = rateLimit({
   },
   standardHeaders: true, // Return rate limit info in `RateLimit-*` headers (draft standard)
   legacyHeaders: true, // Return rate limit info in `X-RateLimit-*` headers
+  validate: false, // Disable validation to allow trust proxy configuration
   handler: (req: Request, res: Response) => {
     res.status(429).json({
       error: {
@@ -60,6 +61,7 @@ export const healthCheckRateLimiter: RateLimitRequestHandler = rateLimit({
   },
   standardHeaders: true, // Return rate limit info in `RateLimit-*` headers (draft standard)
   legacyHeaders: true, // Return rate limit info in `X-RateLimit-*` headers
+  validate: false, // Disable validation to allow trust proxy configuration
   handler: (req: Request, res: Response) => {
     res.status(429).json({
       error: {
@@ -86,6 +88,7 @@ export const webhookRateLimiter: RateLimitRequestHandler = rateLimit({
   },
   standardHeaders: true, // Return rate limit info in `RateLimit-*` headers (draft standard)
   legacyHeaders: true, // Return rate limit info in `X-RateLimit-*` headers
+  validate: false, // Disable validation to allow trust proxy configuration
   handler: (req: Request, res: Response) => {
     res.status(429).json({
       error: {
@@ -121,6 +124,7 @@ export const serviceRateLimiter: RateLimitRequestHandler = rateLimit({
   },
   standardHeaders: true, // Return rate limit info in `RateLimit-*` headers (draft standard)
   legacyHeaders: true, // Return rate limit info in `X-RateLimit-*` headers
+  validate: false, // Disable validation to allow trust proxy configuration
   handler: (req: Request, res: Response) => {
     res.status(429).json({
       error: {
@@ -130,4 +134,3 @@ export const serviceRateLimiter: RateLimitRequestHandler = rateLimit({
     });
   },
 });
-

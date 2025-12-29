@@ -8,7 +8,10 @@ import { ConfigHelper, ServiceConfig } from "@vbar/shared";
 let connection: Connection | null = null;
 let channel: Channel | null = null;
 
-const uri = ConfigHelper.getEnv("RABBITMQ_URI", "amqp://localhost:5672");
+const uri = ConfigHelper.getEnv(
+  "RABBITMQ_URI",
+  "amqp://admin:admin@localhost:5672"
+);
 const exchangeName = ServiceConfig.messageQueue.exchanges.default;
 
 /**
@@ -20,7 +23,7 @@ export async function getConnection(): Promise<Connection> {
   }
 
   connection = await amqp.connect(uri);
-  
+
   connection.on("error", (err) => {
     console.error("RabbitMQ connection error:", err);
     connection = null;
@@ -65,7 +68,7 @@ export async function publishMessage(
   try {
     const ch = await getChannel();
     const messageBuffer = Buffer.from(JSON.stringify(message));
-    
+
     return ch.publish(exchangeName, routingKey, messageBuffer, {
       persistent: true,
     });
@@ -85,7 +88,7 @@ export async function consumeMessages(
 ): Promise<void> {
   try {
     const ch = await getChannel();
-    
+
     // Assert queue
     await ch.assertQueue(queueName, {
       durable: true,
@@ -128,6 +131,3 @@ export async function closeMessageQueue(): Promise<void> {
     connection = null;
   }
 }
-
-
-

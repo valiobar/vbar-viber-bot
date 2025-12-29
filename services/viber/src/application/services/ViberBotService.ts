@@ -141,13 +141,26 @@ export class ViberBotService {
 
     try {
       console.log(`Registering webhook URL: ${this.config.webhookUrl}`);
-      await this.bot.setWebhook(this.config.webhookUrl);
+       this.bot.setWebhook(this.config.webhookUrl)
+       .then((response) => {
+        console.log("WEBHOOK CONNECTED SUCCESSFUL");
+        console.log(response);
+       })
+       .catch((error) => {
+        console.log("WEBHOOK CONNECTED FAILED");
+        console.log(error);
+      
+      });
+     
       console.log("Webhook registered successfully");
     } catch (error) {
+      console.log(error);
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       console.error("Failed to register webhook:", errorMessage);
-      throw new Error(`Webhook registration failed: ${errorMessage}`);
+      throw new Error(
+        `Webhook registration failed: ${JSON.parse(errorMessage)}`
+      );
     }
   }
 
