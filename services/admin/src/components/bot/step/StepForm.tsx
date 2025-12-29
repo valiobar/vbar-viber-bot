@@ -53,6 +53,7 @@ const StepForm = ({
   const [keyboard, setKeyboard] = useState<string | null>(null);
   const [hidden, setHidden] = useState(false);
   const [isAi, setIsAi] = useState(false);
+  const [selectedMessageId, setSelectedMessageId] = useState<string>("");
 
   // UI state
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -142,15 +143,29 @@ const StepForm = ({
   };
 
   /**
-   * Toggle message selection in content array
+   * Add a message to content when selected from dropdown
    */
-  const toggleMessage = (messageId: string) => {
-    if (content.includes(messageId)) {
-      setContent(content.filter((id) => id !== messageId));
-    } else {
+  const handleAddMessage = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const messageId = e.target.value;
+    if (messageId && !content.includes(messageId)) {
       setContent([...content, messageId]);
+      setSelectedMessageId(""); // Reset dropdown
     }
   };
+
+  /**
+   * Remove a message from content
+   */
+  const removeMessage = (messageId: string) => {
+    setContent(content.filter((id) => id !== messageId));
+  };
+
+  /**
+   * Get available messages (not already selected)
+   */
+  const availableMessages = messages.filter(
+    (message) => !content.includes(message.id)
+  );
 
   /**
    * Validate form
@@ -359,40 +374,70 @@ const StepForm = ({
             Loading messages...
           </div>
         ) : (
-          <div className="space-y-2">
-            <div className="max-h-60 space-y-2 overflow-y-auto rounded-md border border-gray-300 p-3 dark:border-gray-600">
-              {messages.length === 0 ? (
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  No messages available
-                </p>
-              ) : (
-                messages.map((message) => (
-                  <label
-                    key={message.id}
-                    className="flex items-center space-x-2 rounded p-2 hover:bg-gray-50 dark:hover:bg-gray-700"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={content.includes(message.id)}
-                      onChange={() => toggleMessage(message.id)}
-                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600"
-                    />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">
+          <div className="space-y-3">
+            {/* Message Selection Dropdown */}
+            <select
+              value={selectedMessageId}
+              onChange={handleAddMessage}
+              className={`mt-1 block w-full rounded-md border px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white ${
+                errors.content
+                  ? "border-red-500"
+                  : "border-gray-300 dark:border-gray-600"
+              }`}
+            >
+              <option value="">
+                {availableMessages.length === 0
+                  ? "All messages selected"
+                  : "Select a message to add"}
+              </option>
+              {availableMessages.map((message) => (
+                <option key={message.id} value={message.id}>
+                  {message.humanReadableName}
+                </option>
+              ))}
+            </select>
+
+            {/* Selected Messages as Chips */}
+            {content.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {content.map((messageId) => {
+                  const message = messages.find((m) => m.id === messageId);
+                  if (!message) return null;
+                  return (
+                    <span
+                      key={messageId}
+                      className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-3 py-1 text-sm text-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
+                    >
                       {message.humanReadableName}
+                      <button
+                        type="button"
+                        onClick={() => removeMessage(messageId)}
+                        className="ml-1 rounded-full text-blue-600 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-blue-400 dark:hover:bg-blue-900/50"
+                        aria-label={`Remove ${message.humanReadableName}`}
+                      >
+                        <svg
+                          className="h-4 w-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M6 18L18 6M6 6l12 12"
+                          />
+                        </svg>
+                      </button>
                     </span>
-                  </label>
-                ))
-              )}
-            </div>
+                  );
+                })}
+              </div>
+            )}
+
             {errors.content && (
               <p className="text-sm text-red-600 dark:text-red-400">
                 {errors.content}
-              </p>
-            )}
-            {content.length > 0 && (
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                {content.length} message{content.length !== 1 ? "s" : ""}{" "}
-                selected
               </p>
             )}
           </div>

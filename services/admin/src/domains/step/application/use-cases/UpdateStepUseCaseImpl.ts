@@ -39,7 +39,7 @@ export class UpdateStepUseCaseImpl implements UpdateStepUseCase {
   async execute(id: string, input: UpdateStepInput): Promise<StepDTO> {
     // Get existing step from repository
     const existingStep = await this.stepRepository.findById(id);
-
+    console.log("Input", input);
     if (!existingStep) {
       throw new Error(`Step with ID ${id} not found`);
     }
@@ -110,4 +110,3 @@ export class UpdateStepUseCaseImpl implements UpdateStepUseCase {
     return StepDTO.fromEntity(savedStep);
   }
 }
-

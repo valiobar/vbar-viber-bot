@@ -11,11 +11,8 @@ import {
   ListStepsUseCase,
 } from "../../ports/in/ListStepsUseCase";
 import { StepDTO } from "../dto/StepDTO";
-import {
-  StepRepository,
-  StepFilters,
-} from "../../ports/out/StepRepository";
-import { PaginationParams } from "@shared";
+import { StepRepository, StepFilters } from "../../ports/out/StepRepository";
+import { PaginationParams } from "@vbar/shared";
 
 /**
  * List Steps Use Case Implementation
@@ -40,6 +37,7 @@ export class ListStepsUseCaseImpl implements ListStepsUseCase {
     // Convert ListStepsFilters to StepFilters
     const repositoryFilters: StepFilters = {
       hidden: filters?.hidden,
+      isAi: filters?.isAi,
       search: filters?.search,
       trigger: filters?.trigger,
     };
@@ -68,4 +66,3 @@ export class ListStepsUseCaseImpl implements ListStepsUseCase {
     };
   }
 }
-

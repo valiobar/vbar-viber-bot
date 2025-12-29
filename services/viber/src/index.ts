@@ -11,9 +11,7 @@ import { getDatabase, closeConnection } from "./config/database";
 import { getConnection, closeMessageQueue } from "./config/messageQueue";
 import { getViberConfig } from "./config/viber";
 import routes from "./adapters/in/routes";
-import {
-  generalRateLimiter,
-} from "./adapters/in/middleware";
+import { generalRateLimiter } from "./adapters/in/middleware";
 import { ViberBotService } from "./application/services/ViberBotService";
 import { MessageHandler } from "./application/handlers/MessageHandler";
 import { SubscribeHandler } from "./application/handlers/SubscribeHandler";
@@ -81,7 +79,7 @@ app.use("/webhook/viber", (req, res, next) => {
   }
   console.log("Webhook received");
   const bot = viberBotService.getBot();
-   return bot.middleware()(req, res, next);
+  return bot.middleware()(req, res, next);
 });
 
 // Routes
@@ -168,8 +166,14 @@ async function initialize(): Promise<void> {
 
       // Create and register event handlers
       try {
-        const messageHandler = new MessageHandler(userRepository);
-        const subscribeHandler = new SubscribeHandler(userRepository);
+        const messageHandler = new MessageHandler(
+          userRepository,
+          viberBotService
+        );
+        const subscribeHandler = new SubscribeHandler(
+          userRepository,
+          viberBotService
+        );
         const unsubscribeHandler = new UnsubscribeHandler(userRepository);
         const conversationStartedHandler = new ConversationStartedHandler(
           userRepository

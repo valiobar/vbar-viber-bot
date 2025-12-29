@@ -16,6 +16,7 @@ export interface ViberUserParams {
   subscribed: boolean;
   subscribedAt?: Date;
   unsubscribedAt?: Date;
+  currentStepId?: string;
   state?: Record<string, any>;
   createdAt?: Date;
   updatedAt?: Date;
@@ -33,6 +34,7 @@ export class ViberUser {
   public readonly subscribed: boolean;
   public readonly subscribedAt?: Date;
   public readonly unsubscribedAt?: Date;
+  public readonly currentStepId?: string;
   public readonly state?: Record<string, any>;
   public readonly createdAt: Date;
   public readonly updatedAt: Date;
@@ -54,6 +56,7 @@ export class ViberUser {
     this.subscribed = params.subscribed;
     this.subscribedAt = params.subscribedAt;
     this.unsubscribedAt = params.unsubscribedAt;
+    this.currentStepId = params.currentStepId;
     this.state = params.state;
     this.createdAt = params.createdAt || new Date();
     this.updatedAt = params.updatedAt || new Date();
@@ -163,6 +166,18 @@ export class ViberUser {
   }
 
   /**
+   * Update user's current step
+   * Returns a new ViberUser instance with updated current step
+   */
+  updateCurrentStep(stepId: string | null): ViberUser {
+    return new ViberUser({
+      ...this.toParams(),
+      currentStepId: stepId || undefined,
+      updatedAt: new Date(),
+    });
+  }
+
+  /**
    * Convert entity to plain object for persistence
    */
   private toParams(): ViberUserParams {
@@ -177,6 +192,7 @@ export class ViberUser {
       subscribed: this.subscribed,
       subscribedAt: this.subscribedAt,
       unsubscribedAt: this.unsubscribedAt,
+      currentStepId: this.currentStepId,
       state: this.state,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,

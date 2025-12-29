@@ -21,6 +21,14 @@ export interface ListStepsFilters {
   hidden?: boolean;
 
   /**
+   * Filter by AI status
+   * If true, only returns AI steps
+   * If false, only returns non-AI steps
+   * If undefined, returns all steps
+   */
+  isAi?: boolean;
+
+  /**
    * Search term for filtering by humanReadableName
    * Performs case-insensitive partial match
    */
@@ -84,4 +92,3 @@ export interface ListStepsUseCase {
     pagination?: PaginationParams
   ): Promise<ListStepsResult>;
 }
-

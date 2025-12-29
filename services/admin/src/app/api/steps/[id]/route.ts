@@ -127,7 +127,7 @@ export async function PUT(
 
     // Parse request body
     const body = await request.json();
-
+    console.log(body);
     // Build input (all fields are optional for updates)
     const input: UpdateStepInput = {};
     if (body.humanReadableName !== undefined) {
@@ -145,8 +145,9 @@ export async function PUT(
     if (body.hidden !== undefined) {
       input.hidden = body.hidden;
     }
-    if (body.isAi !== undefined) {
-      input.isAi = body.isAi;
+    // Explicitly handle isAi for both true and false values
+    if (body.isAi !== undefined && body.isAi !== null) {
+      input.isAi = Boolean(body.isAi);
     }
 
     // Instantiate repositories

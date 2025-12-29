@@ -37,6 +37,7 @@ const StepsList = ({ initialData }: StepsListProps) => {
   const [hiddenFilter, setHiddenFilter] = useState<boolean | undefined>(
     undefined
   );
+  const [isAiFilter, setIsAiFilter] = useState<boolean | undefined>(undefined);
 
   // UI state
   const [isLoading, setIsLoading] = useState(false);
@@ -63,6 +64,9 @@ const StepsList = ({ initialData }: StepsListProps) => {
       if (hiddenFilter !== undefined) {
         params.set("hidden", hiddenFilter.toString());
       }
+      if (isAiFilter !== undefined) {
+        params.set("isAi", isAiFilter.toString());
+      }
 
       const response = await fetch(`/api/steps?${params.toString()}`);
       const data: ApiResponse<ListStepsResult> = await response.json();
@@ -84,7 +88,7 @@ const StepsList = ({ initialData }: StepsListProps) => {
     } finally {
       setIsLoading(false);
     }
-  }, [page, limit, search, hiddenFilter]);
+  }, [page, limit, search, hiddenFilter, isAiFilter]);
 
   /**
    * Load steps on mount and when filters change
@@ -117,7 +121,7 @@ const StepsList = ({ initialData }: StepsListProps) => {
     } else {
       fetchSteps();
     }
-  }, [hiddenFilter]);
+  }, [hiddenFilter, isAiFilter]);
 
   /**
    * Handle select/deselect all
@@ -316,6 +320,8 @@ const StepsList = ({ initialData }: StepsListProps) => {
         onSearchChange={setSearch}
         hiddenFilter={hiddenFilter}
         onHiddenFilterChange={setHiddenFilter}
+        isAiFilter={isAiFilter}
+        onIsAiFilterChange={setIsAiFilter}
       />
 
       {/* Error Message */}

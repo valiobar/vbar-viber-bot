@@ -26,6 +26,8 @@ async function getSteps(searchParams: {
     if (searchParams.limit) params.append("limit", String(searchParams.limit));
     if (searchParams.hidden !== undefined)
       params.append("hidden", String(searchParams.hidden));
+    if (searchParams.isAi !== undefined)
+      params.append("isAi", String(searchParams.isAi));
     if (searchParams.search)
       params.append("search", String(searchParams.search));
     if (searchParams.trigger)

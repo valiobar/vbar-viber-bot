@@ -3,6 +3,7 @@
  *
  * Handles incoming messages from Viber users.
  * Supports multiple message types: text, location, contact, picture, video, file, sticker, URL.
+ * Sends welcome step on first message if configured.
  *
  * Location: Application Layer (Hexagonal Architecture)
  */
@@ -20,10 +21,14 @@ import {
   UrlMessageHandler,
 } from "./message-handlers";
 import { IUserRepository } from "../../ports/out/IUserRepository";
+import { ViberBotService } from "../services/ViberBotService";
+import { StepSender } from "../services/StepSender";
 
 export class MessageHandler implements IEventHandler {
   private logger: Logger;
   private userRepository: IUserRepository;
+  private viberBotService: ViberBotService | null;
+  private stepSender: StepSender;
   private textHandler: TextMessageHandler;
   private locationHandler: LocationMessageHandler;
   private contactHandler: ContactMessageHandler;
@@ -33,9 +38,15 @@ export class MessageHandler implements IEventHandler {
   private stickerHandler: StickerMessageHandler;
   private urlHandler: UrlMessageHandler;
 
-  constructor(userRepository: IUserRepository, logger?: Logger) {
+  constructor(
+    userRepository: IUserRepository,
+    viberBotService?: ViberBotService | null,
+    logger?: Logger
+  ) {
     this.userRepository = userRepository;
+    this.viberBotService = viberBotService || null;
     this.logger = logger || new ConsoleLogger("MessageHandler");
+    this.stepSender = new StepSender(userRepository, this.logger);
     // Initialize message type handlers
     this.textHandler = new TextMessageHandler(this.logger);
     this.locationHandler = new LocationMessageHandler(this.logger);
@@ -70,10 +81,12 @@ export class MessageHandler implements IEventHandler {
       const userName = userProfile.name;
 
       // Ensure user exists in database (create on first message if not exists)
+      let isFirstMessage = false;
       try {
         let user = await this.userRepository.findByViberId(userId);
         if (!user) {
           // Create user on first message
+          isFirstMessage = true;
           user = await this.userRepository.createOrUpdate({
             viberId: userId,
             name: userName,
@@ -118,6 +131,42 @@ export class MessageHandler implements IEventHandler {
         userName,
         messageType: this.getMessageType(message),
       });
+
+      // Send welcome step on first message if configured
+      if (
+        isFirstMessage &&
+        this.viberBotService &&
+        this.viberBotService.isInitialized()
+      ) {
+        try {
+          const settings = this.viberBotService.getSettings();
+          if (settings && settings.welcomeStepId) {
+            const bot = this.viberBotService.getBot();
+            const botDataService = this.viberBotService.getBotDataService();
+            await this.stepSender.sendStep(
+              settings.welcomeStepId,
+              bot,
+              userProfile,
+              botDataService,
+              settings.buttonsPrefix
+            );
+            this.logger.info("Welcome step sent on first message", {
+              userId,
+              welcomeStepId: settings.welcomeStepId,
+            });
+          } else {
+            this.logger.debug("No welcome step configured, skipping", {
+              userId,
+            });
+          }
+        } catch (error) {
+          // Log error but don't throw - message processing should continue
+          this.logger.error("Failed to send welcome step on first message", {
+            error: error instanceof Error ? error.message : String(error),
+            userId,
+          });
+        }
+      }
 
       // Handle different message types
       if (message instanceof Message.Text) {

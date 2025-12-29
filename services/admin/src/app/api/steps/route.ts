@@ -31,6 +31,7 @@ import type { ListStepsResult } from "@/domains/step/ports/in/ListStepsUseCase";
  * - page: Page number (default: 1)
  * - limit: Items per page (default: 10)
  * - hidden: Filter by hidden status (true/false)
+ * - isAi: Filter by AI status (true/false)
  * - search: Search term for humanReadableName
  * - trigger: Filter by trigger string
  *
@@ -49,6 +50,7 @@ export async function GET(
     const page = parseInt(searchParams.get("page") || "1", 10);
     const limit = parseInt(searchParams.get("limit") || "10", 10);
     const hiddenParam = searchParams.get("hidden");
+    const isAiParam = searchParams.get("isAi");
     const triggerParam = searchParams.get("trigger");
     const search = searchParams.get("search") || undefined;
 
@@ -56,6 +58,9 @@ export async function GET(
     const filters: ListStepsFilters = {};
     if (hiddenParam !== null) {
       filters.hidden = hiddenParam === "true";
+    }
+    if (isAiParam !== null) {
+      filters.isAi = isAiParam === "true";
     }
     if (triggerParam !== null) {
       filters.trigger = triggerParam;

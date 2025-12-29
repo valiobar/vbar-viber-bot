@@ -3,6 +3,7 @@
  *
  * Handles user subscription events when users subscribe to the bot.
  * Extracts user profile information and initializes user in the system.
+ * Sends welcome step if configured in bot settings.
  *
  * Location: Application Layer (Hexagonal Architecture)
  */
@@ -10,14 +11,24 @@ import { Bot } from "viber-bot";
 import { IEventHandler } from "./IEventHandler";
 import { ConsoleLogger, Logger } from "@vbar/shared";
 import { IUserRepository } from "../../ports/out/IUserRepository";
+import { ViberBotService } from "../services/ViberBotService";
+import { StepSender } from "../services/StepSender";
 
 export class SubscribeHandler implements IEventHandler {
   private logger: Logger;
   private userRepository: IUserRepository;
+  private viberBotService: ViberBotService | null;
+  private stepSender: StepSender;
 
-  constructor(userRepository: IUserRepository, logger?: Logger) {
+  constructor(
+    userRepository: IUserRepository,
+    viberBotService?: ViberBotService | null,
+    logger?: Logger
+  ) {
     this.userRepository = userRepository;
+    this.viberBotService = viberBotService || null;
     this.logger = logger || new ConsoleLogger("SubscribeHandler");
+    this.stepSender = new StepSender(userRepository, this.logger);
   }
 
   getName(): string {
@@ -75,9 +86,44 @@ export class SubscribeHandler implements IEventHandler {
         // Don't throw - Viber requires quick response
       }
 
-      // TODO: In future steps, send welcome message via message sender
-      // const messageSender = this.messageSender;
-      // await messageSender.sendWelcomeMessage(userId);
+      // Send welcome step if configured
+      if (this.viberBotService && this.viberBotService.isInitialized()) {
+        try {
+          const settings = this.viberBotService.getSettings();
+          if (settings && settings.welcomeStepId) {
+            const bot = this.viberBotService.getBot();
+            const botDataService = this.viberBotService.getBotDataService();
+            await this.stepSender.sendStep(
+              settings.welcomeStepId,
+              bot,
+              userProfile,
+              botDataService,
+              settings.buttonsPrefix
+            );
+            this.logger.info("Welcome step sent on subscription", {
+              userId,
+              welcomeStepId: settings.welcomeStepId,
+            });
+          } else {
+            this.logger.debug("No welcome step configured, skipping", {
+              userId,
+            });
+          }
+        } catch (error) {
+          // Log error but don't throw - subscription is already processed
+          this.logger.error("Failed to send welcome step on subscription", {
+            error: error instanceof Error ? error.message : String(error),
+            userId,
+          });
+        }
+      } else {
+        this.logger.warn(
+          "ViberBotService not available, cannot send welcome step",
+          {
+            userId,
+          }
+        );
+      }
     } catch (error) {
       this.logger.error("Failed to process subscription", {
         error: error instanceof Error ? error.message : String(error),
