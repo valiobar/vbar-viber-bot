@@ -23,3 +23,5 @@ export interface GetBotSettingsUseCase {
    */
   execute(): Promise<BotSettingsDTO>;
 }
+
+

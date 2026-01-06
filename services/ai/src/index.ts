@@ -10,6 +10,7 @@ import * as grpc from "@grpc/grpc-js";
 import { ConfigHelper, ServiceConfig, ConsoleLogger } from "@vbar/shared";
 import { getDatabase, closeConnection } from "./config/database";
 import { getConnection, closeMessageQueue } from "./config/messageQueue";
+import { initializeLangSmith } from "./config/langsmith";
 import routes from "./adapters/in/routes";
 import { createGrpcServer } from "./adapters/in/grpc/server";
 
@@ -79,6 +80,13 @@ app.use((req, res) => {
  */
 async function initialize(): Promise<void> {
   try {
+    // Initialize LangSmith tracing (optional)
+    initializeLangSmith();
+    console.log(
+      "LangSmith tracing:",
+      process.env.LANGSMITH_TRACING === "true" ? "enabled" : "disabled"
+    );
+
     // Initialize MongoDB connection
     console.log("Connecting to MongoDB...");
     await getDatabase();
@@ -177,3 +185,4 @@ process.on("uncaughtException", (error) => {
 
 // Initialize service
 initialize();
+

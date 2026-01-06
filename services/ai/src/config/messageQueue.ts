@@ -131,3 +131,4 @@ export async function closeMessageQueue(): Promise<void> {
     connection = null;
   }
 }
+

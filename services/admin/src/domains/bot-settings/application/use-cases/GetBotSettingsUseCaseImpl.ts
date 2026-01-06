@@ -36,3 +36,5 @@ export class GetBotSettingsUseCaseImpl implements GetBotSettingsUseCase {
     return BotSettingsDTO.fromEntity(settings);
   }
 }
+
+
