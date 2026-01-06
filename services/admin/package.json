@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@vbar/shared": "*",
+    "amqplib": "^0.10.3",
     "bcrypt": "^6.0.0",
     "jose": "^6.1.3",
     "mongodb": "^6.0.0",
@@ -22,6 +23,7 @@
     "zustand": "^5.0.9"
   },
   "devDependencies": {
+    "@types/amqplib": "^0.10.4",
     "@types/bcrypt": "^6.0.0",
     "@types/mongoose": "^5.11.96",
     "@types/node": "^20.0.0",

@@ -46,6 +46,7 @@ RUN adduser --system --uid 1001 viber
 COPY --from=builder --chown=viber:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=viber:nodejs /app/packages/shared/dist ./packages/shared/dist
 COPY --from=builder --chown=viber:nodejs /app/packages/shared/package.json ./packages/shared/
+COPY --from=builder --chown=viber:nodejs /app/packages/shared/proto ./packages/shared/proto
 COPY --from=builder --chown=viber:nodejs /app/services/viber/dist ./dist
 COPY --from=builder --chown=viber:nodejs /app/services/viber/package.json ./
 

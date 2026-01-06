@@ -14,9 +14,8 @@ export class PictureMessageHandler {
   async handle(message: Message.Picture, userProfile: any): Promise<void> {
     this.logger.info("Processing picture message", {
       userId: userProfile.id,
-      pictureUrl: message.picture,
+      pictureUrl: message.url,
     });
     // TODO: Process picture message via message processor
   }
 }
-

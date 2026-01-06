@@ -1,21 +1,26 @@
 /**
  * AI Service Entry Point
- * 
+ *
  * Express.js server with Hexagonal Architecture
  */
 
 import express, { Express } from "express";
 import dotenv from "dotenv";
-import { ConfigHelper, ServiceConfig } from "@vbar/shared";
+import * as grpc from "@grpc/grpc-js";
+import { ConfigHelper, ServiceConfig, ConsoleLogger } from "@vbar/shared";
 import { getDatabase, closeConnection } from "./config/database";
 import { getConnection, closeMessageQueue } from "./config/messageQueue";
 import routes from "./adapters/in/routes";
+import { createGrpcServer } from "./adapters/in/grpc/server";
 
 // Load environment variables
 dotenv.config();
 
 const app: Express = express();
 const port = ConfigHelper.getEnvNumber("PORT", ServiceConfig.ports.ai);
+
+// gRPC server instance (stored for graceful shutdown)
+let grpcServer: grpc.Server | null = null;
 
 // Middleware
 app.use(express.json());
@@ -40,16 +45,24 @@ app.get("/", (req, res) => {
 });
 
 // Error handling middleware
-app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error("Error:", err);
-  res.status(500).json({
-    error: {
-      code: "SVC_002",
-      message: "Internal server error",
-      details: process.env.NODE_ENV === "development" ? err.message : undefined,
-    },
-  });
-});
+app.use(
+  (
+    err: Error,
+    req: express.Request,
+    res: express.Response,
+    next: express.NextFunction
+  ) => {
+    console.error("Error:", err);
+    res.status(500).json({
+      error: {
+        code: "SVC_002",
+        message: "Internal server error",
+        details:
+          process.env.NODE_ENV === "development" ? err.message : undefined,
+      },
+    });
+  }
+);
 
 // 404 handler
 app.use((req, res) => {
@@ -76,6 +89,23 @@ async function initialize(): Promise<void> {
     await getConnection();
     console.log("RabbitMQ connected");
 
+    // Initialize gRPC server
+    const logger = new ConsoleLogger("AIService");
+    grpcServer = createGrpcServer(logger);
+    const grpcPort = ConfigHelper.getEnvNumber("GRPC_PORT", 50051);
+
+    grpcServer.bindAsync(
+      `0.0.0.0:${grpcPort}`,
+      grpc.ServerCredentials.createInsecure(),
+      (error, port) => {
+        if (error) {
+          console.error("Failed to start gRPC server:", error);
+          process.exit(1);
+        }
+        console.log(`gRPC server running on port ${grpcPort}`);
+      }
+    );
+
     // Start server
     app.listen(port, () => {
       console.log(`AI Service running on port ${port}`);
@@ -92,7 +122,28 @@ async function initialize(): Promise<void> {
  */
 async function shutdown(): Promise<void> {
   console.log("Shutting down AI Service...");
-  
+
+  // Shutdown gRPC server
+  if (grpcServer) {
+    try {
+      await new Promise<void>((resolve, reject) => {
+        grpcServer!.tryShutdown((error) => {
+          if (error) {
+            console.error("Error shutting down gRPC server:", error);
+            grpcServer!.forceShutdown();
+          }
+          console.log("gRPC server closed");
+          resolve();
+        });
+      });
+    } catch (error) {
+      console.error("Error closing gRPC server:", error);
+      if (grpcServer) {
+        grpcServer.forceShutdown();
+      }
+    }
+  }
+
   try {
     await closeMessageQueue();
     console.log("RabbitMQ connection closed");
@@ -126,6 +177,3 @@ process.on("uncaughtException", (error) => {
 
 // Initialize service
 initialize();
-
-
-

@@ -106,8 +106,9 @@ declare module "viber-bot" {
 
     export class Picture {
       constructor(pictureUrl: string, text?: string, keyboard?: any);
-      picture: string;
+      url: string;
       text?: string;
+      thumbnail?: string;
     }
 
     export class Video {
@@ -117,8 +118,10 @@ declare module "viber-bot" {
         text?: string,
         keyboard?: any
       );
-      video: string;
+      url: string;
       size?: number;
+      thumbnail?: string;
+      duration?: number;
       text?: string;
     }
 
@@ -129,19 +132,22 @@ declare module "viber-bot" {
         fileName?: string,
         keyboard?: any
       );
-      media: string;
-      size?: number;
-      file_name?: string;
+      url: string;
+      sizeInBytes?: number;
+      filename?: string;
     }
 
     export class Contact {
       constructor(contact: any, keyboard?: any);
-      contact: any;
+      contactName: string;
+      contactPhoneNumber: string;
     }
 
     export class Location {
       constructor(location: any, keyboard?: any);
-      location: any;
+      latitude: number;
+      longitude: number;
+      location?: any; // Keep for backward compatibility
     }
 
     export class Url {

@@ -14,9 +14,8 @@ export class VideoMessageHandler {
   async handle(message: Message.Video, userProfile: any): Promise<void> {
     this.logger.info("Processing video message", {
       userId: userProfile.id,
-      videoUrl: message.video,
+      videoUrl: message.url,
     });
     // TODO: Process video message via message processor
   }
 }
-

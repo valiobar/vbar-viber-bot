@@ -23,6 +23,7 @@ import type { CreateStepInput } from "@/domains/step/ports/in/CreateStepUseCase"
 import type { ListStepsFilters } from "@/domains/step/ports/in/ListStepsUseCase";
 import type { StepDTO } from "@/domains/step/application/dto/StepDTO";
 import type { ListStepsResult } from "@/domains/step/ports/in/ListStepsUseCase";
+import { publishRefreshEvent } from "@/lib/message-queue-publisher";
 
 /**
  * GET handler for listing steps
@@ -195,6 +196,14 @@ export async function POST(
 
     // Execute use case
     const stepDTO = await createStepUseCase.execute(input);
+
+    // Notify viber service to refresh cache (fire-and-forget)
+    try {
+      publishRefreshEvent("steps");
+    } catch (error) {
+      // Log error but don't fail the operation
+      console.error("Failed to publish refresh event:", error);
+    }
 
     // Return success response
     return NextResponse.json<ApiResponse<StepDTO>>(

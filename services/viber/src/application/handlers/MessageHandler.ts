@@ -23,6 +23,8 @@ import {
 import { IUserRepository } from "../../ports/out/IUserRepository";
 import { ViberBotService } from "../services/ViberBotService";
 import { StepSender } from "../services/StepSender";
+import { ViberAiService } from "../services/ViberAiService";
+import { IAiServiceClient } from "../../ports/out/IAiServiceClient";
 
 export class MessageHandler implements IEventHandler {
   private logger: Logger;
@@ -37,11 +39,13 @@ export class MessageHandler implements IEventHandler {
   private fileHandler: FileMessageHandler;
   private stickerHandler: StickerMessageHandler;
   private urlHandler: UrlMessageHandler;
+  private viberAiService: ViberAiService;
 
   constructor(
     userRepository: IUserRepository,
     viberBotService?: ViberBotService | null,
-    logger?: Logger
+    logger?: Logger,
+    aiServiceClient?: IAiServiceClient
   ) {
     this.userRepository = userRepository;
     this.viberBotService = viberBotService || null;
@@ -61,6 +65,10 @@ export class MessageHandler implements IEventHandler {
     this.fileHandler = new FileMessageHandler(this.logger);
     this.stickerHandler = new StickerMessageHandler(this.logger);
     this.urlHandler = new UrlMessageHandler(this.logger);
+    if (!aiServiceClient) {
+      throw new Error("AI Service client is required for MessageHandler");
+    }
+    this.viberAiService = new ViberAiService(this.logger, aiServiceClient);
   }
 
   getName(): string {
@@ -84,8 +92,6 @@ export class MessageHandler implements IEventHandler {
       const userProfile = response.userProfile;
       const userId = userProfile.id;
       const userName = userProfile.name;
-      console.log("userProfile", userProfile);
-      console.log("message", message);
       // Ensure user exists in database (create on first message if not exists)
       let isFirstMessage = false;
       try {
@@ -172,6 +178,98 @@ export class MessageHandler implements IEventHandler {
             userId,
           });
         }
+      }
+
+      // Check if user is in AI step before routing to specific handlers
+      try {
+        const user = await this.userRepository.findByViberId(userId);
+        if (user && user.currentStepId) {
+          if (this.viberBotService && this.viberBotService.isInitialized()) {
+            const buttonsPrefix =
+              this.viberBotService.getSettings()?.buttonsPrefix;
+            const isTextMessage = message instanceof Message.Text;
+            const isMessageContainsPrefix = isTextMessage && buttonsPrefix && message.text?.includes(buttonsPrefix);
+          
+            const botDataService = this.viberBotService.getBotDataService();
+            const step = botDataService.getStepById(user.currentStepId);
+            if (step && step.isAi === true && !isMessageContainsPrefix) {
+              // Extract message content based on message typea
+              let messageContent: string = "";
+              const messageType = this.getMessageType(message);
+
+              if (message instanceof Message.Text) {
+                messageContent = message.text;
+              } else if (message instanceof Message.Picture) {
+                // Picture message: URL and optional text
+                messageContent = message.url;
+                if (message.text) {
+                  messageContent += ` | Text: ${message.text}`;
+                }
+              } else if (message instanceof Message.Video) {
+                // Video message: URL, optional text, size, and duration
+                messageContent = message.url;
+                if (message.text) {
+                  messageContent += ` | Text: ${message.text}`;
+                }
+                if (message.size) {
+                  messageContent += ` | Size: ${message.size} bytes`;
+                }
+                if (message.duration) {
+                  messageContent += ` | Duration: ${message.duration} seconds`;
+                }
+              } else if (message instanceof Message.File) {
+                // File message: URL, optional file name and size
+                messageContent = message.url;
+                if (message.filename) {
+                  messageContent += ` | File: ${message.filename}`;
+                }
+                if (message.sizeInBytes) {
+                  messageContent += ` | Size: ${message.sizeInBytes} bytes`;
+                }
+              } else if (message instanceof Message.Location) {
+                // Location message: format as "latitude,longitude" per Viber Node API
+                if (
+                  message.latitude !== undefined &&
+                  message.longitude !== undefined
+                ) {
+                  messageContent = `${message.latitude},${message.longitude}`;
+                } else {
+                  messageContent = "Location data not available";
+                }
+              } else if (message instanceof Message.Contact) {
+                // Contact message: format contact info
+                const name = message.contactName || "";
+                const phone = message.contactPhoneNumber || "";
+                messageContent = `Contact: ${name}${
+                  phone ? ` (${phone})` : ""
+                }`;
+              } else if (message instanceof Message.Sticker) {
+                messageContent = `Sticker ID: ${message.stickerId}`;
+              } else if (message instanceof Message.Url) {
+                messageContent = message.url;
+              }
+
+              // Handle message via AI service
+
+              await this.viberAiService.handleMessage(
+                messageContent,
+                messageType,
+                userId,
+                user.currentStepId,
+                userProfile
+              );
+
+              // Return early - don't route to specific handler
+              return;
+            }
+          }
+        }
+      } catch (error) {
+        // Log error but continue with normal message routing
+        this.logger.error("Failed to check AI step", {
+          error: error instanceof Error ? error.message : String(error),
+          userId,
+        });
       }
 
       // Handle different message types

@@ -72,25 +72,6 @@ export class TextMessageHandler {
       const normalizedMessageText = messageText.toLowerCase();
 
       if (!normalizedMessageText.includes(normalizedPrefix)) {
-        // Check if user's current step is AI
-        try {
-          const user = await this.userRepository.findByViberId(userProfile.id);
-          if (user && user.currentStepId) {
-            const botDataService = this.viberBotService.getBotDataService();
-            const step = botDataService.getStepById(user.currentStepId);
-            if (step && step.isAi === true) {
-              console.log("User in AI step - message:", {
-                userId: userProfile.id,
-                messageText: messageText,
-                stepId: user.currentStepId,
-                isAi: step.isAi,
-              });
-            }
-          }
-        } catch (error) {
-          // Silently fail - this is just for logging
-        }
-
         this.logger.debug(
           "Message does not contain prefix, skipping step trigger",
           {

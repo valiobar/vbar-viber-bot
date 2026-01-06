@@ -19,6 +19,7 @@ import type { CreateMessageInput } from "@/domains/message/ports/in/CreateMessag
 import type { ListMessagesFilters } from "@/domains/message/ports/in/ListMessagesUseCase";
 import type { MessageDTO } from "@/domains/message/application/dto/MessageDTO";
 import type { ListMessagesResult } from "@/domains/message/ports/in/ListMessagesUseCase";
+import { publishRefreshEvent } from "@/lib/message-queue-publisher";
 
 /**
  * GET handler for listing messages
@@ -173,6 +174,14 @@ export async function POST(
 
     // Execute use case
     const messageDTO = await createMessageUseCase.execute(input);
+
+    // Notify viber service to refresh cache (fire-and-forget)
+    try {
+      publishRefreshEvent("messages");
+    } catch (error) {
+      // Log error but don't fail the operation
+      console.error("Failed to publish refresh event:", error);
+    }
 
     // Return success response
     return NextResponse.json<ApiResponse<MessageDTO>>(

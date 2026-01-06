@@ -20,6 +20,7 @@ import type { CreateKeyboardInput } from "@/domains/keyboard/ports/in/CreateKeyb
 import type { ListKeyboardsFilters } from "@/domains/keyboard/ports/in/ListKeyboardsUseCase";
 import type { KeyboardDTO } from "@/domains/keyboard/application/dto/KeyboardDTO";
 import type { ListKeyboardsResult } from "@/domains/keyboard/ports/in/ListKeyboardsUseCase";
+import { publishRefreshEvent } from "@/lib/message-queue-publisher";
 
 /**
  * GET handler for listing keyboards
@@ -169,6 +170,14 @@ export async function POST(
 
     // Execute use case
     const keyboardDTO = await createKeyboardUseCase.execute(input);
+
+    // Notify viber service to refresh cache (fire-and-forget)
+    try {
+      publishRefreshEvent("keyboards");
+    } catch (error) {
+      // Log error but don't fail the operation
+      console.error("Failed to publish refresh event:", error);
+    }
 
     // Return success response
     return NextResponse.json<ApiResponse<KeyboardDTO>>(

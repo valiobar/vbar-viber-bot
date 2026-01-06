@@ -6,7 +6,7 @@
 
 import express, { Express } from "express";
 import dotenv from "dotenv";
-import { ConfigHelper, ServiceConfig } from "@vbar/shared";
+import { ConfigHelper, ServiceConfig, ConsoleLogger } from "@vbar/shared";
 import { getDatabase, closeConnection } from "./config/database";
 import { getConnection, closeMessageQueue } from "./config/messageQueue";
 import { getViberConfig } from "./config/viber";
@@ -20,6 +20,9 @@ import { ConversationStartedHandler } from "./application/handlers/ConversationS
 import { DeliveryHandler } from "./application/handlers/DeliveryHandler";
 import { IUserRepository } from "./ports/out/IUserRepository";
 import { MongooseUserRepository } from "./adapters/out/MongooseUserRepository";
+import { RefreshConsumer } from "./adapters/in/consumers/RefreshConsumer";
+import { IAiServiceClient } from "./ports/out/IAiServiceClient";
+import { AiServiceGrpcClient } from "./adapters/out/grpc/AiServiceGrpcClient";
 
 // Load environment variables
 dotenv.config();
@@ -29,6 +32,7 @@ const port = ConfigHelper.getEnvNumber("PORT", ServiceConfig.ports.viber);
 
 // Store ViberBotService instance globally for middleware access
 let viberBotService: ViberBotService | null = null;
+let refreshConsumer: RefreshConsumer | null = null;
 
 // Middleware to preserve raw body for webhook signature verification
 // This must be applied before JSON parsing for webhook routes
@@ -142,6 +146,13 @@ async function initialize(): Promise<void> {
     const userRepository: IUserRepository = new MongooseUserRepository();
     console.log("User repository initialized");
 
+    // Initialize AI Service gRPC client
+    const aiClientLogger = new ConsoleLogger("AiServiceClient");
+    const aiServiceClient: IAiServiceClient = new AiServiceGrpcClient(
+      aiClientLogger
+    );
+    console.log("AI Service gRPC client initialized");
+
     // Initialize RabbitMQ connection
     console.log("Connecting to RabbitMQ...");
     await getConnection();
@@ -168,7 +179,9 @@ async function initialize(): Promise<void> {
       try {
         const messageHandler = new MessageHandler(
           userRepository,
-          viberBotService
+          viberBotService,
+          undefined,
+          aiServiceClient
         );
         const subscribeHandler = new SubscribeHandler(
           userRepository,
@@ -214,6 +227,19 @@ async function initialize(): Promise<void> {
       console.log("Viber bot configuration loaded");
     }
 
+    // Initialize refresh consumer
+    if (viberBotService) {
+      try {
+        refreshConsumer = new RefreshConsumer(viberBotService);
+        await refreshConsumer.start();
+        console.log("Refresh consumer initialized and started");
+      } catch (error) {
+        console.error("Failed to initialize refresh consumer:", error);
+        // Don't fail service startup if consumer fails
+        // Consumer will retry on next connection
+      }
+    }
+
     // Start server
     app.listen(port, () => {
       console.log(`Viber Service running on port ${port}`);
@@ -230,6 +256,15 @@ async function initialize(): Promise<void> {
  */
 async function shutdown(): Promise<void> {
   console.log("Shutting down Viber Service...");
+
+  // Stop refresh consumer
+  if (refreshConsumer) {
+    try {
+      await refreshConsumer.stop();
+    } catch (error) {
+      console.error("Error stopping refresh consumer:", error);
+    }
+  }
 
   try {
     await closeMessageQueue();

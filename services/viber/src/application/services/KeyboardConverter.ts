@@ -60,7 +60,7 @@ export class KeyboardConverter {
       if (keyboardDTO.BgColor !== null) {
         viberKeyboard.BgColor = keyboardDTO.BgColor;
       }
-      console.log("viberKeyboard", viberKeyboard);
+
       return viberKeyboard;
     } catch (error) {
       const errorMessage =

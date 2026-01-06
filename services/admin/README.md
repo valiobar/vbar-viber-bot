@@ -115,20 +115,21 @@ npm start
 
 ## Environment Variables
 
-| Variable                  | Description                                                                        | Default                     |
-| ------------------------- | ---------------------------------------------------------------------------------- | --------------------------- |
-| `NODE_ENV`                | Node environment                                                                   | `development`               |
-| `NEXT_PUBLIC_APP_URL`     | Public app URL                                                                     | `http://localhost:3000`     |
-| `MONGODB_URI`             | MongoDB connection string                                                          | `mongodb://localhost:27017` |
-| `MONGODB_DB_NAME`         | MongoDB database name                                                              | `admin`                     |
-| `VIBER_SERVICE_URL`       | Viber service URL                                                                  | `http://localhost:3001`     |
-| `AI_SERVICE_URL`          | AI service URL                                                                     | `http://localhost:3002`     |
-| `ANALYTICS_SERVICE_URL`   | Analytics service URL                                                              | `http://localhost:3003`     |
-| `LOG_LEVEL`               | Logging level                                                                      | `info`                      |
-| `SERVICE_TOKEN`           | General service token for service-to-service authentication                        | -                           |
-| `VIBER_SERVICE_TOKEN`     | Viber service specific token (should match `ADMIN_SERVICE_TOKEN` in viber service) | -                           |
-| `AI_SERVICE_TOKEN`        | AI service specific token                                                          | -                           |
-| `ANALYTICS_SERVICE_TOKEN` | Analytics service specific token                                                   | -                           |
+| Variable                  | Description                                                                        | Default                             |
+| ------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------- |
+| `NODE_ENV`                | Node environment                                                                   | `development`                       |
+| `NEXT_PUBLIC_APP_URL`     | Public app URL                                                                     | `http://localhost:3000`             |
+| `MONGODB_URI`             | MongoDB connection string                                                          | `mongodb://localhost:27017`         |
+| `MONGODB_DB_NAME`         | MongoDB database name                                                              | `admin`                             |
+| `VIBER_SERVICE_URL`       | Viber service URL                                                                  | `http://localhost:3001`             |
+| `AI_SERVICE_URL`          | AI service URL                                                                     | `http://localhost:3002`             |
+| `ANALYTICS_SERVICE_URL`   | Analytics service URL                                                              | `http://localhost:3003`             |
+| `LOG_LEVEL`               | Logging level                                                                      | `info`                              |
+| `SERVICE_TOKEN`           | General service token for service-to-service authentication                        | -                                   |
+| `VIBER_SERVICE_TOKEN`     | Viber service specific token (should match `ADMIN_SERVICE_TOKEN` in viber service) | -                                   |
+| `AI_SERVICE_TOKEN`        | AI service specific token                                                          | -                                   |
+| `ANALYTICS_SERVICE_TOKEN` | Analytics service specific token                                                   | -                                   |
+| `RABBITMQ_URI`            | RabbitMQ connection URI for refresh notifications                                  | `amqp://admin:admin@localhost:5672` |
 
 ### Service Token Authentication
 
@@ -160,6 +161,34 @@ The admin service supports service-to-service authentication using service token
 
 - **GET** `/api/health`
 - Returns service health status and database connection status
+
+## Bot Data Refresh Notification
+
+The admin service automatically notifies all viber service instances when bot data changes. This ensures that all viber service instances (including multiple replicas in Kubernetes) stay synchronized.
+
+### How It Works
+
+When steps, messages, keyboards, or bot-settings are created, updated, or deleted:
+
+1. The admin service publishes a refresh event to RabbitMQ
+2. All viber service instances consume the event
+3. Each instance refreshes its in-memory cache
+
+### Configuration
+
+**Environment Variables**:
+
+- `RABBITMQ_URI` - RabbitMQ connection URI (default: `amqp://admin:admin@localhost:5672`)
+
+### Dependencies
+
+- RabbitMQ must be running and accessible
+- Viber service instances must be running and connected to RabbitMQ
+
+### Error Handling
+
+- If RabbitMQ publish fails, the error is logged but doesn't affect the main operation
+- Refresh notifications use fire-and-forget pattern (non-blocking)
 
 ## Database
 

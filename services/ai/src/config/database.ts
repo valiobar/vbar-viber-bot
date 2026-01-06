@@ -7,11 +7,17 @@
 import mongoose from "mongoose";
 import { ConfigHelper } from "@vbar/shared";
 
-const uri = ConfigHelper.getEnv(
-  "MONGODB_URI",
-  "mongodb://ai:ai123@localhost:27019/ai"
-);
+// Build connection URI with authSource to authenticate against 'admin' database
+// but use a different database for application data
+const defaultUri = `mongodb://ai:ai123@localhost:27019/ai?authSource=admin`;
+let uri = ConfigHelper.getEnv("MONGODB_URI", defaultUri);
 const dbName = ConfigHelper.getEnv("MONGODB_DB_NAME", "ai");
+
+// Ensure authSource is included if not already present (for custom URIs)
+if (uri && !uri.includes("authSource=")) {
+  const separator = uri.includes("?") ? "&" : "?";
+  uri = `${uri}${separator}authSource=admin`;
+}
 
 if (!uri) {
   throw new Error("Please add your Mongo URI to the .env file");
