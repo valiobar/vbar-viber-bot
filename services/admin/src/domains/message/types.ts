@@ -2,21 +2,8 @@
  * Message Domain Types
  *
  * Type definitions for the Message domain
+ *
+ * Re-exports from @vbar/shared for consistency across services.
  */
 
-/**
- * Message type enum
- *
- * Valid message types supported by Viber API
- */
-export type MessageType =
-  | "text"
-  | "url"
-  | "contact"
-  | "picture"
-  | "video"
-  | "file"
-  | "location"
-  | "sticker"
-  | "rich-media"
-  | "keyboard";
+export type { MessageType } from "@vbar/shared";

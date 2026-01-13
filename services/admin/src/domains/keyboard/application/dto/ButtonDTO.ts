@@ -16,6 +16,7 @@ import {
   OpenURLType,
   InternalBrowserConfig,
 } from "../../types";
+import type { ButtonDTO as SharedButtonDTO } from "@vbar/shared";
 
 /**
  * Button DTO (Data Transfer Object)
@@ -23,8 +24,9 @@ import {
  * Plain data structure matching Button entity properties
  * but without business logic or methods.
  * Provides static methods for converting between Button entities and DTOs.
+ * Implements the shared ButtonDTO interface for cross-service compatibility.
  */
-export class ButtonDTO {
+export class ButtonDTO implements SharedButtonDTO {
   public readonly id: string;
   public readonly Columns: number;
   public readonly Rows: number;

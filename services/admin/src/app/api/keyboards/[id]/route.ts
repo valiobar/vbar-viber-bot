@@ -19,6 +19,7 @@ import { KeyboardModel } from "@/domains/keyboard/adapters/out/models/KeyboardMo
 import { ViberApiValidator } from "@/domains/keyboard/services/ViberApiValidator";
 import type { UpdateKeyboardInput } from "@/domains/keyboard/ports/in/UpdateKeyboardUseCase";
 import type { KeyboardDTO } from "@/domains/keyboard/application/dto/KeyboardDTO";
+import { publishRefreshEvent } from "@/lib/message-queue-publisher";
 
 /**
  * GET handler for getting a keyboard by ID
@@ -165,6 +166,13 @@ export async function PUT(
     // Execute use case
     const keyboardDTO = await updateKeyboardUseCase.execute(id, input);
 
+    // Notify viber service to refresh cache (fire-and-forget)
+    try {
+      publishRefreshEvent("keyboards");
+    } catch (error) {
+      console.error("Failed to publish refresh event:", error);
+    }
+
     // Return success response
     return NextResponse.json<ApiResponse<KeyboardDTO>>(
       {
@@ -257,6 +265,13 @@ export async function DELETE(
 
     // Execute use case
     await deleteKeyboardUseCase.execute(id);
+
+    // Notify viber service to refresh cache (fire-and-forget)
+    try {
+      publishRefreshEvent("keyboards");
+    } catch (error) {
+      console.error("Failed to publish refresh event:", error);
+    }
 
     // Return success response (204 No Content)
     return new NextResponse(null, { status: 204 });

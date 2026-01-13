@@ -61,6 +61,7 @@ export class CreateStepUseCaseImpl implements CreateStepUseCase {
       content: input.content,
       keyboard: input.keyboard ?? null,
       hidden: input.hidden ?? false,
+      isAi: input.isAi ?? false,
     });
 
     // Save step via StepRepository

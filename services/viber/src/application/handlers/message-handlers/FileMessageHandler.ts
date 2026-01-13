@@ -14,11 +14,10 @@ export class FileMessageHandler {
   async handle(message: Message.File, userProfile: any): Promise<void> {
     this.logger.info("Processing file message", {
       userId: userProfile.id,
-      fileUrl: message.media,
-      fileName: message.file_name,
-      fileSize: message.size,
+      fileUrl: message.url,
+      fileName: message.filename,
+      fileSize: message.sizeInBytes,
     });
     // TODO: Process file message via message processor
   }
 }
-

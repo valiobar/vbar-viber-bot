@@ -38,6 +38,11 @@ declare module "viber-bot" {
     sendMessage(userProfile: any, messages: any[]): Promise<any>;
 
     /**
+     * Generic event handler - use this for MESSAGE_RECEIVED and other events
+     */
+    on(event: string, callback: (...args: any[]) => void): void;
+
+    /**
      * On conversation started event
      */
     onConversationStarted(
@@ -50,7 +55,7 @@ declare module "viber-bot" {
     ): void;
 
     /**
-     * On message received event
+     * On message received event (deprecated - use bot.on(Events.MESSAGE_RECEIVED, ...) instead)
      */
     onMessage(callback: (message: any, response: any) => void): void;
 
@@ -76,6 +81,21 @@ declare module "viber-bot" {
   }
 
   /**
+   * Bot Events - use with bot.on(Events.EVENT_NAME, handler)
+   */
+  export const Events: {
+    readonly MESSAGE_RECEIVED: string;
+    readonly MESSAGE_SENT: string;
+    readonly SUBSCRIBED: string;
+    readonly UNSUBSCRIBED: string;
+    readonly CONVERSATION_STARTED: string;
+    readonly DELIVERED: string;
+    readonly SEEN: string;
+    readonly FAILED: string;
+    readonly ERROR: string;
+  };
+
+  /**
    * Message types
    */
   export namespace Message {
@@ -86,8 +106,9 @@ declare module "viber-bot" {
 
     export class Picture {
       constructor(pictureUrl: string, text?: string, keyboard?: any);
-      picture: string;
+      url: string;
       text?: string;
+      thumbnail?: string;
     }
 
     export class Video {
@@ -97,8 +118,10 @@ declare module "viber-bot" {
         text?: string,
         keyboard?: any
       );
-      video: string;
+      url: string;
       size?: number;
+      thumbnail?: string;
+      duration?: number;
       text?: string;
     }
 
@@ -109,19 +132,22 @@ declare module "viber-bot" {
         fileName?: string,
         keyboard?: any
       );
-      media: string;
-      size?: number;
-      file_name?: string;
+      url: string;
+      sizeInBytes?: number;
+      filename?: string;
     }
 
     export class Contact {
       constructor(contact: any, keyboard?: any);
-      contact: any;
+      contactName: string;
+      contactPhoneNumber: string;
     }
 
     export class Location {
       constructor(location: any, keyboard?: any);
-      location: any;
+      latitude: number;
+      longitude: number;
+      location?: any; // Keep for backward compatibility
     }
 
     export class Url {

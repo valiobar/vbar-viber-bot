@@ -1,7 +1,8 @@
 /**
  * Next.js Middleware for Route Protection
  *
- * Protects routes by verifying JWT tokens from Authorization header or cookies.
+ * Protects routes by verifying JWT tokens from Authorization header or cookies,
+ * or service tokens from X-Service-Token header for service-to-service communication.
  * Public routes (login, refresh, health) are allowed without authentication.
  * Protected API routes return 401 for unauthenticated requests.
  * Protected frontend routes redirect to login page.
@@ -10,6 +11,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { verifyToken } from "./domains/user/lib/jwt";
+import { validateServiceToken } from "./lib/security/serviceTokens";
 
 /**
  * Public routes that don't require authentication
@@ -50,6 +52,22 @@ const isPublicRoute = (pathname: string): boolean => {
  */
 const isProtectedApiRoute = (pathname: string): boolean => {
   return PROTECTED_API_ROUTES.some((route) => pathname.startsWith(route));
+};
+
+/**
+ * Extract service token from request
+ *
+ * Extracts service token from X-Service-Token header (case-insensitive).
+ *
+ * @param request - Next.js request object
+ * @returns Service token or null if not found
+ */
+const extractServiceToken = (request: NextRequest): string | null => {
+  const serviceToken = request.headers.get("x-service-token");
+  if (serviceToken && serviceToken.trim().length > 0) {
+    return serviceToken.trim();
+  }
+  return null;
 };
 
 /**
@@ -142,15 +160,33 @@ export async function middleware(request: NextRequest) {
 
   // For protected routes, verify authentication
   if (isProtectedApiRoute(pathname) || pathname.startsWith("/api/")) {
-    // Extract token from request
-    const token = extractToken(request);
+    // Check for service token first (for service-to-service communication)
+    const serviceToken = extractServiceToken(request);
+    if (serviceToken) {
+      // Validate service token (async - uses Web Crypto API for Edge Runtime compatibility)
+      const isValidServiceToken = await validateServiceToken(serviceToken);
+      if (isValidServiceToken) {
+        // Service token is valid, allow request to proceed
+        // Optionally log service name for monitoring
+        const serviceName = request.headers.get("x-service-name");
+        if (serviceName) {
+          console.log(`Service authenticated: ${serviceName}`);
+        }
+        return NextResponse.next();
+      } else {
+        // Invalid service token
+        return createUnauthorizedResponse("Invalid service token");
+      }
+    }
 
+    // If no service token, check for JWT token (for admin UI users)
+    const token = extractToken(request);
     if (!token) {
       return createUnauthorizedResponse("Authentication required");
     }
 
     try {
-      // Verify token
+      // Verify JWT token
       await verifyAuthToken(token);
 
       // Token is valid, allow request to proceed

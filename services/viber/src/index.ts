@@ -6,16 +6,23 @@
 
 import express, { Express } from "express";
 import dotenv from "dotenv";
-import { ConfigHelper, ServiceConfig } from "@vbar/shared";
+import { ConfigHelper, ServiceConfig, ConsoleLogger } from "@vbar/shared";
 import { getDatabase, closeConnection } from "./config/database";
 import { getConnection, closeMessageQueue } from "./config/messageQueue";
 import { getViberConfig } from "./config/viber";
 import routes from "./adapters/in/routes";
-import {
-  generalRateLimiter,
-  webhookRateLimiter,
-} from "./adapters/in/middleware";
+import { generalRateLimiter } from "./adapters/in/middleware";
 import { ViberBotService } from "./application/services/ViberBotService";
+import { MessageHandler } from "./application/handlers/MessageHandler";
+import { SubscribeHandler } from "./application/handlers/SubscribeHandler";
+import { UnsubscribeHandler } from "./application/handlers/UnsubscribeHandler";
+import { ConversationStartedHandler } from "./application/handlers/ConversationStartedHandler";
+import { DeliveryHandler } from "./application/handlers/DeliveryHandler";
+import { IUserRepository } from "./ports/out/IUserRepository";
+import { MongooseUserRepository } from "./adapters/out/MongooseUserRepository";
+import { RefreshConsumer } from "./adapters/in/consumers/RefreshConsumer";
+import { IAiServiceClient } from "./ports/out/IAiServiceClient";
+import { AiServiceGrpcClient } from "./adapters/out/grpc/AiServiceGrpcClient";
 
 // Load environment variables
 dotenv.config();
@@ -25,6 +32,7 @@ const port = ConfigHelper.getEnvNumber("PORT", ServiceConfig.ports.viber);
 
 // Store ViberBotService instance globally for middleware access
 let viberBotService: ViberBotService | null = null;
+let refreshConsumer: RefreshConsumer | null = null;
 
 // Middleware to preserve raw body for webhook signature verification
 // This must be applied before JSON parsing for webhook routes
@@ -64,7 +72,7 @@ app.use(generalRateLimiter);
 // The middleware routes events to registered event handlers
 // Note: This is applied before general routes to ensure proper event handling
 // Rate limiting is applied via webhookRateLimiter middleware
-app.post("/webhook/viber", webhookRateLimiter, (req, res, next) => {
+app.use("/webhook/viber", (req, res, next) => {
   if (!viberBotService || !viberBotService.isInitialized()) {
     return res.status(503).json({
       error: {
@@ -73,6 +81,7 @@ app.post("/webhook/viber", webhookRateLimiter, (req, res, next) => {
       },
     });
   }
+  console.log("Webhook received");
   const bot = viberBotService.getBot();
   return bot.middleware()(req, res, next);
 });
@@ -133,6 +142,17 @@ async function initialize(): Promise<void> {
     await getDatabase();
     console.log("MongoDB connected");
 
+    // Initialize user repository
+    const userRepository: IUserRepository = new MongooseUserRepository();
+    console.log("User repository initialized");
+
+    // Initialize AI Service gRPC client
+    const aiClientLogger = new ConsoleLogger("AiServiceClient");
+    const aiServiceClient: IAiServiceClient = new AiServiceGrpcClient(
+      aiClientLogger
+    );
+    console.log("AI Service gRPC client initialized");
+
     // Initialize RabbitMQ connection
     console.log("Connecting to RabbitMQ...");
     await getConnection();
@@ -155,24 +175,44 @@ async function initialize(): Promise<void> {
         // In production, you may want to exit if webhook registration is critical
       }
 
-      // Register event handlers
-      // TODO: After Steps 3-9 are complete, create and register handlers here:
-      // const messageHandler = new MessageHandler();
-      // const subscribeHandler = new SubscribeHandler();
-      // const unsubscribeHandler = new UnsubscribeHandler();
-      // const conversationStartedHandler = new ConversationStartedHandler();
-      // const deliveryHandler = new DeliveryHandler();
-      // const messageSentHandler = new MessageSentHandler();
-      // const handlers = [
-      //   messageHandler,
-      //   subscribeHandler,
-      //   unsubscribeHandler,
-      //   conversationStartedHandler,
-      //   deliveryHandler,
-      //   messageSentHandler,
-      // ];
-      // viberBotService.registerEventHandlers(handlers);
-      // console.log("Event handlers registered successfully");
+      // Create and register event handlers
+      try {
+        const messageHandler = new MessageHandler(
+          userRepository,
+          viberBotService,
+          undefined,
+          aiServiceClient
+        );
+        const subscribeHandler = new SubscribeHandler(
+          userRepository,
+          viberBotService
+        );
+        const unsubscribeHandler = new UnsubscribeHandler(userRepository);
+        const conversationStartedHandler = new ConversationStartedHandler(
+          userRepository
+        );
+        const deliveryHandler = new DeliveryHandler();
+        // MessageSentHandler is optional and not yet implemented
+        // const messageSentHandler = new MessageSentHandler();
+
+        const handlers = [
+          messageHandler,
+          subscribeHandler,
+          unsubscribeHandler,
+          conversationStartedHandler,
+          deliveryHandler,
+          // messageSentHandler, // Optional - can be added when implemented
+        ];
+
+        viberBotService.registerEventHandlers(handlers);
+        console.log(
+          `Event handlers registered successfully (${handlers.length} handlers)`
+        );
+      } catch (error) {
+        console.error("Failed to register event handlers:", error);
+        // Continue startup - handlers can be registered later
+        // In production, you may want to exit if handler registration is critical
+      }
     } catch (error) {
       console.error("Failed to initialize Viber Bot:", error);
       // Continue without bot - bot may be optional for service startup
@@ -185,6 +225,19 @@ async function initialize(): Promise<void> {
       console.warn("Warning: Viber bot token or webhook URL not configured");
     } else {
       console.log("Viber bot configuration loaded");
+    }
+
+    // Initialize refresh consumer
+    if (viberBotService) {
+      try {
+        refreshConsumer = new RefreshConsumer(viberBotService);
+        await refreshConsumer.start();
+        console.log("Refresh consumer initialized and started");
+      } catch (error) {
+        console.error("Failed to initialize refresh consumer:", error);
+        // Don't fail service startup if consumer fails
+        // Consumer will retry on next connection
+      }
     }
 
     // Start server
@@ -203,6 +256,15 @@ async function initialize(): Promise<void> {
  */
 async function shutdown(): Promise<void> {
   console.log("Shutting down Viber Service...");
+
+  // Stop refresh consumer
+  if (refreshConsumer) {
+    try {
+      await refreshConsumer.stop();
+    } catch (error) {
+      console.error("Error stopping refresh consumer:", error);
+    }
+  }
 
   try {
     await closeMessageQueue();

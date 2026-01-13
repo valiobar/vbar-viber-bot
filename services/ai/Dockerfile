@@ -46,6 +46,7 @@ RUN adduser --system --uid 1001 ai
 COPY --from=builder --chown=ai:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=ai:nodejs /app/packages/shared/dist ./packages/shared/dist
 COPY --from=builder --chown=ai:nodejs /app/packages/shared/package.json ./packages/shared/
+COPY --from=builder --chown=ai:nodejs /app/packages/shared/proto ./packages/shared/proto
 COPY --from=builder --chown=ai:nodejs /app/services/ai/dist ./dist
 COPY --from=builder --chown=ai:nodejs /app/services/ai/package.json ./
 
@@ -56,6 +57,7 @@ EXPOSE 3002
 ENV PORT=3002
 
 CMD ["node", "dist/index.js"]
+
 
 
 

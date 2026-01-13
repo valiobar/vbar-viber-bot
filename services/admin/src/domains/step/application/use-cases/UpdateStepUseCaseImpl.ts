@@ -39,7 +39,7 @@ export class UpdateStepUseCaseImpl implements UpdateStepUseCase {
   async execute(id: string, input: UpdateStepInput): Promise<StepDTO> {
     // Get existing step from repository
     const existingStep = await this.stepRepository.findById(id);
-
+    console.log("Input", input);
     if (!existingStep) {
       throw new Error(`Step with ID ${id} not found`);
     }
@@ -66,6 +66,9 @@ export class UpdateStepUseCaseImpl implements UpdateStepUseCase {
 
     const updatedHidden =
       input.hidden !== undefined ? input.hidden : existingStep.hidden;
+
+    const updatedIsAi =
+      input.isAi !== undefined ? input.isAi : existingStep.isAi;
 
     // Validate all Message IDs exist (if content is being updated)
     if (input.content !== undefined) {
@@ -95,6 +98,7 @@ export class UpdateStepUseCaseImpl implements UpdateStepUseCase {
       content: updatedContent,
       keyboard: updatedKeyboard,
       hidden: updatedHidden,
+      isAi: updatedIsAi,
       createdAt: existingStep.createdAt,
       updatedAt: new Date().toISOString(),
     });
@@ -106,4 +110,3 @@ export class UpdateStepUseCaseImpl implements UpdateStepUseCase {
     return StepDTO.fromEntity(savedStep);
   }
 }
-

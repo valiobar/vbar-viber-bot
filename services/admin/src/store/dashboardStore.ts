@@ -75,3 +75,4 @@ export const getToolByRoute = (route: string): Tool | undefined => {
 export const getToolById = (id: string): Tool | undefined => {
   return DEFAULT_TOOLS.find((tool) => tool.id === id);
 };
+

@@ -40,6 +40,12 @@ export interface CreateStepInput {
    * @default false
    */
   hidden?: boolean;
+
+  /**
+   * Whether this step uses AI
+   * @default false
+   */
+  isAi?: boolean;
 }
 
 /**

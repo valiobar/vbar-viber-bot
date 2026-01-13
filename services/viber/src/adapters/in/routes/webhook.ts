@@ -77,7 +77,15 @@ export function configureWebhookRoutes(router: any): void {
   // The middleware is applied at the Express app level and automatically
   // routes events to registered event handlers.
   //
-  // The POST handler has been replaced by:
+  // The old POST handler (webhookEventHandler) has been replaced by:
   // - viber-bot middleware (bot.middleware()) in index.ts
   // - Event handlers in application/handlers/ directory
+  //
+  // If you need to keep the old handler for reference, it's commented out below:
+  // router.post(
+  //   "/webhook/viber",
+  //   webhookRateLimiter,
+  //   verifyWebhookSignature,
+  //   webhookEventHandler
+  // );
 }

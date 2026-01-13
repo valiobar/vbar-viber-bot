@@ -20,6 +20,7 @@ import { MongoStepRepository } from "@/domains/step/adapters/out/repositories/Mo
 import { StepModel } from "@/domains/step/adapters/out/models/StepModel";
 import type { UpdateBotSettingsInput } from "@/domains/bot-settings/ports/in/UpdateBotSettingsUseCase";
 import type { BotSettingsDTO } from "@/domains/bot-settings/application/dto/BotSettingsDTO";
+import { publishRefreshEvent } from "@/lib/message-queue-publisher";
 
 /**
  * GET handler for getting bot settings
@@ -151,6 +152,13 @@ export async function PUT(
 
     // Execute use case
     const botSettingsDTO = await updateBotSettingsUseCase.execute(input);
+
+    // Notify viber service to refresh cache (fire-and-forget)
+    try {
+      publishRefreshEvent("bot_settings");
+    } catch (error) {
+      console.error("Failed to publish refresh event:", error);
+    }
 
     // Return success response
     return NextResponse.json<ApiResponse<BotSettingsDTO>>(

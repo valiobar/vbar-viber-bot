@@ -8,7 +8,10 @@ import { ConfigHelper, ServiceConfig } from "@vbar/shared";
 let connection: Connection | null = null;
 let channel: Channel | null = null;
 
-const uri = ConfigHelper.getEnv("RABBITMQ_URI", "amqp://localhost:5672");
+const uri = ConfigHelper.getEnv(
+  "RABBITMQ_URI",
+  "amqp://admin:admin@localhost:5672"
+);
 const exchangeName = ServiceConfig.messageQueue.exchanges.default;
 const queueName = ServiceConfig.messageQueue.queues.analyticsEvents;
 

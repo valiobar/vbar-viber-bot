@@ -171,7 +171,7 @@ Rate limit information is included in all responses via standard headers (`RateL
 
 ### AI Service
 
-**Technology Stack**: Node.js, Express.js, TypeScript, MongoDB, Mongoose
+**Technology Stack**: Node.js, Express.js, TypeScript, MongoDB, Mongoose, LangChain
 
 **Purpose and Responsibilities**:
 
@@ -181,6 +181,11 @@ Rate limit information is included in all responses via standard headers (`RateL
 - Response generation
 - AI model training and fine-tuning (if applicable)
 - Multi-provider AI model support (External APIs and Self-hosted)
+- LangChain-based chain execution (simple, RAG, custom chains)
+- Conversation memory management (BufferMemory, ConversationSummaryMemory)
+- Retrieval Augmented Generation (RAG) with vector stores
+- Prompt engineering and template management
+- LangSmith observability integration
 
 **Database**: `ai` MongoDB database
 
@@ -191,23 +196,67 @@ Rate limit information is included in all responses via standard headers (`RateL
 - **Processing Logs**: AI processing history and results
 - **Configurations**: AI service settings and parameters
 - **Analytics**: AI performance metrics and statistics
+- **Prompt Templates**: Stored prompt templates for custom chains (if using MongoDB storage)
+- **Embeddings**: Vector embeddings for RAG (if using MongoDB vector store)
+
+**LangChain Integration Architecture**:
+
+The AI Service uses **LangChain** as the core framework for AI processing, providing:
+
+1. **Unified AI Provider Interface**:
+
+   - LangChain adapters for OpenAI, Anthropic, Google, and Ollama
+   - Consistent interface across all providers via `BaseChatModel`
+   - Automatic LangSmith tracing when enabled
+
+2. **Conversation Memory Management**:
+
+   - **BufferMemory**: Stores full conversation history (configurable max history)
+   - **ConversationSummaryMemory**: Summarizes conversation history to save tokens
+   - Memory type configurable via `CONVERSATION_MEMORY_TYPE` environment variable
+
+3. **Flexible Task System**:
+
+   - **Simple Chains**: Direct prompts to AI models
+   - **RAG Chains**: Retrieval Augmented Generation with vector store retrieval
+   - **Custom Chains**: Template-based chains with variable substitution
+   - Task type configurable via `AI_TASK_TYPE` environment variable
+
+4. **RAG (Retrieval Augmented Generation) Architecture**:
+
+   - Vector store integration (MongoDB Atlas Vector Search or in-memory)
+   - Embedding providers (OpenAI, Ollama, or local)
+   - Similarity search with configurable K and threshold
+   - Automatic context injection into prompts
+
+5. **Prompt Engineering System**:
+
+   - Template storage (MongoDB or file-based)
+   - Variable substitution and rendering
+   - Default template configuration
+   - Template management via repository pattern
+
+6. **LangSmith Observability**:
+   - Optional tracing integration for debugging and monitoring
+   - Automatic trace collection for all LangChain operations
+   - Token usage tracking (when available from providers)
+   - Latency and error tracking
 
 **AI Model Providers**:
 
-The AI Service supports a **hybrid approach** with multiple AI model providers:
+The AI Service supports a **hybrid approach** with multiple AI model providers through LangChain:
 
 1. **External AI API Services (SaaS)**:
 
-   - OpenAI (GPT-4, GPT-3.5, etc.)
-   - Anthropic (Claude)
-   - Google (Gemini)
-   - Other cloud-based AI services
-   - Accessed via REST APIs
+   - OpenAI (GPT-4, GPT-3.5, etc.) - via `ChatOpenAI` LangChain adapter
+   - Anthropic (Claude) - via `ChatAnthropic` LangChain adapter
+   - Google (Gemini) - via `ChatGoogleGenerativeAI` LangChain adapter
+   - Accessed via LangChain's unified interface
 
 2. **Self-Hosted AI Models (Ollama)**:
-   - Local LLM models (Llama 2, Mistral, etc.)
+   - Local LLM models (Llama 2, Mistral, etc.) - via `ChatOllama` LangChain adapter
    - Deployed via Ollama service
-   - Accessed via HTTP API
+   - Accessed via HTTP API through LangChain
    - Provides data privacy and cost control
 
 The AI Service can dynamically switch between providers based on configuration, allowing for:
@@ -219,14 +268,46 @@ The AI Service can dynamically switch between providers based on configuration, 
 
 **Hexagonal Architecture Structure**:
 
-- Express routes as input adapters for API endpoints
-- Domain layer contains AI business logic
-- Application layer handles AI processing use cases
-- MongoDB repositories for data persistence
-- Multiple AI client adapters as output adapters:
-  - External AI API clients (OpenAI, Anthropic, etc.)
-  - Ollama client for self-hosted models
-  - Provider selection and routing logic
+The AI Service follows Hexagonal Architecture with the following layer organization:
+
+- **Input Adapters** (`src/adapters/in/`):
+
+  - Express routes for REST API endpoints
+  - gRPC server for high-performance Viber Service communication
+  - Message queue consumers (if implemented)
+
+- **Application Layer** (`src/application/`):
+
+  - Use cases (e.g., `ProcessMessageUseCase`)
+  - Orchestrates domain logic and chain execution
+  - DTOs and application services
+
+- **Domain Layer** (`src/domains/ai/`):
+
+  - Entities: `MessageRequest`, `MessageResponse`, `AITask`, `ConversationContext`
+  - Value Objects: `AIProvider`, `AITaskType`
+  - Domain Services: `PromptTemplateService`
+  - Business rules and validations
+
+- **Output Adapters** (`src/adapters/out/`):
+
+  - **LangChain Adapters**: Provider-specific implementations (`OpenAIAdapter`, `OllamaAdapter`, etc.)
+  - **Chain Executor**: `LangChainExecutor` for executing different chain types
+  - **Vector Store Adapters**: MongoDB vector store implementation
+  - **Repositories**: MongoDB repositories for conversations, prompt templates
+  - **Ports**: Interfaces for `AIProviderPort`, `ChainExecutorPort`, `VectorStorePort`, `ConversationRepository`
+
+- **Ports** (`src/ports/`):
+  - **Input Ports** (`in/`): Use case interfaces (e.g., `ProcessMessageUseCase`)
+  - **Output Ports** (`out/`): Repository and service interfaces (e.g., `ChainExecutorPort`, `AIProviderPort`, `VectorStorePort`)
+
+**Key Components**:
+
+- **LangChainAdapter**: Abstract base class for all AI provider adapters, provides common functionality (memory management, message formatting, retry logic)
+- **LangChainExecutor**: Executes different types of chains (simple, RAG, custom) based on task configuration
+- **ConversationRepository**: Manages conversation history persistence
+- **VectorStorePort**: Interface for vector store operations (similarity search, document storage)
+- **PromptTemplateRepository**: Manages prompt template storage and retrieval
 
 ### Analytics Service
 

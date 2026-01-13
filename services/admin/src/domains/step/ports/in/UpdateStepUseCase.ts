@@ -41,6 +41,12 @@ export interface UpdateStepInput {
    * Optional - if not provided, hidden status remains unchanged
    */
   hidden?: boolean;
+
+  /**
+   * Whether this step uses AI
+   * Optional - if not provided, isAi status remains unchanged
+   */
+  isAi?: boolean;
 }
 
 /**

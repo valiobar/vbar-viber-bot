@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package ai;
+
+service AIProcessingService {
+  rpc ProcessMessage(ProcessMessageRequest) returns (ProcessMessageResponse);
+}
+
+message ProcessMessageRequest {
+  string messageContent = 1;
+  string messageType = 2;
+  string userId = 3;
+  string stepId = 4;
+  UserProfile userProfile = 5;
+  string taskType = 6;  // "simple", "rag", or "custom" (optional)
+}
+
+message UserProfile {
+  string id = 1;
+  string name = 2;
+  string avatar = 3;
+}
+
+message ProcessMessageResponse {
+  string response = 1;
+}
+

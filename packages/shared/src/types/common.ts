@@ -83,3 +83,13 @@ export interface HealthCheckResponse {
     [key: string]: "connected" | "disconnected" | undefined;
   };
 }
+
+/**
+ * Refresh event for bot data cache invalidation
+ */
+export interface RefreshEvent {
+  type: "bot_data_refresh";
+  timestamp: string;
+  source: "admin_service";
+  dataType?: "all" | "steps" | "messages" | "keyboards" | "bot_settings";
+}

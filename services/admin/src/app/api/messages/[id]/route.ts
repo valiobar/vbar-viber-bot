@@ -18,6 +18,7 @@ import { MongoMessageRepository } from "@/domains/message/adapters/out/repositor
 import { MessageModel } from "@/domains/message/adapters/out/models/MessageModel";
 import type { UpdateMessageInput } from "@/domains/message/ports/in/UpdateMessageUseCase";
 import type { MessageDTO } from "@/domains/message/application/dto/MessageDTO";
+import { publishRefreshEvent } from "@/lib/message-queue-publisher";
 
 /**
  * GET handler for getting a message by ID
@@ -153,6 +154,13 @@ export async function PUT(
     // Execute use case
     const messageDTO = await updateMessageUseCase.execute(id, input);
 
+    // Notify viber service to refresh cache (fire-and-forget)
+    try {
+      publishRefreshEvent("messages");
+    } catch (error) {
+      console.error("Failed to publish refresh event:", error);
+    }
+
     // Return success response
     return NextResponse.json<ApiResponse<MessageDTO>>(
       {
@@ -245,6 +253,13 @@ export async function DELETE(
 
     // Execute use case
     await deleteMessageUseCase.execute(id);
+
+    // Notify viber service to refresh cache (fire-and-forget)
+    try {
+      publishRefreshEvent("messages");
+    } catch (error) {
+      console.error("Failed to publish refresh event:", error);
+    }
 
     // Return success response (204 No Content)
     return new NextResponse(null, { status: 204 });

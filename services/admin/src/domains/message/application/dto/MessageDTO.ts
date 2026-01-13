@@ -9,6 +9,7 @@
 import { Message } from "../../entities/Message";
 import { MessageContent } from "../../value-objects/MessageContent";
 import { MessageType } from "../../types";
+import type { MessageDTO as SharedMessageDTO } from "@vbar/shared";
 
 /**
  * Message DTO (Data Transfer Object)
@@ -17,8 +18,9 @@ import { MessageType } from "../../types";
  * but without business logic or methods.
  * Content is represented as plain object instead of MessageContent value object.
  * Provides static methods for converting between Message entities and DTOs.
+ * Implements the shared MessageDTO interface for cross-service compatibility.
  */
-export class MessageDTO {
+export class MessageDTO implements SharedMessageDTO {
   public readonly id: string;
   public readonly type: MessageType;
   public readonly content: object; // Plain object, not MessageContent

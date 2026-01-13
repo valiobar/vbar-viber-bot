@@ -19,3 +19,7 @@ export class LocationMessageHandler {
     // TODO: Process location message via message processor
   }
 }
+
+
+
+

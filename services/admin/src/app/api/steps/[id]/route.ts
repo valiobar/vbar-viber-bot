@@ -22,6 +22,7 @@ import { MongoKeyboardRepository } from "@/domains/keyboard/adapters/out/reposit
 import { KeyboardModel } from "@/domains/keyboard/adapters/out/models/KeyboardModel";
 import type { UpdateStepInput } from "@/domains/step/ports/in/UpdateStepUseCase";
 import type { StepDTO } from "@/domains/step/application/dto/StepDTO";
+import { publishRefreshEvent } from "@/lib/message-queue-publisher";
 
 /**
  * GET handler for getting a step by ID
@@ -127,7 +128,7 @@ export async function PUT(
 
     // Parse request body
     const body = await request.json();
-
+    console.log(body);
     // Build input (all fields are optional for updates)
     const input: UpdateStepInput = {};
     if (body.humanReadableName !== undefined) {
@@ -145,6 +146,10 @@ export async function PUT(
     if (body.hidden !== undefined) {
       input.hidden = body.hidden;
     }
+    // Explicitly handle isAi for both true and false values
+    if (body.isAi !== undefined && body.isAi !== null) {
+      input.isAi = Boolean(body.isAi);
+    }
 
     // Instantiate repositories
     const stepRepository = new MongoStepRepository(StepModel);
@@ -160,6 +165,13 @@ export async function PUT(
 
     // Execute use case
     const stepDTO = await updateStepUseCase.execute(id, input);
+
+    // Notify viber service to refresh cache (fire-and-forget)
+    try {
+      publishRefreshEvent("steps");
+    } catch (error) {
+      console.error("Failed to publish refresh event:", error);
+    }
 
     // Return success response
     return NextResponse.json<ApiResponse<StepDTO>>(
@@ -252,6 +264,13 @@ export async function DELETE(
     // Execute use case
     await deleteStepUseCase.execute(id);
 
+    // Notify viber service to refresh cache (fire-and-forget)
+    try {
+      publishRefreshEvent("steps");
+    } catch (error) {
+      console.error("Failed to publish refresh event:", error);
+    }
+
     // Return success response (204 No Content)
     return new NextResponse(null, { status: 204 });
   } catch (error) {
@@ -299,4 +318,3 @@ export async function DELETE(
     );
   }
 }
-

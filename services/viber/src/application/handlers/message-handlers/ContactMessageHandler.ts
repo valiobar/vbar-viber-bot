@@ -14,9 +14,9 @@ export class ContactMessageHandler {
   async handle(message: Message.Contact, userProfile: any): Promise<void> {
     this.logger.info("Processing contact message", {
       userId: userProfile.id,
-      contact: message.contact,
+      contactName: message.contactName,
+      contactPhoneNumber: message.contactPhoneNumber,
     });
     // TODO: Process contact message via message processor
   }
 }
-

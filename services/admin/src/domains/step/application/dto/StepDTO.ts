@@ -7,6 +7,7 @@
  */
 
 import { Step } from "../../entities/Step";
+import type { StepDTO as SharedStepDTO } from "@vbar/shared";
 
 /**
  * Step DTO (Data Transfer Object)
@@ -14,14 +15,16 @@ import { Step } from "../../entities/Step";
  * Plain data structure matching Step entity properties
  * but without business logic or methods.
  * Provides static methods for converting between Step entities and DTOs.
+ * Implements the shared StepDTO interface for cross-service compatibility.
  */
-export class StepDTO {
+export class StepDTO implements SharedStepDTO {
   public readonly id: string;
   public readonly humanReadableName: string;
   public readonly trigger: string[];
   public readonly content: string[]; // Array of Message IDs
   public readonly keyboard: string | null; // Optional Keyboard ID
   public readonly hidden: boolean;
+  public readonly isAi: boolean;
   public readonly createdAt: string;
   public readonly updatedAt: string;
 
@@ -32,6 +35,7 @@ export class StepDTO {
     content: string[];
     keyboard: string | null;
     hidden: boolean;
+    isAi: boolean;
     createdAt: string;
     updatedAt: string;
   }) {
@@ -41,6 +45,7 @@ export class StepDTO {
     this.content = data.content;
     this.keyboard = data.keyboard;
     this.hidden = data.hidden;
+    this.isAi = data.isAi;
     this.createdAt = data.createdAt;
     this.updatedAt = data.updatedAt;
   }
@@ -59,6 +64,7 @@ export class StepDTO {
       content: step.content,
       keyboard: step.keyboard,
       hidden: step.hidden,
+      isAi: step.isAi,
       createdAt: step.createdAt,
       updatedAt: step.updatedAt,
     });
@@ -81,6 +87,7 @@ export class StepDTO {
       content: dto.content,
       keyboard: dto.keyboard,
       hidden: dto.hidden,
+      isAi: dto.isAi,
       createdAt: dto.createdAt,
       updatedAt: dto.updatedAt,
     });

@@ -14,6 +14,7 @@ import { AdminServiceClient } from "../../adapters/out/AdminServiceClient";
 import { getViberConfig } from "../../config/viber";
 import { BotSettings } from "../types/BotSettings";
 import { IEventHandler } from "../handlers/IEventHandler";
+import { BotDataService } from "./BotDataService";
 
 /**
  * Viber Bot Service
@@ -31,10 +32,12 @@ export class ViberBotService {
   private settings: BotSettings | null = null;
   private initialized: boolean = false;
   private handlers: IEventHandler[] = [];
+  private botDataService: BotDataService;
 
   constructor(adminServiceClient?: IAdminServiceClient) {
     this.adminServiceClient = adminServiceClient || new AdminServiceClient();
     this.config = getViberConfig();
+    this.botDataService = new BotDataService(this.adminServiceClient);
   }
 
   /**
@@ -42,8 +45,9 @@ export class ViberBotService {
    *
    * This method:
    * 1. Fetches bot settings from admin service
-   * 2. Initializes ViberBot with token and settings
-   * 3. Configures bot with name and avatar
+   * 2. Fetches steps, messages, and keyboards from admin service via BotDataService
+   * 3. Initializes ViberBot with token and settings
+   * 4. Configures bot with name and avatar
    *
    * @throws Error if settings cannot be fetched or bot initialization fails
    */
@@ -55,10 +59,24 @@ export class ViberBotService {
     }
 
     try {
-      // Fetch bot settings from admin service
+      // Fetch bot settings from admin service (critical - fail if this fails)
       console.log("Fetching bot settings from admin service...");
       this.settings = await this.adminServiceClient.getBotSettings();
       console.log("Bot settings fetched successfully");
+
+      // Fetch steps, messages, and keyboards (non-critical - continue even if fails)
+      try {
+        await this.botDataService.fetchAllData();
+      } catch (error) {
+        // Non-critical: log warning but continue initialization
+        // BotDataService already handles individual fetch errors gracefully,
+        // but catch any unexpected errors here to ensure initialization continues
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        console.warn(
+          `Failed to fetch bot data (steps/messages/keyboards) - continuing initialization: ${errorMessage}`
+        );
+      }
 
       // Validate required configuration
       if (!this.config.token) {
@@ -91,6 +109,18 @@ export class ViberBotService {
   }
 
   /**
+   * Get the BotDataService instance
+   *
+   * Provides access to bot data (steps, messages, keyboards) for other services
+   * that need to query this data.
+   *
+   * @returns BotDataService instance
+   */
+  getBotDataService(): BotDataService {
+    return this.botDataService;
+  }
+
+  /**
    * Register webhook URL with Viber API
    *
    * This method calls the Viber API to set the webhook URL.
@@ -111,13 +141,26 @@ export class ViberBotService {
 
     try {
       console.log(`Registering webhook URL: ${this.config.webhookUrl}`);
-      await this.bot.setWebhook(this.config.webhookUrl);
+       this.bot.setWebhook(this.config.webhookUrl)
+       .then((response) => {
+        console.log("WEBHOOK CONNECTED SUCCESSFUL");
+        console.log(response);
+       })
+       .catch((error) => {
+        console.log("WEBHOOK CONNECTED FAILED");
+        console.log(error);
+      
+      });
+     
       console.log("Webhook registered successfully");
     } catch (error) {
+      console.log(error);
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       console.error("Failed to register webhook:", errorMessage);
-      throw new Error(`Webhook registration failed: ${errorMessage}`);
+      throw new Error(
+        `Webhook registration failed: ${JSON.parse(errorMessage)}`
+      );
     }
   }
 
