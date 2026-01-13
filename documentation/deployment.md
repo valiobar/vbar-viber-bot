@@ -271,11 +271,45 @@ services:
       - NODE_ENV=production
       - MONGODB_URI=${MONGODB_AI_URI}
       - RABBITMQ_URL=${RABBITMQ_URL}
-      - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434}
+      # AI Provider Configuration
       - AI_MODEL_PROVIDER=${AI_MODEL_PROVIDER:-ollama}
-      - AI_MODEL_NAME=${AI_MODEL_NAME:-llama2}
+      - AI_TEMPERATURE=${AI_TEMPERATURE:-0.7}
+      - AI_MAX_TOKENS=${AI_MAX_TOKENS:-}
+      # Conversation Memory Configuration
+      - CONVERSATION_MEMORY_TYPE=${CONVERSATION_MEMORY_TYPE:-buffer}
+      - CONVERSATION_MAX_HISTORY=${CONVERSATION_MAX_HISTORY:-10}
+      # Task Type Configuration
+      - AI_TASK_TYPE=${AI_TASK_TYPE:-simple}
+      # Ollama Configuration
+      - OLLAMA_BASE_URL=${OLLAMA_URL:-http://ollama:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3:4b}
+      # OpenAI Configuration
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-3.5-turbo}
+      # Anthropic Configuration
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-}
+      # Google AI Configuration
+      - GOOGLE_AI_API_KEY=${GOOGLE_AI_API_KEY:-}
+      - GOOGLE_AI_MODEL=${GOOGLE_AI_MODEL:-gemini-pro}
+      # RAG Configuration
+      - RAG_ENABLED=${RAG_ENABLED:-false}
+      - RAG_EMBEDDING_PROVIDER=${RAG_EMBEDDING_PROVIDER:-openai}
+      - RAG_OPENAI_EMBEDDING_MODEL=${RAG_OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      - RAG_OLLAMA_EMBEDDING_MODEL=${RAG_OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
+      - RAG_VECTOR_STORE_TYPE=${RAG_VECTOR_STORE_TYPE:-mongodb}
+      - RAG_VECTOR_STORE_COLLECTION=${RAG_VECTOR_STORE_COLLECTION:-embeddings}
+      - RAG_RETRIEVER_K=${RAG_RETRIEVER_K:-4}
+      - RAG_SIMILARITY_THRESHOLD=${RAG_SIMILARITY_THRESHOLD:-0.7}
+      # Prompt Template Configuration
+      - PROMPT_TEMPLATES_ENABLED=${PROMPT_TEMPLATES_ENABLED:-true}
+      - PROMPT_TEMPLATE_STORAGE=${PROMPT_TEMPLATE_STORAGE:-mongodb}
+      - PROMPT_TEMPLATE_DEFAULT=${PROMPT_TEMPLATE_DEFAULT:-}
+      # LangSmith Configuration (Optional Observability)
+      - LANGSMITH_TRACING=${LANGSMITH_TRACING:-false}
+      - LANGSMITH_API_KEY=${LANGSMITH_API_KEY:-}
+      - LANGSMITH_PROJECT=${LANGSMITH_PROJECT:-}
+      - LANGSMITH_ENDPOINT=${LANGSMITH_ENDPOINT:-}
     depends_on:
       - mongodb-ai
       - rabbitmq
@@ -927,6 +961,73 @@ spec:
 - Use ConfigMaps for non-sensitive configuration
 - Never commit secrets to version control
 - Use external secret management (e.g., HashiCorp Vault, AWS Secrets Manager)
+
+**AI Service Environment Variables**:
+
+The AI Service requires the following environment variables for LangChain integration:
+
+**AI Provider Configuration**:
+
+- `AI_MODEL_PROVIDER`: AI provider to use (`ollama`, `openai`, `anthropic`, `google`) - Default: `ollama`
+- `AI_TEMPERATURE`: Temperature for AI model responses (0.0-2.0) - Default: `0.7`
+- `AI_MAX_TOKENS`: Maximum tokens for AI responses (optional)
+
+**Conversation Memory Settings**:
+
+- `CONVERSATION_MEMORY_TYPE`: Memory type (`buffer` or `summary`) - Default: `buffer`
+- `CONVERSATION_MAX_HISTORY`: Maximum conversation history messages - Default: `10`
+
+**Task Type Configuration**:
+
+- `AI_TASK_TYPE`: Task type (`simple`, `rag`, `custom`) - Default: `simple`
+
+**Provider-Specific Configuration**:
+
+**Ollama (Self-Hosted)**:
+
+- `OLLAMA_BASE_URL`: Ollama service URL - Default: `http://localhost:11434`
+- `OLLAMA_MODEL`: Model name - Default: `qwen3:4b`
+
+**OpenAI**:
+
+- `OPENAI_API_KEY`: OpenAI API key (required if using OpenAI)
+- `OPENAI_MODEL`: Model name - Default: `gpt-3.5-turbo`
+
+**Anthropic**:
+
+- `ANTHROPIC_API_KEY`: Anthropic API key (required if using Anthropic)
+- `ANTHROPIC_MODEL`: Model name (required if using Anthropic)
+
+**Google AI**:
+
+- `GOOGLE_AI_API_KEY`: Google AI API key (required if using Google)
+- `GOOGLE_AI_MODEL`: Model name - Default: `gemini-pro`
+
+**RAG (Retrieval Augmented Generation) Configuration**:
+
+- `RAG_ENABLED`: Enable RAG functionality - Default: `false`
+- `RAG_EMBEDDING_PROVIDER`: Embedding provider (`openai`, `ollama`, `local`) - Default: `openai`
+- `RAG_OPENAI_EMBEDDING_MODEL`: OpenAI embedding model - Default: `text-embedding-3-small`
+- `RAG_OLLAMA_EMBEDDING_MODEL`: Ollama embedding model - Default: `nomic-embed-text`
+- `RAG_VECTOR_STORE_TYPE`: Vector store type (`mongodb` or `memory`) - Default: `mongodb`
+- `RAG_VECTOR_STORE_COLLECTION`: MongoDB collection for vectors - Default: `embeddings`
+- `RAG_RETRIEVER_K`: Number of documents to retrieve - Default: `4`
+- `RAG_SIMILARITY_THRESHOLD`: Similarity threshold (0.0-1.0) - Default: `0.7`
+
+**Prompt Template Configuration**:
+
+- `PROMPT_TEMPLATES_ENABLED`: Enable prompt templates - Default: `true`
+- `PROMPT_TEMPLATE_STORAGE`: Storage type (`mongodb` or `file`) - Default: `mongodb`
+- `PROMPT_TEMPLATE_DEFAULT`: Default template name (optional)
+
+**LangSmith Observability (Optional)**:
+
+- `LANGSMITH_TRACING`: Enable LangSmith tracing - Default: `false`
+- `LANGSMITH_API_KEY`: LangSmith API key (required if tracing enabled)
+- `LANGSMITH_PROJECT`: LangSmith project name (optional)
+- `LANGSMITH_ENDPOINT`: LangSmith endpoint URL (optional, defaults to LangSmith cloud)
+
+**Note**: If using MongoDB vector store for RAG, ensure MongoDB Atlas Vector Search index is configured. See [Setup Guide](./setup.md) for MongoDB vector search setup instructions.
 
 ### Secrets Management
 

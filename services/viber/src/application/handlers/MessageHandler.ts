@@ -188,8 +188,11 @@ export class MessageHandler implements IEventHandler {
             const buttonsPrefix =
               this.viberBotService.getSettings()?.buttonsPrefix;
             const isTextMessage = message instanceof Message.Text;
-            const isMessageContainsPrefix = isTextMessage && buttonsPrefix && message.text?.includes(buttonsPrefix);
-          
+            const isMessageContainsPrefix =
+              isTextMessage &&
+              buttonsPrefix &&
+              message.text?.includes(buttonsPrefix);
+
             const botDataService = this.viberBotService.getBotDataService();
             const step = botDataService.getStepById(user.currentStepId);
             if (step && step.isAi === true && !isMessageContainsPrefix) {
@@ -250,12 +253,13 @@ export class MessageHandler implements IEventHandler {
               }
 
               // Handle message via AI service
-
+              const bot = this.viberBotService.getBot();
               await this.viberAiService.handleMessage(
                 messageContent,
                 messageType,
                 userId,
                 user.currentStepId,
+                bot,
                 userProfile
               );
 

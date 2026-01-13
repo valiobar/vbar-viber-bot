@@ -652,7 +652,8 @@ All services support hot reload in development mode:
 - TypeScript
 - MongoDB
 - Mongoose (ODM)
-- Multi-provider AI support (Ollama, OpenAI, Anthropic, etc.)
+- **LangChain** (AI framework)
+- Multi-provider AI support (Ollama, OpenAI, Anthropic, Google)
 
 **Setup Steps**:
 
@@ -668,6 +669,8 @@ All services support hot reload in development mode:
    npm install
    ```
 
+   This installs LangChain and all required dependencies for AI processing.
+
 3. Configure environment variables:
 
    ```bash
@@ -681,46 +684,156 @@ All services support hot reload in development mode:
 
    ```env
    AI_MODEL_PROVIDER=ollama
-   OLLAMA_URL=http://localhost:11434
-   AI_MODEL_NAME=llama2
+   OLLAMA_BASE_URL=http://localhost:11434
+   OLLAMA_MODEL=qwen3:4b
    ```
 
    Ensure Ollama is running (via Docker Compose or local installation):
 
    ```bash
    # Pull a model if not already done
-   ollama pull llama2
+   ollama pull qwen3:4b
    # Or if using Docker
-   docker exec -it ollama ollama pull llama2
+   docker exec -it ollama ollama pull qwen3:4b
    ```
 
    **Option B: Using External AI APIs**:
 
+   **OpenAI**:
+
    ```env
    AI_MODEL_PROVIDER=openai
    OPENAI_API_KEY=your-openai-api-key
-   AI_MODEL_NAME=gpt-4
+   OPENAI_MODEL=gpt-3.5-turbo
    ```
 
-   Or for Anthropic:
+   **Anthropic**:
 
    ```env
    AI_MODEL_PROVIDER=anthropic
    ANTHROPIC_API_KEY=your-anthropic-api-key
-   AI_MODEL_NAME=claude-3-opus
+   ANTHROPIC_MODEL=claude-3-opus
    ```
 
-5. Start development server:
+   **Google AI**:
 
-   ```bash
-   npm run dev
+   ```env
+   AI_MODEL_PROVIDER=google
+   GOOGLE_AI_API_KEY=your-google-ai-api-key
+   GOOGLE_AI_MODEL=gemini-pro
    ```
 
-6. Verify service is running:
+5. **Configure Conversation Memory** (Optional):
 
-   ```bash
-   curl http://localhost:3002/health
+   ```env
+   # Buffer memory stores full conversation history
+   CONVERSATION_MEMORY_TYPE=buffer
+   CONVERSATION_MAX_HISTORY=10
+
+   # Or use summary memory to save tokens
+   # CONVERSATION_MEMORY_TYPE=summary
+   # CONVERSATION_MAX_HISTORY=20
    ```
+
+6. **Configure Task Type** (Optional):
+
+   ```env
+   # Simple: Direct prompts to AI model
+   AI_TASK_TYPE=simple
+
+   # RAG: Retrieval Augmented Generation (requires RAG setup)
+   # AI_TASK_TYPE=rag
+
+   # Custom: Template-based chains
+   # AI_TASK_TYPE=custom
+   ```
+
+7. **Configure RAG (Retrieval Augmented Generation)** (Optional):
+
+   If you want to enable RAG for enhanced context retrieval:
+
+   ```env
+   RAG_ENABLED=true
+   RAG_EMBEDDING_PROVIDER=openai
+   RAG_OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+   RAG_VECTOR_STORE_TYPE=mongodb
+   RAG_VECTOR_STORE_COLLECTION=embeddings
+   RAG_RETRIEVER_K=4
+   RAG_SIMILARITY_THRESHOLD=0.7
+   ```
+
+   **MongoDB Atlas Vector Search Setup** (if using MongoDB vector store):
+
+   1. Create a vector search index in MongoDB Atlas:
+
+      ```json
+      {
+        "fields": [
+          {
+            "type": "vector",
+            "path": "embedding",
+            "numDimensions": 1536,
+            "similarity": "cosine"
+          }
+        ]
+      }
+      ```
+
+   2. Ensure your MongoDB connection string has access to the database with the vector search index.
+
+   **Document Loading and Indexing**:
+
+   - Documents need to be loaded and embedded before RAG can be used
+   - Use embedding provider to generate vector embeddings
+   - Store embeddings in MongoDB vector store collection
+   - See LangChain documentation for document loading and indexing examples
+
+8. **Configure Prompt Templates** (Optional):
+
+   ```env
+   PROMPT_TEMPLATES_ENABLED=true
+   PROMPT_TEMPLATE_STORAGE=mongodb
+   PROMPT_TEMPLATE_DEFAULT=default_template
+   ```
+
+   Prompt templates can be stored in MongoDB or as files. Templates support variable substitution for dynamic prompt generation.
+
+9. **Configure LangSmith Observability** (Optional):
+
+   LangSmith provides observability and debugging for LangChain operations:
+
+   ```env
+   LANGSMITH_TRACING=true
+   LANGSMITH_API_KEY=your-langsmith-api-key
+   LANGSMITH_PROJECT=your-project-name
+   LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+   ```
+
+   **LangSmith Setup**:
+
+   1. Sign up for LangSmith at [smith.langchain.com](https://smith.langchain.com)
+   2. Create an API key in your LangSmith dashboard
+   3. Set `LANGSMITH_TRACING=true` and provide your API key
+   4. Optionally set project name and custom endpoint
+
+   LangSmith automatically traces all LangChain operations when enabled, providing:
+
+   - Request/response logging
+   - Token usage tracking
+   - Latency metrics
+   - Error tracking and debugging
+
+10. Start development server:
+
+    ```bash
+    npm run dev
+    ```
+
+11. Verify service is running:
+
+    ```bash
+    curl http://localhost:3002/health
+    ```
 
 **Note**: In Docker Compose configuration, the AI service is bound to localhost only (`127.0.0.1:3002:3002`) for security. This means:
 
@@ -728,20 +841,37 @@ All services support hot reload in development mode:
 - ❌ **NOT** accessible from external networks (security)
 - ✅ Accessible from other Docker containers using service name: `http://ai:3002`
 
-7. Test AI processing:
-   ```bash
-   curl -X POST http://localhost:3002/api/ai/process \
-     -H "Content-Type: application/json" \
-     -d '{"message": "Hello, how are you?"}'
-   ```
+12. Test AI processing:
+    ```bash
+    curl -X POST http://localhost:3002/api/ai/process \
+      -H "Content-Type: application/json" \
+      -d '{"message": "Hello, how are you?"}'
+    ```
 
 **Development Features**:
 
 - Hot reload support
-- Multi-provider AI model integration (Ollama, OpenAI, Anthropic, etc.)
+- **LangChain integration** for unified AI processing
+- Multi-provider AI model integration (Ollama, OpenAI, Anthropic, Google)
+- **Conversation memory management** (BufferMemory, ConversationSummaryMemory)
+- **RAG (Retrieval Augmented Generation)** with vector stores
+- **Prompt engineering** with template system
+- **Flexible task system** (simple, RAG, custom chains)
+- **LangSmith observability** for debugging and monitoring
 - Automatic provider switching and fallback
 - Message queue consumer for AI processing requests
 - gRPC server for high-performance Viber Service integration
+
+**LangChain Features**:
+
+The AI Service uses LangChain for:
+
+- **Unified Provider Interface**: Consistent interface across all AI providers
+- **Chain Execution**: Simple, RAG, and custom chain types
+- **Memory Management**: Automatic conversation history management
+- **Vector Store Integration**: MongoDB Atlas Vector Search for RAG
+- **Prompt Templates**: Dynamic prompt generation with variable substitution
+- **Observability**: LangSmith integration for tracing and debugging
 
 **AI Provider Switching**:
 
@@ -751,6 +881,13 @@ The AI Service supports dynamic provider switching. You can:
 - Use external APIs for production or specific use cases
 - Configure fallback providers for reliability
 - Switch providers via environment variables without code changes
+
+**Local Development Requirements**:
+
+- Node.js 20+
+- MongoDB instance (for conversation history and optional vector store)
+- (Optional) Ollama instance for self-hosted AI models
+- (Optional) LangSmith account for observability
 
 ### Analytics Service Setup
 

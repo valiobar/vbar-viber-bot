@@ -12,13 +12,15 @@ export class MessageRequest {
     name: string;
     avatar?: string;
   };
+  public readonly taskType?: string;
 
   constructor(
     messageContent: string,
     messageType: string,
     userId: string,
     stepId: string,
-    userProfile?: { id: string; name: string; avatar?: string }
+    userProfile?: { id: string; name: string; avatar?: string },
+    taskType?: string
   ) {
     // Validate required fields
     if (!messageContent || messageContent.trim().length === 0) {
@@ -39,6 +41,6 @@ export class MessageRequest {
     this.userId = userId.trim();
     this.stepId = stepId.trim();
     this.userProfile = userProfile;
+    this.taskType = taskType;
   }
 }
-

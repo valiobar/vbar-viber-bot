@@ -69,6 +69,7 @@ export interface AIConfig {
   google?: GoogleConfig;
   rag: RAGConfig;
   promptTemplates: PromptTemplateConfig;
+  bulgarianCulturePromptTemplate?: string; // Optional Bulgarian culture prompt template name
 }
 
 /**
@@ -82,7 +83,7 @@ export interface AIConfig {
  */
 export function getAIConfig(): AIConfig {
   // Get provider
-  const providerStr = ConfigHelper.getEnv("AI_MODEL_PROVIDER", "openai");
+  const providerStr = ConfigHelper.getEnv("AI_MODEL_PROVIDER", "ollama");
   const provider = parseAIProvider(providerStr);
 
   // Get general AI settings
@@ -131,7 +132,7 @@ export function getAIConfig(): AIConfig {
   if (provider === AIProvider.OLLAMA) {
     ollama = {
       baseUrl: ConfigHelper.getEnv("OLLAMA_BASE_URL", "http://localhost:11434"),
-      model: ConfigHelper.getEnv("OLLAMA_MODEL", "llama2"),
+      model: ConfigHelper.getEnv("OLLAMA_MODEL", "qwen3:4b"),
     };
   }
 
@@ -242,6 +243,12 @@ export function getAIConfig(): AIConfig {
     default: ConfigHelper.getEnv("PROMPT_TEMPLATE_DEFAULT") || undefined,
   };
 
+  // Bulgarian culture prompt template configuration
+  const bulgarianCulturePromptTemplate = ConfigHelper.getEnv(
+    "BULGARIAN_CULTURE_PROMPT_TEMPLATE",
+    "bulgarian_culture_system"
+  );
+
   return {
     provider,
     temperature,
@@ -254,5 +261,6 @@ export function getAIConfig(): AIConfig {
     google,
     rag: ragConfig,
     promptTemplates: promptTemplateConfig,
+    bulgarianCulturePromptTemplate,
   };
 }

@@ -13,6 +13,7 @@ import { getConnection, closeMessageQueue } from "./config/messageQueue";
 import { initializeLangSmith } from "./config/langsmith";
 import routes from "./adapters/in/routes";
 import { createGrpcServer } from "./adapters/in/grpc/server";
+import { initBulgarianCulturePrompt } from "./scripts/initBulgarianCulturePrompt";
 
 // Load environment variables
 dotenv.config();
@@ -91,6 +92,16 @@ async function initialize(): Promise<void> {
     console.log("Connecting to MongoDB...");
     await getDatabase();
     console.log("MongoDB connected");
+
+    // Initialize Bulgarian culture prompt template
+    try {
+      await initBulgarianCulturePrompt();
+    } catch (error) {
+      console.warn(
+        "Failed to initialize Bulgarian culture prompt template, continuing anyway:",
+        error instanceof Error ? error.message : String(error)
+      );
+    }
 
     // Initialize RabbitMQ connection
     console.log("Connecting to RabbitMQ...");
@@ -185,4 +196,3 @@ process.on("uncaughtException", (error) => {
 
 // Initialize service
 initialize();
-

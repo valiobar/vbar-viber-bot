@@ -1780,6 +1780,8 @@ Admin Service ← REST API (GET /api/analytics/...) ← Analytics Service
 
 The Viber Service and AI Service communicate using **gRPC** for high-performance, low-latency message processing. gRPC provides efficient binary serialization and HTTP/2 multiplexing, making it ideal for real-time AI processing requests.
 
+**Note**: The AI Service uses **LangChain** for all AI processing operations. All gRPC requests are processed through LangChain chains (simple, RAG, or custom) based on configuration. LangSmith tracing is automatically enabled when configured via environment variables.
+
 ### gRPC Configuration
 
 **AI Service gRPC Endpoint**:
@@ -1788,6 +1790,13 @@ The Viber Service and AI Service communicate using **gRPC** for high-performance
 - **Production**: Configured via environment variables
 
 **Protocol**: Protocol Buffers (protobuf) over HTTP/2
+
+**LangChain Integration**:
+
+- All AI processing uses LangChain framework
+- Conversation memory is automatically managed (BufferMemory or ConversationSummaryMemory)
+- Token usage tracking is available when provided by the AI provider
+- Processing time is tracked and included in responses
 
 ### gRPC Service Definition
 

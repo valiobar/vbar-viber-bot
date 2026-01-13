@@ -9,6 +9,7 @@
 
 import { Logger } from "@vbar/shared";
 import { IAiServiceClient } from "../../ports/out/IAiServiceClient";
+import { Bot, Message } from "viber-bot";
 
 export class ViberAiService {
   constructor(
@@ -23,14 +24,18 @@ export class ViberAiService {
    * @param messageType - Type of message (text, picture, video, file, location, contact, sticker, url)
    * @param userId - Viber user ID
    * @param stepId - Current step ID
-   * @param userProfile - User profile (optional, for future use)
+   * @param bot - Viber Bot instance for sending messages
+   * @param userProfile - User profile for sending messages
+   * @param taskType - Task type: "simple", "rag", or "custom" (optional)
    */
   async handleMessage(
     messageContent: string,
     messageType: string,
     userId: string,
     stepId: string,
-    userProfile?: any
+    bot: Bot,
+    userProfile: any,
+    taskType?: string
   ): Promise<void> {
     try {
       // Call AI service via gRPC client
@@ -46,10 +51,31 @@ export class ViberAiService {
               avatar: userProfile.avatar,
             }
           : undefined,
+        taskType,
       });
 
       // Log the response
-      console.log("ViberAiService - AI response received:", response);
+      this.logger.info("ViberAiService - AI response received", {
+        userId,
+        stepId,
+        responseLength: response.response?.length || 0,
+      });
+
+      // Send AI response back to user
+      if (response && response.response) {
+        const textMessage = new Message.Text(response.response);
+        await bot.sendMessage(userProfile, [textMessage]);
+
+        this.logger.info("ViberAiService - AI response sent to user", {
+          userId,
+          stepId,
+        });
+      } else {
+        this.logger.warn("ViberAiService - Empty AI response, not sending", {
+          userId,
+          stepId,
+        });
+      }
     } catch (error) {
       this.logger.error("Failed to process message via AI service", {
         error: error instanceof Error ? error.message : String(error),
