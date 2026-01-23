@@ -12,7 +12,7 @@
 
 ## System Architecture Overview
 
-The vbar-viber-bot project follows a **microservices architecture** pattern, consisting of four independent services that communicate through REST APIs and message queues. Each service is designed using the **Hexagonal Architecture (Ports and Adapters)** pattern to ensure separation of concerns, testability, and independence from external frameworks.
+The vbar-viber-bot project follows a **microservices architecture** pattern, consisting of five independent services that communicate through REST APIs, gRPC, and message queues. Each service is designed using the **Hexagonal Architecture (Ports and Adapters)** pattern to ensure separation of concerns, testability, and independence from external frameworks.
 
 ### Architecture Principles
 
@@ -30,38 +30,56 @@ The vbar-viber-bot project follows a **microservices architecture** pattern, con
                     │    (Next.js)    │
                     └────────┬────────┘
                              │
-                ┌────────────┼────────────┐
-                │            │            │
-            REST│        REST│        REST│
-                │            │            │
-        ┌───────▼───┐  ┌─────▼────┐  ┌───▼────────┐
-        │   Viber   │  │    AI    │  │  Analytics │
-        │  Service  │  │ Service  │  │  Service   │
-        │ (Express) │  │(Express) │  │ (Express)  │
-        └─────┬─────┘  └─────┬────┘  └─────┬──────┘
-              │              │             │
-              │              │             │
-         gRPC │              │             │
-              │              │             │
-              └──────┬───────┘             │
-                     │                     │
-             RabbitMQ│(async)              │
-                     │                     │
-              ┌──────▼──────┐              │
-              │  RabbitMQ   │              │
-              │(analytics.  │              │
-              │  events)    │              │
-              └─────────────┘              │
-                                           │
-        ┌──────────┐  ┌──────────┐  ┌──────▼─────┐  ┌──────────┐
-        │ MongoDB  │  │ MongoDB  │  │  MongoDB   │  │ MongoDB  │
-        │  (bot)   │  │   (ai)   │  │(analytics) │  │ (admin)  │
-        └──────────┘  └──────────┘  └────────────┘  └──────────┘
+                ┌────────────┼────────────┬────────────┐
+                │            │            │            │
+            REST│        REST│        REST│        REST│
+                │            │            │            │
+        ┌───────▼───┐  ┌─────▼────┐  ┌───▼────────┐  ┌───▼────────┐
+        │   Viber   │  │    AI    │  │  Analytics │  │   Web3    │
+        │  Service  │  │ Service  │  │  Service   │  │  Service  │
+        │ (Express) │  │(Express) │  │ (Express)  │  │ (Express) │
+        └─────┬─────┘  └─────┬────┘  └─────┬──────┘  └─────┬─────┘
+              │              │             │               │
+              │              │             │               │
+         gRPC │          gRPC│             │               │
+              │              │             │               │
+              └──────┬───────┘             │               │
+                     │ gRPC                │               │
+                     │                     │               │
+                     └──────────┬──────────┘               │
+                                │ gRPC                      │
+                                │                           │
+                                │                           │
+                     ┌──────────▼──────────┐               │
+                     │   Web3 Service      │               │
+                     │   (gRPC + REST)      │               │
+                     └──────────┬───────────┘               │
+                                │                           │
+                     ┌──────────┼───────────┐               │
+                     │          │           │               │
+             RabbitMQ│(async)   │           │               │
+                     │          │           │               │
+              ┌──────▼──────┐   │           │               │
+              │  RabbitMQ   │   │           │               │
+              │(analytics.  │   │           │               │
+              │  events)    │   │           │               │
+              └─────────────┘   │           │               │
+                                │           │               │
+        ┌──────────┐  ┌──────────┐  ┌──────▼─────┐  ┌──────▼─────┐  ┌──────────┐
+        │ MongoDB  │  │ MongoDB  │  │  MongoDB   │  │ MongoDB  │  │ MongoDB  │
+        │  (bot)   │  │   (ai)   │  │(analytics) │  │ (admin)  │  │  (web3)  │
+        └──────────┘  └──────────┘  └────────────┘  └──────────┘  └──────────┘
+                                                                         │
+                                                              ┌──────────▼──────────┐
+                                                              │  Blockchain Networks │
+                                                              │ (Ethereum, Polygon,  │
+                                                              │  BSC, Arbitrum)     │
+                                                              └─────────────────────┘
 
 Communication Protocols:
-━━━━━━ REST API (Admin ↔ Viber, Admin ↔ AI, Admin ↔ Analytics)
-══════ gRPC (Viber ↔ AI)
-────── RabbitMQ (Viber → Analytics, asynchronous)
+━━━━━━ REST API (Admin ↔ Viber, Admin ↔ AI, Admin ↔ Analytics, Admin ↔ Web3)
+══════ gRPC (Viber ↔ AI, Viber ↔ Web3, AI ↔ Web3)
+────── RabbitMQ (Viber → Analytics, Web3 → Analytics, asynchronous)
 ```
 
 ## Service Descriptions
@@ -339,6 +357,78 @@ The AI Service follows Hexagonal Architecture with the following layer organizat
 - MongoDB repositories for data storage
 - Message queue consumers for event processing
 
+### Web3 Service
+
+**Technology Stack**: Node.js, Express.js, TypeScript, MongoDB, Mongoose, ethers.js v6
+
+**Purpose and Responsibilities**:
+
+- Blockchain wallet management (create, import, balance queries)
+- Transaction tracking and monitoring (send, track, history)
+- Token operations (ERC-20 token balance, transfers)
+- NFT operations (ERC-721/ERC-1155 NFT queries and transfers)
+- Smart contract interactions (read contract state, execute contract functions)
+- Multi-chain support (Ethereum, Polygon, BSC, Arbitrum)
+- Blockchain provider management with RPC endpoint fallback
+
+**Database**: `web3` MongoDB database
+
+**Database Schema Overview**:
+
+- **Wallets**: User wallet addresses, encrypted private keys, network associations
+- **Transactions**: Transaction history, status tracking, confirmations
+- **Contracts**: Stored contract ABIs and metadata for smart contract interactions
+
+**Hexagonal Architecture Structure**:
+
+- Express routes as input adapters (REST API for Admin Service - exposes all Web3 functionality)
+- gRPC server as input adapter (for Viber Service and AI Service - high-performance operations)
+- Domain layer contains blockchain business logic (wallet, transaction, token, contract domains)
+- Application layer handles use cases (wallet management, transaction operations, token operations, contract interactions)
+- MongoDB repositories for data persistence (wallets, transactions, contracts)
+- Blockchain provider adapters (ethers.js v6) for multi-chain interactions
+- Message queue publishers for async analytics events
+
+**API Architecture**:
+
+The Web3 Service exposes functionality through two APIs:
+
+- **REST API** (port 3004): Full Web3 functionality accessible to Admin Service
+  - All wallet operations (create, list, get balance, delete)
+  - All transaction operations (send, track, history)
+  - All token operations (balance, transfer, info, NFTs)
+  - All smart contract operations (read, write, ABI management)
+  - Service-to-service authentication via `X-Service-Token` header
+
+- **gRPC API** (port 50052): High-performance operations for Viber and AI services
+  - Same functionality as REST API, optimized for low-latency operations
+  - Binary Protocol Buffers serialization
+  - Used by Viber Service and AI Service for blockchain operations
+
+**Multi-Chain Support**:
+
+The Web3 Service supports multiple blockchain networks through a unified interface:
+
+- **Ethereum**: Mainnet and testnets
+- **Polygon**: Polygon network
+- **Binance Smart Chain (BSC)**: BSC network
+- **Arbitrum**: Arbitrum network
+
+**Blockchain Provider Architecture**:
+
+- Factory pattern for network provider creation
+- RPC endpoint fallback mechanism for reliability
+- Network-agnostic interface for consistent operations across chains
+- Gas price estimation and transaction signing
+- Encrypted private key storage for secure wallet management
+
+**Security Architecture**:
+
+- Private keys encrypted at rest using environment-configured encryption keys
+- Never log sensitive data (private keys, transaction details)
+- Service-to-service authentication for REST API endpoints
+- Secure key management and storage practices
+
 ## Database Schemas
 
 ### Admin Database Schema
@@ -507,7 +597,7 @@ interface Event {
   _id: ObjectId;
   type: string;
   userId: string;
-  service: "admin" | "viber" | "ai" | "analytics";
+  service: "admin" | "viber" | "ai" | "analytics" | "web3";
   properties: Record<string, any>;
   timestamp: Date;
 }
@@ -538,6 +628,64 @@ interface Report {
 }
 ```
 
+### Web3 Database Schema
+
+```typescript
+// Wallet Collection
+interface Wallet {
+  _id: ObjectId;
+  viberUserId: string; // Link to Viber user
+  address: string; // Blockchain address (EIP-55 checksummed)
+  network: "ethereum" | "polygon" | "bsc" | "arbitrum";
+  encryptedPrivateKey: string; // Encrypted private key (never stored in plain text)
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Transaction Collection
+interface Transaction {
+  _id: ObjectId;
+  walletId: ObjectId; // Reference to Wallet
+  txHash: string; // Transaction hash (unique per network)
+  network: "ethereum" | "polygon" | "bsc" | "arbitrum";
+  from: string; // Sender address
+  to: string; // Recipient address
+  value: string; // Amount in wei (native token) or token amount
+  tokenAddress?: string; // ERC-20 token address (if token transfer)
+  status: "pending" | "confirmed" | "failed";
+  confirmations: number; // Number of block confirmations
+  blockNumber?: number; // Block number when confirmed
+  gasUsed?: string; // Gas used (in wei)
+  gasPrice?: string; // Gas price (in wei)
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Contract Collection
+interface Contract {
+  _id: ObjectId;
+  address: string; // Contract address (EIP-55 checksummed)
+  network: "ethereum" | "polygon" | "bsc" | "arbitrum";
+  abi: any; // Contract ABI JSON (Application Binary Interface)
+  name?: string; // Human-readable contract name
+  createdAt: Date;
+  updatedAt: Date;
+}
+```
+
+**Schema Relationships**:
+
+- **Wallet → Transaction**: One-to-many relationship (one wallet can have many transactions)
+- **Wallet → viberUserId**: Links wallet to Viber user for user-specific wallet management
+- **Transaction → Wallet**: Many-to-one relationship (transactions reference their originating wallet)
+- **Contract**: Standalone collection for storing contract ABIs and metadata
+
+**Security Considerations**:
+
+- Private keys are **never** stored in plain text - always encrypted using `WEB3_ENCRYPTION_KEY`
+- Addresses are stored in EIP-55 checksummed format for validation
+- Transaction hashes are unique per network (same hash can exist on different networks)
+
 ### Database Relationships
 
 - **No Direct Foreign Keys**: Services maintain loose coupling through identifiers
@@ -553,6 +701,7 @@ Services communicate synchronously through REST APIs for most direct service-to-
 - **Admin Service → Viber Service**: Configuration updates, bot control commands
 - **Admin Service → AI Service**: Model configuration, training triggers
 - **Admin Service → Analytics Service**: Report generation, dashboard data, analytics queries
+- **Admin Service → Web3 Service**: All Web3 operations via REST API (wallet management, transaction operations, token operations, NFT operations, smart contract interactions, monitoring and dashboard data)
 
 **Communication Flow**:
 
@@ -562,15 +711,17 @@ Client → Service A → REST API → Service B → Response → Service A → C
 
 ### gRPC Communication (Synchronous, High-Performance)
 
-The Viber Service and AI Service communicate using **gRPC** for high-performance, low-latency message processing:
+Services communicate using **gRPC** for high-performance, low-latency operations:
 
 - **Viber Service → AI Service**: Message processing requests, intent detection (via gRPC)
+- **Viber Service → Web3 Service**: Blockchain operations (wallet creation, balance queries, transaction sending)
+- **AI Service → Web3 Service**: AI agent tool calls for blockchain operations
 
-**Why gRPC for Viber ↔ AI**:
+**Why gRPC for High-Performance Operations**:
 
 - Binary serialization (Protocol Buffers) is faster than JSON
 - HTTP/2 multiplexing reduces connection overhead
-- Lower latency for real-time message processing
+- Lower latency for real-time operations
 - Type-safe contracts with Protocol Buffers
 - Supports streaming for advanced use cases
 
@@ -578,18 +729,22 @@ The Viber Service and AI Service communicate using **gRPC** for high-performance
 
 ```
 Viber Service → gRPC Call → AI Service → gRPC Response → Viber Service
+Viber Service → gRPC Call → Web3 Service → gRPC Response → Viber Service
+AI Service → gRPC Call → Web3 Service → gRPC Response → AI Service
 ```
 
-**gRPC Endpoint**: `localhost:50051` (development)
+**gRPC Endpoints**:
+- AI Service: `localhost:50051` (development)
+- Web3 Service: `localhost:50052` (development)
 
 ### Message Queue Communication (Asynchronous)
 
-RabbitMQ is used **exclusively** for asynchronous communication from the Viber Service to the Analytics Service. This allows the Viber Service to send analytics events without blocking, and the Analytics Service to process them asynchronously.
+RabbitMQ is used for asynchronous communication between services. This allows services to send analytics events without blocking, and the Analytics Service to process them asynchronously.
 
 **Queue Configuration**:
 
 - **Queue Name**: `analytics.events`
-- **Publisher**: Viber Service
+- **Publishers**: Viber Service, Web3 Service
 - **Consumer**: Analytics Service
 
 **Routing Keys**:
@@ -599,11 +754,16 @@ RabbitMQ is used **exclusively** for asynchronous communication from the Viber S
 - `analytics.message.sent` - Message sent event
 - `analytics.user.action` - User action event
 - `analytics.bot.interaction` - Bot interaction event
+- `web3.transaction.sent` - Transaction sent event (from Web3 Service)
+- `web3.transaction.confirmed` - Transaction confirmed event (from Web3 Service)
+- `web3.wallet.created` - Wallet created event (from Web3 Service)
+- `web3.token.transferred` - Token transfer event (from Web3 Service)
 
 **Communication Flow**:
 
 ```
 Viber Service → Publisher → RabbitMQ (analytics.events) → Consumer → Analytics Service
+Web3 Service → Publisher → RabbitMQ (analytics.events) → Consumer → Analytics Service
                                                                           ↓
                                                                     Store in MongoDB
                                                                           ↓
@@ -619,8 +779,12 @@ Admin Service ← REST API ← Analytics Service (reads from MongoDB)
 | Admin        | Viber      | REST API             | Configuration, bot control                              |
 | Admin        | AI         | REST API             | Model configuration, training                           |
 | Admin        | Analytics  | REST API             | Dashboard data, reports, queries                        |
+| Admin        | Web3       | REST API             | All Web3 operations (wallet management, transactions, tokens, NFTs, contracts, monitoring) |
 | Viber        | AI         | gRPC                 | Message processing, intent detection (high-performance) |
+| Viber        | Web3       | gRPC                 | Blockchain operations (wallet, transactions, tokens)    |
 | Viber        | Analytics  | RabbitMQ             | Asynchronous analytics events                           |
+| AI           | Web3       | gRPC                 | AI agent tool calls for blockchain operations          |
+| Web3         | Analytics  | RabbitMQ             | Asynchronous transaction and wallet events              |
 
 ## Hexagonal Architecture Details
 
@@ -882,12 +1046,13 @@ Each service has its own MongoDB database instance:
 - **Bot MongoDB**: Stores viber service data
 - **AI MongoDB**: Stores AI service data
 - **Analytics MongoDB**: Stores analytics service data
+- **Web3 MongoDB**: Stores web3 service data (wallets, transactions, contracts)
 
 **Configuration**:
 
 - Each service connects to its own database using **Mongoose ODM**
 - Connection strings configured via environment variables
-- Database names: `admin`, `bot`, `ai`, `analytics`
+- Database names: `admin`, `bot`, `ai`, `analytics`, `web3`
 - **Connection Pattern**: Singleton pattern with connection caching to reuse connections across requests
 - **Connection Management**: Services use `connectToDatabase()` function that implements connection pooling and reuse
 
@@ -907,6 +1072,44 @@ Each service has its own MongoDB database instance:
 - Durable queues for reliability
 - Message acknowledgments for guaranteed delivery
 - Dead letter queues for failed messages
+
+### Blockchain Network Providers (RPC Endpoints)
+
+**Purpose**: External blockchain network access for Web3 Service operations
+
+**Configuration**:
+
+- Multiple RPC endpoints per network for redundancy and fallback
+- Network-specific configurations (Ethereum, Polygon, BSC, Arbitrum)
+- Environment variable configuration for each network's RPC endpoint
+- Support for public RPC endpoints and private node endpoints
+
+**Supported Networks**:
+
+- **Ethereum**: Mainnet and testnets (Sepolia, Goerli)
+- **Polygon**: Polygon network
+- **Binance Smart Chain (BSC)**: BSC network
+- **Arbitrum**: Arbitrum network
+
+**Integration**:
+
+- Web3 Service connects to blockchain networks via RPC endpoints
+- Factory pattern for network provider creation
+- Automatic fallback to secondary RPC endpoints on failure
+- Rate limiting and connection pooling for reliability
+
+**Benefits**:
+
+- **Multi-Chain Support**: Unified interface for multiple blockchain networks
+- **Reliability**: RPC endpoint fallback mechanism ensures service availability
+- **Flexibility**: Easy addition of new blockchain networks
+- **Performance**: Connection pooling and caching for efficient operations
+
+**Deployment Options**:
+
+- Public RPC endpoints (Infura, Alchemy, QuickNode, etc.)
+- Private blockchain nodes
+- Hybrid approach (primary private, fallback public)
 
 ### Ollama (Self-Hosted AI Models)
 
@@ -955,6 +1158,7 @@ Each service has its own MongoDB database instance:
 - Viber service (Node.js)
 - AI service (Node.js)
 - Analytics service (Node.js)
+- Web3 service (Node.js)
 - MongoDB instances (one per service)
 - RabbitMQ
 - Ollama (self-hosted AI models)
@@ -980,6 +1184,8 @@ Each service has its own MongoDB database instance:
 ## Diagrams
 
 For visual representations of the architecture, see:
+
+**Note**: The architecture diagrams (architecture.mmd, data-flow.mmd, deployment.mmd) will be updated in Step 2 to include the Web3 service. The diagrams below show the current state and will be enhanced with Web3 service integration.
 
 ### Architecture Diagram
 

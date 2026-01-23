@@ -12,12 +12,17 @@ graph TB
     ViberService[Viber Service<br/>Express]
     AIService[AI Service<br/>Express]
     AnalyticsService[Analytics Service<br/>Express]
+    Web3Service[Web3 Service<br/>Express]
     
     %% Databases
     AdminDB[(MongoDB<br/>admin)]
     BotDB[(MongoDB<br/>bot)]
     AIDB[(MongoDB<br/>ai)]
     AnalyticsDB[(MongoDB<br/>analytics)]
+    Web3DB[(MongoDB<br/>web3)]
+    
+    %% Blockchain Networks
+    BlockchainNetworks[Blockchain Networks<br/>Ethereum, Polygon, BSC, Arbitrum]
     
     %% Message Queue
     RabbitMQ[RabbitMQ<br/>Message Queue]
@@ -76,16 +81,75 @@ graph TB
     AnalyticsService -->|39. REST API Response| AdminService
     AdminService -->|40. Display report| AdminUser
     
+    %% Flow 8: Wallet Creation Flow
+    User -->|41. Request wallet creation<br/>Viber Message| ViberAPI
+    ViberAPI -->|42. Webhook POST| ViberService
+    ViberService -->|43. gRPC Request<br/>CreateWallet| Web3Service
+    Web3Service -->|44. Generate wallet<br/>RPC API| BlockchainNetworks
+    BlockchainNetworks -->|45. Wallet address| Web3Service
+    Web3Service -->|46. Encrypt & save wallet<br/>Write| Web3DB
+    Web3Service -->|47. gRPC Response<br/>Wallet Info| ViberService
+    ViberService -->|48. Send wallet address<br/>HTTP| ViberAPI
+    ViberAPI -->|49. Deliver message| User
+    Web3Service -->|50. Publish wallet.created event<br/>Async| RabbitMQ
+    
+    %% Flow 9: Transaction Processing Flow
+    User -->|51. Request transaction<br/>Viber Message| ViberAPI
+    ViberAPI -->|52. Webhook POST| ViberService
+    ViberService -->|53. gRPC Request<br/>SendTransaction| Web3Service
+    Web3Service -->|54. Read wallet<br/>Read| Web3DB
+    Web3Service -->|55. Sign & send transaction<br/>RPC API| BlockchainNetworks
+    BlockchainNetworks -->|56. Transaction hash| Web3Service
+    Web3Service -->|57. Save transaction<br/>Write| Web3DB
+    Web3Service -->|58. Publish transaction.sent event<br/>Async| RabbitMQ
+    Web3Service -->|59. gRPC Response<br/>Transaction Hash| ViberService
+    ViberService -->|60. Send confirmation<br/>HTTP| ViberAPI
+    ViberAPI -->|61. Deliver message| User
+    Web3Service -->|62. Track transaction status<br/>RPC API| BlockchainNetworks
+    BlockchainNetworks -->|63. Transaction confirmed| Web3Service
+    Web3Service -->|64. Update transaction status<br/>Write| Web3DB
+    Web3Service -->|65. Publish transaction.confirmed event<br/>Async| RabbitMQ
+    
+    %% Flow 10: Token Transfer Flow
+    User -->|66. Request token transfer<br/>Viber Message| ViberAPI
+    ViberAPI -->|67. Webhook POST| ViberService
+    ViberService -->|68. gRPC Request<br/>TransferToken| Web3Service
+    Web3Service -->|69. Read wallet & contract<br/>Read| Web3DB
+    Web3Service -->|70. Execute token transfer<br/>RPC API| BlockchainNetworks
+    BlockchainNetworks -->|71. Transaction hash| Web3Service
+    Web3Service -->|72. Save transaction<br/>Write| Web3DB
+    Web3Service -->|73. Publish token.transferred event<br/>Async| RabbitMQ
+    Web3Service -->|74. gRPC Response<br/>Transaction Hash| ViberService
+    ViberService -->|75. Send confirmation<br/>HTTP| ViberAPI
+    ViberAPI -->|76. Deliver message| User
+    
+    %% Flow 11: Contract Interaction Flow
+    AdminUser -->|77. Interact with contract<br/>HTTP| AdminService
+    AdminService -->|78. REST API Request<br/>ReadContract/WriteContract| Web3Service
+    Web3Service -->|79. Read contract ABI<br/>Read| Web3DB
+    Web3Service -->|80. Execute contract call<br/>RPC API| BlockchainNetworks
+    BlockchainNetworks -->|81. Contract result| Web3Service
+    Web3Service -->|82. Save transaction if write<br/>Write| Web3DB
+    Web3Service -->|83. REST API Response| AdminService
+    AdminService -->|84. Display result| AdminUser
+    
+    %% Flow 12: Analytics Event Processing from Web3
+    RabbitMQ -->|85. Consume web3 events<br/>Async| AnalyticsService
+    AnalyticsService -->|86. Process & aggregate<br/>Write| AnalyticsDB
+    AnalyticsService -->|87. Update metrics<br/>Write| AnalyticsDB
+    
     %% Styling
     classDef userBox fill:#AA96DA,stroke:#333,stroke-width:2px,color:#000
     classDef serviceBox fill:#4ECDC4,stroke:#333,stroke-width:3px,color:#000
     classDef dbBox fill:#95E1D3,stroke:#333,stroke-width:2px,color:#000
     classDef mqBox fill:#F38181,stroke:#333,stroke-width:2px,color:#000
     classDef externalBox fill:#FFD93D,stroke:#333,stroke-width:2px,color:#000
+    classDef blockchainBox fill:#C7CEEA,stroke:#333,stroke-width:2px,color:#000
     
     class User,AdminUser userBox
-    class AdminService,ViberService,AIService,AnalyticsService serviceBox
-    class AdminDB,BotDB,AIDB,AnalyticsDB dbBox
+    class AdminService,ViberService,AIService,AnalyticsService,Web3Service serviceBox
+    class AdminDB,BotDB,AIDB,AnalyticsDB,Web3DB dbBox
     class RabbitMQ mqBox
     class ViberAPI,ExternalAI,Ollama externalBox
+    class BlockchainNetworks blockchainBox
 

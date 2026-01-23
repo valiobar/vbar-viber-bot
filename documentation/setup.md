@@ -75,7 +75,7 @@ npm install
 This will install dependencies for:
 
 - Root workspace
-- All services (`services/admin`, `services/viber`, `services/ai`, `services/analytics`)
+- All services (`services/admin`, `services/viber`, `services/ai`, `services/analytics`, `services/web3`)
 - Shared package (`packages/shared`)
 
 ### Environment Variables Configuration
@@ -97,6 +97,9 @@ cp services/ai/.env.example services/ai/.env
 
 # Analytics service
 cp services/analytics/.env.example services/analytics/.env
+
+# Web3 service
+cp services/web3/.env.example services/web3/.env
 ```
 
 #### Environment Variables Overview
@@ -207,6 +210,53 @@ RABBITMQ_URL=amqp://localhost:5672
 RABBITMQ_EXCHANGE=analytics_events
 ```
 
+**Web3 Service** (`.env` in `services/web3/`):
+
+```env
+# Server
+PORT=3004
+NODE_ENV=development
+
+# Database
+# Format: mongodb://username:password@host:port/database
+MONGODB_URI=mongodb://web3:web3123@localhost:27021/web3
+MONGODB_DB_NAME=web3
+
+# Message Queue
+RABBITMQ_URL=amqp://localhost:5672
+RABBITMQ_EXCHANGE=web3_events
+
+# Blockchain RPC Endpoints
+# Ethereum Mainnet
+WEB3_RPC_ETHEREUM=https://eth-mainnet.g.alchemy.com/v2/your-api-key
+# Or use public endpoint: https://eth.llamarpc.com
+
+# Polygon Mainnet
+WEB3_RPC_POLYGON=https://polygon-mainnet.g.alchemy.com/v2/your-api-key
+# Or use public endpoint: https://polygon.llamarpc.com
+
+# Binance Smart Chain (BSC)
+WEB3_RPC_BSC=https://bsc-dataseed1.binance.org
+# Or use: https://bsc-dataseed2.binance.org
+
+# Arbitrum One
+WEB3_RPC_ARBITRUM=https://arb-mainnet.g.alchemy.com/v2/your-api-key
+# Or use public endpoint: https://arb1.arbitrum.io/rpc
+
+# Security Configuration
+# Encryption key for encrypting private keys (required, minimum 32 characters)
+WEB3_ENCRYPTION_KEY=your-encryption-key-here-minimum-32-characters-long
+
+# gRPC Configuration
+WEB3_GRPC_PORT=50052
+
+# Other services
+ADMIN_SERVICE_URL=http://localhost:3000
+VIBER_SERVICE_URL=http://localhost:3001
+AI_SERVICE_URL=http://localhost:3002
+ANALYTICS_SERVICE_URL=http://localhost:3003
+```
+
 **Important**: Update all placeholder values with your actual configuration values.
 
 ## Local Development Setup
@@ -226,11 +276,12 @@ docker compose -f infrastructure/docker-compose.infrastructure.yml up -d
 
 This starts:
 
-- MongoDB instances (one per service) on ports 27017-27020 with authentication enabled
+- MongoDB instances (one per service) on ports 27017-27021 with authentication enabled
   - Admin DB: `mongodb://admin:admin123@localhost:27017/admin`
   - Bot DB: `mongodb://bot:bot123@localhost:27018/bot`
   - AI DB: `mongodb://ai:ai123@localhost:27019/ai`
   - Analytics DB: `mongodb://analytics:analytics123@localhost:27020/analytics`
+  - Web3 DB: `mongodb://web3:web3123@localhost:27021/web3`
 - RabbitMQ on port 5672 (management UI on port 15672)
   - Default credentials: `admin/admin`
 
@@ -240,6 +291,7 @@ This starts:
 - `MONGO_BOT_USER`, `MONGO_BOT_PASS`
 - `MONGO_AI_USER`, `MONGO_AI_PASS`
 - `MONGO_ANALYTICS_USER`, `MONGO_ANALYTICS_PASS`
+- `MONGO_WEB3_USER`, `MONGO_WEB3_PASS`
 
 **Important**: When starting MongoDB for the first time with authentication, the databases will be initialized with the root users. If you need to reset the databases (e.g., after changing credentials), you'll need to remove the volumes:
 
@@ -248,7 +300,7 @@ This starts:
 docker compose -f infrastructure/docker-compose.infrastructure.yml down
 
 # Remove volumes (WARNING: This deletes all data)
-docker volume rm vbar-mongodb-admin-data vbar-mongodb-bot-data vbar-mongodb-ai-data vbar-mongodb-analytics-data
+docker volume rm vbar-mongodb-admin-data vbar-mongodb-bot-data vbar-mongodb-ai-data vbar-mongodb-analytics-data vbar-mongodb-web3-data
 
 # Start again with new credentials
 docker compose -f infrastructure/docker-compose.infrastructure.yml up -d
@@ -294,6 +346,17 @@ npm run dev
 # for security - accessible from host machine but not from external networks
 ```
 
+**Terminal 5 - Web3 Service**:
+
+```bash
+cd services/web3
+npm run dev
+# Service runs on http://localhost:3004 (REST API)
+# gRPC server runs on localhost:50052
+# Note: In Docker Compose, REST API (3004) is publicly accessible for Admin Service
+# gRPC (50052) is internal only (localhost or Docker network)
+```
+
 #### Using Root Scripts
 
 Alternatively, you can use root-level scripts:
@@ -307,6 +370,7 @@ npm run admin:dev
 npm run viber:dev
 npm run ai:dev
 npm run analytics:dev
+npm run web3:dev
 ```
 
 ### Option 2: Running with Docker Compose
@@ -339,18 +403,22 @@ The Docker Compose configuration uses a security model that restricts internal s
 - **Localhost-Only Services** (internal services, not accessible from external networks):
   - **AI Service**: `http://localhost:3002` (localhost only - accessible from host machine)
   - **Analytics Service**: `http://localhost:3003` (localhost only - accessible from host machine)
+  - **Web3 Service**: `http://localhost:3004` (REST API - publicly accessible for Admin Service)
+  - **Web3 Service gRPC**: `localhost:50052` (internal only - localhost or Docker network)
 
 **Service Communication Patterns**:
 
 **When services run locally** (`pnpm dev`):
 
-- Services connect via `http://localhost:3001/3002/3003`
-- Works because ports are bound to localhost (AI, Analytics) or public (Admin, Viber)
+- Services connect via `http://localhost:3001/3002/3003/3004`
+- Works because ports are bound to localhost (AI, Analytics) or public (Admin, Viber, Web3 REST)
+- Web3 gRPC accessible on `localhost:50052`
 
 **When services run in Docker**:
 
-- Services communicate via Docker network hostnames: `http://viber:3001`, `http://ai:3002`, `http://analytics:3003`
-- External access: Admin and Viber accessible, AI and Analytics blocked
+- Services communicate via Docker network hostnames: `http://viber:3001`, `http://ai:3002`, `http://analytics:3003`, `http://web3:3004`
+- Web3 gRPC accessible via `web3:50052` within Docker network
+- External access: Admin, Viber, and Web3 REST (3004) accessible; AI and Analytics blocked
 - Services within Docker network can communicate using service names regardless of port binding
 
 **Why Localhost-Only Binding for Internal Services?**:
@@ -945,6 +1013,140 @@ The AI Service supports dynamic provider switching. You can:
 - Event aggregation
 - Message queue consumer for analytics events
 
+### Web3 Service Setup
+
+**Location**: `services/web3/`
+
+**Technology Stack**:
+
+- Node.js
+- Express.js
+- TypeScript
+- MongoDB
+- Mongoose (ODM)
+- ethers.js v6 (blockchain interaction)
+- gRPC (for Viber and AI service communication)
+
+**Prerequisites**:
+
+- Node.js 18.0.0 or higher
+- MongoDB instance (or use Docker Compose infrastructure)
+- Blockchain RPC endpoints (Ethereum, Polygon, BSC, Arbitrum)
+  - Public endpoints available (e.g., `https://eth.llamarpc.com`)
+  - Or use Alchemy, Infura, or other RPC providers for better reliability
+- Encryption key for private key encryption (minimum 32 characters)
+
+**Setup Steps**:
+
+1. Navigate to service directory:
+
+   ```bash
+   cd services/web3
+   ```
+
+2. Install dependencies:
+
+   ```bash
+   npm install
+   ```
+
+   This installs ethers.js v6 and all required dependencies for blockchain interaction.
+
+3. Configure environment variables:
+
+   ```bash
+   cp .env.example .env
+   # Edit .env with your configuration
+   ```
+
+4. **Configure Blockchain RPC Endpoints**:
+
+   **Option A: Using Public RPC Endpoints** (for development):
+
+   ```env
+   WEB3_RPC_ETHEREUM=https://eth.llamarpc.com
+   WEB3_RPC_POLYGON=https://polygon.llamarpc.com
+   WEB3_RPC_BSC=https://bsc-dataseed1.binance.org
+   WEB3_RPC_ARBITRUM=https://arb1.arbitrum.io/rpc
+   ```
+
+   **Option B: Using RPC Provider Services** (recommended for production):
+
+   ```env
+   # Alchemy (recommended)
+   WEB3_RPC_ETHEREUM=https://eth-mainnet.g.alchemy.com/v2/your-api-key
+   WEB3_RPC_POLYGON=https://polygon-mainnet.g.alchemy.com/v2/your-api-key
+   WEB3_RPC_ARBITRUM=https://arb-mainnet.g.alchemy.com/v2/your-api-key
+
+   # Infura
+   WEB3_RPC_ETHEREUM=https://mainnet.infura.io/v3/your-project-id
+   ```
+
+5. **Configure Encryption Key**:
+
+   ```env
+   # Generate a secure encryption key (minimum 32 characters)
+   # Use a strong random string for production
+   WEB3_ENCRYPTION_KEY=your-encryption-key-here-minimum-32-characters-long
+   ```
+
+   **Security Note**: The encryption key is used to encrypt private keys stored in the database. Use a strong, randomly generated key in production. Never commit this key to version control.
+
+6. **Configure gRPC Port** (optional, defaults to 50052):
+
+   ```env
+   WEB3_GRPC_PORT=50052
+   ```
+
+7. Start development server:
+
+   ```bash
+   npm run dev
+   ```
+
+8. Verify service is running:
+
+   ```bash
+   # REST API health check
+   curl http://localhost:3004/api/web3/health
+
+   # gRPC server runs on localhost:50052 (internal only)
+   ```
+
+**Note**: In Docker Compose configuration:
+- Web3 service REST API (3004) is publicly accessible for Admin Service integration
+- Web3 service gRPC (50052) is internal only (localhost or Docker network) for Viber and AI services
+
+**Development Features**:
+
+- Hot reload support
+- Multi-chain support (Ethereum, Polygon, BSC, Arbitrum)
+- Wallet management (create, import, balance checking)
+- Transaction processing and tracking
+- Token operations (ERC-20 balance, transfer)
+- NFT operations (query owned NFTs, transfer)
+- Smart contract interaction (read/write)
+- gRPC server for high-performance service-to-service communication
+- Message queue publisher for analytics events
+- Private key encryption for secure storage
+
+**Blockchain Network Support**:
+
+The Web3 service supports multiple blockchain networks:
+
+- **Ethereum Mainnet**: Primary network for Ethereum-based operations
+- **Polygon**: Layer 2 scaling solution for Ethereum
+- **Binance Smart Chain (BSC)**: EVM-compatible blockchain
+- **Arbitrum One**: Layer 2 scaling solution for Ethereum
+
+Each network requires its own RPC endpoint. The service automatically routes operations to the correct network based on wallet configuration.
+
+**RPC Endpoint Requirements**:
+
+- **Public Endpoints**: Free but may have rate limits and lower reliability
+- **Provider Services** (Alchemy, Infura): More reliable, higher rate limits, may require API keys
+- **Self-Hosted Nodes**: Maximum control and reliability, requires infrastructure setup
+
 ## Troubleshooting
 
 ### Common Issues and Solutions
@@ -1118,6 +1320,55 @@ taskkill /PID <PID> /F
 3. Check port availability
 4. Verify database and message queue connections
 5. Review service-specific README for additional requirements
+
+#### Web3 Service Specific Issues
+
+**Problem**: RPC endpoint connection issues
+
+**Solutions**:
+
+1. Verify RPC endpoints are accessible:
+
+   ```bash
+   # Test Ethereum RPC endpoint
+   curl -X POST https://eth.llamarpc.com \
+     -H "Content-Type: application/json" \
+     -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
+   ```
+
+2. Check RPC endpoint URLs in `.env` file (must include `https://` or `http://`)
+3. Verify API keys if using provider services (Alchemy, Infura)
+4. Check rate limits - public endpoints may have stricter limits
+5. Try alternative RPC endpoints if one is unavailable
+
+**Problem**: Blockchain network connectivity
+
+**Solutions**:
+
+1. Verify network name matches supported networks (ethereum, polygon, bsc, arbitrum)
+2. Check RPC endpoint corresponds to correct network
+3. Test network connectivity from service logs
+4. Verify network is not in maintenance mode
+
+**Problem**: Private key encryption issues
+
+**Solutions**:
+
+1. Verify `WEB3_ENCRYPTION_KEY` is set and at least 32 characters
+2. Check encryption key hasn't changed (changing key will make existing encrypted keys unreadable)
+3. Ensure encryption key is consistent across service restarts
+4. Review service logs for encryption/decryption errors
+
+**Problem**: Transaction failures
+
+**Solutions**:
+
+1. Verify wallet has sufficient balance for gas fees
+2. Check transaction parameters (to address, value, gas limit)
+3. Verify network is correct for the transaction
+4. Check RPC endpoint is responding correctly
+5. Review transaction hash in blockchain explorer
+6. Check service logs for detailed error messages
 
 ### Getting Help
 
