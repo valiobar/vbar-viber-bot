@@ -1,0 +1,338 @@
+syntax = "proto3";
+
+package web3;
+
+service Web3Service {
+  // Wallet operations
+  rpc CreateWallet(CreateWalletRequest) returns (CreateWalletResponse);
+  rpc GetBalance(GetBalanceRequest) returns (GetBalanceResponse);
+  rpc GetWalletInfo(GetWalletInfoRequest) returns (GetWalletInfoResponse);
+  rpc ListWallets(ListWalletsRequest) returns (ListWalletsResponse);
+  
+  // Transaction operations
+  rpc SendTransaction(SendTransactionRequest) returns (SendTransactionResponse);
+  rpc TrackTransaction(TrackTransactionRequest) returns (TrackTransactionResponse);
+  rpc GetTransactionHistory(GetTransactionHistoryRequest) returns (GetTransactionHistoryResponse);
+  
+  // Token operations
+  rpc GetTokenBalance(GetTokenBalanceRequest) returns (GetTokenBalanceResponse);
+  rpc TransferToken(TransferTokenRequest) returns (TransferTokenResponse);
+  rpc GetTokenInfo(GetTokenInfoRequest) returns (GetTokenInfoResponse);
+  rpc GetNFTs(GetNFTsRequest) returns (GetNFTsResponse);
+  rpc TransferNFT(TransferNFTRequest) returns (TransferNFTResponse);
+  
+  // Smart contract operations
+  rpc ReadContract(ReadContractRequest) returns (ReadContractResponse);
+  rpc WriteContract(WriteContractRequest) returns (WriteContractResponse);
+  rpc StoreContractABI(StoreContractABIRequest) returns (StoreContractABIResponse);
+  rpc GetContractABI(GetContractABIRequest) returns (GetContractABIResponse);
+}
+
+// Wallet operations messages
+message CreateWalletRequest {
+  string viber_user_id = 1;
+  string network = 2; // "ethereum" | "polygon" | "bsc" | "arbitrum"
+  string private_key = 3; // Optional, for importing existing wallet
+}
+
+message CreateWalletResponse {
+  Wallet wallet = 1;
+}
+
+message Wallet {
+  string id = 1;
+  string viber_user_id = 2;
+  string address = 3;
+  string network = 4;
+  string created_at = 5;
+  string updated_at = 6;
+}
+
+message GetBalanceRequest {
+  string wallet_id = 1;
+}
+
+message GetBalanceResponse {
+  string wallet_id = 1;
+  string address = 2;
+  string network = 3;
+  string balance = 4; // Balance in wei/smallest unit (as string)
+  string balance_formatted = 5; // Human-readable balance (e.g., "1.5 ETH")
+  string last_updated = 6; // ISO 8601 date string
+}
+
+message GetWalletInfoRequest {
+  string wallet_id = 1;
+}
+
+message GetWalletInfoResponse {
+  Wallet wallet = 1;
+}
+
+message ListWalletsRequest {
+  string viber_user_id = 1; // Optional: Filter by Viber user ID
+  string network = 2; // Optional: Filter by network
+  int32 page = 3; // Default: 1
+  int32 limit = 4; // Default: 20
+}
+
+message ListWalletsResponse {
+  repeated Wallet wallets = 1;
+  PaginationMeta meta = 2;
+}
+
+// Transaction operations messages
+message SendTransactionRequest {
+  string wallet_id = 1; // Wallet ID to send from
+  string to = 2; // Recipient blockchain address
+  string value = 3; // Amount in wei/smallest unit (as string)
+  string network = 4; // "ethereum", "polygon", "bsc", "arbitrum"
+  int64 gas_limit = 5; // Optional: Gas limit
+  string gas_price = 6; // Optional: Gas price in wei (as string)
+}
+
+message SendTransactionResponse {
+  string id = 1; // Transaction ID (database ID)
+  string tx_hash = 2; // Blockchain transaction hash
+  string wallet_id = 3;
+  string from = 4; // Sender address
+  string to = 5; // Recipient address
+  string value = 6; // Amount in wei
+  string network = 7;
+  string status = 8; // "pending", "confirmed", "failed"
+  int32 confirmations = 9; // Number of confirmations
+  string created_at = 10; // ISO 8601 date string
+}
+
+message TrackTransactionRequest {
+  string tx_hash = 1;
+}
+
+message TrackTransactionResponse {
+  string tx_hash = 1;
+  string status = 2; // "pending", "confirmed", "failed"
+  int32 confirmations = 3;
+  int64 block_number = 4; // Optional
+  string block_hash = 5; // Optional
+  string last_checked = 6; // ISO 8601 date string
+}
+
+message GetTransactionHistoryRequest {
+  string wallet_id = 1; // Optional: Filter by wallet ID
+  string network = 2; // Optional: Filter by network
+  string status = 3; // Optional: Filter by status ("pending", "confirmed", "failed")
+  int32 page = 4; // Default: 1
+  int32 limit = 5; // Default: 20
+}
+
+message GetTransactionHistoryResponse {
+  repeated Transaction transactions = 1;
+  PaginationMeta meta = 2;
+}
+
+message Transaction {
+  string id = 1;
+  string tx_hash = 2;
+  string wallet_id = 3;
+  string from = 4;
+  string to = 5;
+  string value = 6;
+  string network = 7;
+  string status = 8;
+  int32 confirmations = 9;
+  int64 block_number = 10; // Optional
+  string block_hash = 11; // Optional
+  int64 gas_used = 12; // Optional
+  string gas_price = 13; // Optional
+  string created_at = 14;
+  string updated_at = 15;
+}
+
+// Token operations messages
+message GetTokenBalanceRequest {
+  string wallet_id = 1; // Wallet ID to check balance for
+  string token_address = 2; // Token contract address
+  string network = 3; // "ethereum", "polygon", "bsc", "arbitrum"
+}
+
+message GetTokenBalanceResponse {
+  string wallet_id = 1;
+  string wallet_address = 2;
+  string token_address = 3;
+  string token_symbol = 4; // e.g., "USDT", "USDC"
+  string token_name = 5; // e.g., "Tether USD"
+  int32 token_decimals = 6; // Token decimals (e.g., 18)
+  string balance = 7; // Balance in smallest unit (as string)
+  string balance_formatted = 8; // Human-readable balance (e.g., "100.5 USDT")
+  string network = 9;
+  string last_updated = 10; // ISO 8601 date string
+}
+
+message TransferTokenRequest {
+  string wallet_id = 1; // Wallet ID to send from
+  string token_address = 2; // ERC-20 token contract address
+  string to = 3; // Recipient blockchain address
+  string amount = 4; // Amount in smallest token unit (as string)
+  string network = 5; // "ethereum", "polygon", "bsc", "arbitrum"
+  int64 gas_limit = 6; // Optional: Gas limit
+  string gas_price = 7; // Optional: Gas price in wei (as string)
+}
+
+message TransferTokenResponse {
+  string id = 1; // Transaction ID
+  string tx_hash = 2; // Blockchain transaction hash
+  string wallet_id = 3;
+  string token_address = 4;
+  string from = 5;
+  string to = 6;
+  string amount = 7; // Amount in smallest token unit
+  string network = 8;
+  string status = 9; // "pending", "confirmed", "failed"
+  int32 confirmations = 10;
+  string created_at = 11;
+}
+
+message GetTokenInfoRequest {
+  string token_address = 1; // Token contract address
+  string network = 2; // "ethereum", "polygon", "bsc", "arbitrum"
+}
+
+message GetTokenInfoResponse {
+  string address = 1; // Token contract address
+  string symbol = 2; // Token symbol (e.g., "USDT")
+  string name = 3; // Token name (e.g., "Tether USD")
+  int32 decimals = 4; // Token decimals (e.g., 18)
+  string total_supply = 5; // Total supply (if available, as string)
+  string network = 6;
+}
+
+message GetNFTsRequest {
+  string wallet_address = 1; // Wallet address to check NFTs for
+  string network = 2; // "ethereum", "polygon", "bsc", "arbitrum"
+  string contract_address = 3; // Optional: Filter by NFT contract address
+  int32 page = 4; // Default: 1
+  int32 limit = 5; // Default: 20
+}
+
+message GetNFTsResponse {
+  repeated NFT nfts = 1;
+  PaginationMeta meta = 2;
+}
+
+message NFT {
+  string contract_address = 1; // NFT contract address
+  string token_id = 2; // NFT token ID
+  string owner = 3; // Owner address
+  string token_uri = 4; // Token metadata URI (optional)
+  string metadata = 5; // Parsed metadata as JSON string (if available)
+  string network = 6;
+}
+
+message TransferNFTRequest {
+  string wallet_id = 1; // Wallet ID to send from
+  string contract_address = 2; // NFT contract address
+  string to = 3; // Recipient blockchain address
+  string token_id = 4; // NFT token ID to transfer
+  string network = 5; // "ethereum", "polygon", "bsc", "arbitrum"
+  int64 gas_limit = 6; // Optional: Gas limit
+  string gas_price = 7; // Optional: Gas price in wei (as string)
+}
+
+message TransferNFTResponse {
+  string id = 1; // Transaction ID
+  string tx_hash = 2; // Blockchain transaction hash
+  string wallet_id = 3;
+  string contract_address = 4;
+  string from = 5; // Sender address
+  string to = 6; // Recipient address
+  string token_id = 7; // NFT token ID
+  string network = 8;
+  string status = 9; // "pending", "confirmed", "failed"
+  int32 confirmations = 10;
+  string created_at = 11;
+}
+
+// Smart contract operations messages
+message ReadContractRequest {
+  string contract_address = 1; // Contract address
+  string abi = 2; // Contract ABI as JSON string (or use stored ABI via contract_id)
+  string function_name = 3; // Function name to call
+  repeated string args = 4; // Function arguments (as JSON strings)
+  string network = 5; // "ethereum", "polygon", "bsc", "arbitrum"
+  string contract_id = 6; // Optional: Use stored contract ABI by ID
+}
+
+message ReadContractResponse {
+  string contract_address = 1;
+  string function_name = 2;
+  string result = 3; // Function return value as JSON string
+  string network = 4;
+}
+
+message WriteContractRequest {
+  string wallet_id = 1; // Wallet ID to send transaction from
+  string contract_address = 2; // Contract address
+  string abi = 3; // Contract ABI as JSON string (or use stored ABI via contract_id)
+  string function_name = 4; // Function name to call
+  repeated string args = 5; // Function arguments (as JSON strings)
+  string value = 6; // Optional: Native token value to send (in wei, as string)
+  string network = 7; // "ethereum", "polygon", "bsc", "arbitrum"
+  int64 gas_limit = 8; // Optional: Gas limit
+  string gas_price = 9; // Optional: Gas price in wei (as string)
+  string contract_id = 10; // Optional: Use stored contract ABI by ID
+}
+
+message WriteContractResponse {
+  string id = 1; // Transaction ID
+  string tx_hash = 2; // Blockchain transaction hash
+  string wallet_id = 3;
+  string contract_address = 4;
+  string function_name = 5;
+  string network = 6;
+  string status = 7; // "pending", "confirmed", "failed"
+  int32 confirmations = 8;
+  string created_at = 9;
+}
+
+message StoreContractABIRequest {
+  string address = 1; // Contract address
+  string network = 2; // "ethereum", "polygon", "bsc", "arbitrum"
+  string abi = 3; // Contract ABI as JSON string
+  string name = 4; // Optional: Contract name for reference
+}
+
+message StoreContractABIResponse {
+  string id = 1; // Contract ABI ID
+  string address = 2;
+  string network = 3;
+  string name = 4; // Optional
+  string abi = 5; // Stored ABI as JSON string
+  string created_at = 6;
+  string updated_at = 7;
+}
+
+message GetContractABIRequest {
+  string address = 1; // Contract address
+  string network = 2; // "ethereum", "polygon", "bsc", "arbitrum"
+}
+
+message GetContractABIResponse {
+  string id = 1;
+  string address = 2;
+  string network = 3;
+  string name = 4; // Optional
+  string abi = 5; // Contract ABI as JSON string
+  string created_at = 6;
+  string updated_at = 7;
+}
+
+// Common messages
+message PaginationMeta {
+  int32 page = 1;
+  int32 limit = 2;
+  int32 total = 3;
+  int32 total_pages = 4;
+  bool has_next = 5;
+  bool has_prev = 6;
+}
+

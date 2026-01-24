@@ -20,3 +20,6 @@ export * from "./viber";
 
 // AI service types
 export * from "./ai";
+
+// Web3 service types
+export * from "./web3";

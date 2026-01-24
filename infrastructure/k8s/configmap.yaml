@@ -14,6 +14,7 @@ data:
   MONGODB_BOT_URI: "mongodb://mongodb-bot:27017/bot"
   MONGODB_AI_URI: "mongodb://mongodb-ai:27017/ai"
   MONGODB_ANALYTICS_URI: "mongodb://mongodb-analytics:27017/analytics"
+  MONGODB_WEB3_URI: "mongodb://mongodb-web3:27017/web3"
   
   # RabbitMQ Connection
   RABBITMQ_URL: "amqp://admin:admin@rabbitmq:5672"
@@ -28,6 +29,7 @@ data:
   VIBER_PORT: "3001"
   AI_PORT: "3002"
   ANALYTICS_PORT: "3003"
+  WEB3_PORT: "3004"
 
 
 
