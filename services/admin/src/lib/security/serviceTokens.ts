@@ -23,6 +23,7 @@ declare const process: {
  * - VIBER_SERVICE_TOKEN: Viber service specific token
  * - AI_SERVICE_TOKEN: AI service specific token
  * - ANALYTICS_SERVICE_TOKEN: Analytics service specific token
+ * - WEB3_SERVICE_TOKEN: Web3 service specific token
  *
  * @returns Array of valid service tokens (non-empty strings only)
  */
@@ -51,6 +52,12 @@ export function getServiceTokens(): string[] {
   const analyticsServiceToken = process.env.ANALYTICS_SERVICE_TOKEN;
   if (analyticsServiceToken && analyticsServiceToken.trim().length > 0) {
     tokens.push(analyticsServiceToken.trim());
+  }
+
+  // Get Web3 service token
+  const web3ServiceToken = process.env.WEB3_SERVICE_TOKEN;
+  if (web3ServiceToken && web3ServiceToken.trim().length > 0) {
+    tokens.push(web3ServiceToken.trim());
   }
 
   return tokens;

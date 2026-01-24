@@ -75,11 +75,29 @@ graph TB
         AnalyticsPortsOut --> AnalyticsAdapterOut
     end
     
+    %% Web3 Service with Hexagonal Architecture
+    subgraph Web3Service["Web3 Service (Express)"]
+        direction TB
+        Web3AdapterIn[Input Adapters<br/>Express Routes<br/>gRPC Server]
+        Web3PortsIn[Input Ports<br/>Use Case Interfaces]
+        Web3App[Application Layer<br/>Use Cases, Services, DTOs]
+        Web3Domain[Domain Layer<br/>Entities, Business Rules]
+        Web3PortsOut[Output Ports<br/>Repository Interfaces]
+        Web3AdapterOut[Output Adapters<br/>MongoDB Repositories<br/>Blockchain Providers<br/>Message Publishers]
+        
+        Web3AdapterIn --> Web3PortsIn
+        Web3PortsIn --> Web3App
+        Web3App --> Web3Domain
+        Web3App --> Web3PortsOut
+        Web3PortsOut --> Web3AdapterOut
+    end
+    
     %% Databases
     AdminDB[(MongoDB<br/>admin database<br/>Users, Configs, Sessions)]
     BotDB[(MongoDB<br/>bot database<br/>Conversations, Messages, Users)]
     AIDB[(MongoDB<br/>ai database<br/>Models, Processing Logs)]
     AnalyticsDB[(MongoDB<br/>analytics database<br/>Events, Metrics, Reports)]
+    Web3DB[(MongoDB<br/>web3 database<br/>Wallets, Transactions, Contracts)]
     
     %% Message Queue
     RabbitMQ[RabbitMQ<br/>Message Queue<br/>analytics.events]
@@ -87,6 +105,9 @@ graph TB
     %% AI Model Providers
     Ollama[Ollama<br/>Self-Hosted LLMs<br/>Llama 2, Mistral, etc.]
     ExternalAI[External AI APIs<br/>OpenAI, Anthropic, etc.]
+    
+    %% Blockchain Networks
+    BlockchainNetworks[Blockchain Networks<br/>Ethereum, Polygon<br/>BSC, Arbitrum]
     
     %% User Connections
     Users -->|HTTP| AdminAdapterIn
@@ -98,12 +119,16 @@ graph TB
     AdminAdapterOut -->|REST API<br/>Configuration, Control| ViberAdapterIn
     AdminAdapterOut -->|REST API<br/>Model Config, Training| AIAdapterIn
     AdminAdapterOut -->|REST API<br/>Dashboard, Reports| AnalyticsAdapterIn
+    AdminAdapterOut -->|REST API<br/>Wallet, Transaction, Token, Contract| Web3AdapterIn
     
-    %% gRPC Communication (Viber to AI)
+    %% gRPC Communication (Viber to AI, Viber to Web3, AI to Web3)
     ViberAdapterOut -->|gRPC<br/>Message Processing<br/>Intent Detection| AIAdapterIn
+    ViberAdapterOut -->|gRPC<br/>Wallet, Transaction, Token| Web3AdapterIn
+    AIAdapterOut -->|gRPC<br/>Wallet, Transaction, Token| Web3AdapterIn
     
-    %% RabbitMQ Communication (Viber to Analytics)
+    %% RabbitMQ Communication (Viber to Analytics, Web3 to Analytics)
     ViberAdapterOut -->|RabbitMQ<br/>Async Events<br/>analytics.events| RabbitMQ
+    Web3AdapterOut -->|RabbitMQ<br/>Async Events<br/>analytics.events| RabbitMQ
     RabbitMQ -->|Consume Events| AnalyticsAdapterIn
     
     %% Database Connections
@@ -111,16 +136,21 @@ graph TB
     ViberAdapterOut -->|Read/Write| BotDB
     AIAdapterOut -->|Read/Write| AIDB
     AnalyticsAdapterOut -->|Read/Write| AnalyticsDB
+    Web3AdapterOut -->|Read/Write| Web3DB
     
     %% AI Model Provider Connections
     AIAdapterOut -->|HTTP API<br/>Local Models| Ollama
     AIAdapterOut -->|REST API<br/>Cloud Models| ExternalAI
+    
+    %% Blockchain Network Connections
+    Web3AdapterOut -->|RPC API<br/>Multi-Chain| BlockchainNetworks
     
     %% Shared Package Dependencies
     SharedPackage -.->|Imports| AdminApp
     SharedPackage -.->|Imports| ViberApp
     SharedPackage -.->|Imports| AIApp
     SharedPackage -.->|Imports| AnalyticsApp
+    SharedPackage -.->|Imports| Web3App
     
     %% Styling
     classDef serviceBox fill:#4ECDC4,stroke:#333,stroke-width:3px,color:#000
@@ -130,14 +160,15 @@ graph TB
     classDef sharedBox fill:#FCBAD3,stroke:#333,stroke-width:2px,color:#000
     classDef layerBox fill:#FFF9CA,stroke:#333,stroke-width:1px,color:#000
     
-    class AdminService,ViberService,AIService,AnalyticsService serviceBox
-    class AdminDB,BotDB,AIDB,AnalyticsDB dbBox
+    class AdminService,ViberService,AIService,AnalyticsService,Web3Service serviceBox
+    class AdminDB,BotDB,AIDB,AnalyticsDB,Web3DB dbBox
     class RabbitMQ mqBox
     class ViberAPI,Users,ExternalAI externalBox
-    class Ollama serviceBox
+    class Ollama,BlockchainNetworks serviceBox
     class SharedPackage sharedBox
     class AdminAdapterIn,AdminPortsIn,AdminApp,AdminDomain,AdminPortsOut,AdminAdapterOut layerBox
     class ViberAdapterIn,ViberPortsIn,ViberApp,ViberDomain,ViberPortsOut,ViberAdapterOut layerBox
     class AIAdapterIn,AIPortsIn,AIApp,AIDomain,AIPortsOut,AIAdapterOut layerBox
     class AnalyticsAdapterIn,AnalyticsPortsIn,AnalyticsApp,AnalyticsDomain,AnalyticsPortsOut,AnalyticsAdapterOut layerBox
+    class Web3AdapterIn,Web3PortsIn,Web3App,Web3Domain,Web3PortsOut,Web3AdapterOut layerBox
 

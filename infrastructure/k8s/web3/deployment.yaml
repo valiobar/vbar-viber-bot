@@ -1,0 +1,117 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web3-service
+  namespace: vbar-viber-bot
+  labels:
+    app: web3-service
+    component: web3
+    service: web3
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: web3-service
+  template:
+    metadata:
+      labels:
+        app: web3-service
+        component: web3
+        service: web3
+    spec:
+      containers:
+      - name: web3
+        image: vbar-web3:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 3004
+          protocol: TCP
+        - name: grpc
+          containerPort: 50052
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: vbar-config
+              key: NODE_ENV
+        - name: PORT
+          value: "3004"
+        - name: WEB3_GRPC_PORT
+          value: "50052"
+        - name: MONGODB_URI
+          valueFrom:
+            configMapKeyRef:
+              name: vbar-config
+              key: MONGODB_WEB3_URI
+        - name: MONGODB_DB_NAME
+          value: "web3"
+        - name: RABBITMQ_URL
+          valueFrom:
+            configMapKeyRef:
+              name: vbar-config
+              key: RABBITMQ_URL
+        - name: WEB3_RPC_ETHEREUM
+          valueFrom:
+            secretKeyRef:
+              name: vbar-secrets
+              key: WEB3_RPC_ETHEREUM
+              optional: true
+        - name: WEB3_RPC_POLYGON
+          valueFrom:
+            secretKeyRef:
+              name: vbar-secrets
+              key: WEB3_RPC_POLYGON
+              optional: true
+        - name: WEB3_RPC_BSC
+          valueFrom:
+            secretKeyRef:
+              name: vbar-secrets
+              key: WEB3_RPC_BSC
+              optional: true
+        - name: WEB3_RPC_ARBITRUM
+          valueFrom:
+            secretKeyRef:
+              name: vbar-secrets
+              key: WEB3_RPC_ARBITRUM
+              optional: true
+        - name: WEB3_ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: vbar-secrets
+              key: WEB3_ENCRYPTION_KEY
+              optional: true
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3004
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3004
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 3004
+          initialDelaySeconds: 0
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 12
+      restartPolicy: Always
+

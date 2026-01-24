@@ -134,6 +134,39 @@ services:
       retries: 5
       start_period: 30s
 
+  mongodb-web3:
+    image: mongo:7
+    container_name: vbar-mongodb-web3
+    ports:
+      - "27021:27017" # Expose for local access
+    environment:
+      - MONGO_INITDB_DATABASE=web3
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_WEB3_USER:-web3}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_WEB3_PASS:-web3123}
+    volumes:
+      - web3-mongo-data:/data/db
+    restart: unless-stopped
+    networks:
+      - vbar-network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mongosh",
+          "-u",
+          "${MONGO_WEB3_USER:-web3}",
+          "-p",
+          "${MONGO_WEB3_PASS:-web3123}",
+          "--authenticationDatabase",
+          "admin",
+          "--eval",
+          "db.adminCommand('ping')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
   # RabbitMQ Message Queue
   rabbitmq:
     image: rabbitmq:3-management-alpine
@@ -170,5 +203,7 @@ volumes:
     name: vbar-mongodb-ai-data
   mongodb-analytics-data:
     name: vbar-mongodb-analytics-data
+  web3-mongo-data:
+    name: vbar-mongodb-web3-data
   rabbitmq-data:
     name: vbar-rabbitmq-data
