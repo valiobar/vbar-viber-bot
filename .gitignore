@@ -32,6 +32,8 @@ out/
 # IDE
 .vscode/
 .idea/
+.cursor/
+!.cursor/rules/
 *.swp
 *.swo
 *~
