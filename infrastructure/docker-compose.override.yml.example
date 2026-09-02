@@ -1,151 +1,77 @@
 # Docker Compose Override Example
-# Copy this file to docker-compose.override.yml and customize for your local development environment
-# This file is automatically loaded by docker-compose when present
+# Copy this file to docker-compose.override.yml and customize for local development.
+# This file is automatically loaded by docker compose when present.
 #
 # Security Model:
-# - Admin and Viber services: Publicly accessible (0.0.0.0) - Admin for user access, Viber for webhooks
-# - AI and Analytics services: Localhost only (127.0.0.1) - Internal services, not exposed externally
-# - Services within Docker network communicate using service names regardless of port binding
+# - Admin and Viber: publicly accessible (0.0.0.0) — Admin for UI, Viber for webhooks
+# - AI: localhost only (127.0.0.1) — internal
+# - Mongo/RabbitMQ: localhost only (set in main compose)
+#
+# Optional profiles:
+# - local-llm: Ollama (docker compose --profile local-llm up -d)
 
 version: '3.8'
 
 services:
-  # Admin Service Development Overrides
   admin:
     build:
       context: ..
-      dockerfile: infrastructure/docker/Dockerfile.admin
+      dockerfile: services/admin/Dockerfile
     environment:
       - NODE_ENV=development
-      - MONGODB_URI=mongodb://mongodb-admin:27017/admin
-      - RABBITMQ_URL=amqp://admin:admin@rabbitmq:5672
-    # Uncomment for hot reload (requires Next.js dev mode)
-    # volumes:
-    #   - ../services/admin:/app
-    #   - /app/node_modules
-    #   - /app/.next
-    # command: npm run dev
+      - MONGODB_URI=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/admin_service?authSource=admin
+      - MONGODB_DB_NAME=admin_service
+      - RABBITMQ_URI=${RABBITMQ_URI}
+      - VIBER_SERVICE_TOKEN=${VIBER_SERVICE_TOKEN}
+      - ADMIN_SERVICE_TOKEN=${ADMIN_SERVICE_TOKEN}
+      - SERVICE_TOKEN=${SERVICE_TOKEN}
+      - JWT_SECRET=${JWT_SECRET}
+      - BOT_TOKEN_ENCRYPTION_KEY=${BOT_TOKEN_ENCRYPTION_KEY}
 
-  # Viber Service Development Overrides
-  # Note: Viber service must remain publicly accessible (0.0.0.0:3001:3001) in main docker-compose.yml
-  # because Viber API sends webhook events from external networks. The service cannot receive webhooks
-  # if bound to localhost only. Services within Docker network can communicate using service name
-  # (http://viber:3001).
+  # Viber must remain publicly accessible for webhook callbacks
   viber:
     build:
       context: ..
-      dockerfile: infrastructure/docker/Dockerfile.viber
+      dockerfile: services/viber/Dockerfile
     environment:
       - NODE_ENV=development
       - PORT=3001
-      - MONGODB_URI=mongodb://mongodb-bot:27017/bot
-      - RABBITMQ_URL=amqp://admin:admin@rabbitmq:5672
-      - VIBER_BOT_TOKEN=${VIBER_BOT_TOKEN:-your-viber-bot-token}
-      - VIBER_WEBHOOK_URL=${VIBER_WEBHOOK_URL:-http://localhost:3001}
-    # Port binding follows main docker-compose.yml (publicly accessible for webhooks)
-    # Override only if you need different binding for development
-    # ports:
-    #   - "3001:3001"  # Publicly accessible (required for Viber webhook callbacks)
-    # Uncomment for hot reload
-    # volumes:
-    #   - ../services/viber:/app
-    #   - /app/node_modules
-    #   - /app/dist
-    # command: npm run dev
+      - MONGODB_URI=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/bot?authSource=admin
+      - MONGODB_DB_NAME=bot
+      - RABBITMQ_URI=${RABBITMQ_URI}
+      - VIBER_BOT_TOKEN=${VIBER_BOT_TOKEN}
+      - VIBER_BOT_WEBHOOK_URL=${VIBER_BOT_WEBHOOK_URL}
+      - ADMIN_SERVICE_URL=http://admin:3000
+      - ADMIN_SERVICE_TOKEN=${ADMIN_SERVICE_TOKEN}
+      - AI_SERVICE_GRPC_HOST=ai
+      - AI_SERVICE_GRPC_PORT=50051
+      - SERVICE_TOKEN=${SERVICE_TOKEN}
 
-  # AI Service Development Overrides
-  # Note: In main docker-compose.yml, AI service is bound to localhost only (127.0.0.1:3002:3002)
-  # for security. This ensures the service is accessible from the host machine for local development
-  # but not from external networks. Services within Docker network can still communicate using
-  # the service name (http://ai:3002).
   ai:
     build:
       context: ..
-      dockerfile: infrastructure/docker/Dockerfile.ai
+      dockerfile: services/ai/Dockerfile
     environment:
       - NODE_ENV=development
       - PORT=3002
-      - MONGODB_URI=mongodb://mongodb-ai:27017/ai
-      - RABBITMQ_URL=amqp://admin:admin@rabbitmq:5672
-      - OLLAMA_URL=http://ollama:11434
-      - AI_MODEL_PROVIDER=ollama
-      - AI_MODEL_NAME=llama2
-    # Port binding follows main docker-compose.yml (localhost-only for security)
-    # Override only if you need different binding for development
-    # ports:
-    #   - "127.0.0.1:3002:3002"  # Localhost only (default in main config)
-    # Uncomment for hot reload
-    # volumes:
-    #   - ../services/ai:/app
-    #   - /app/node_modules
-    #   - /app/dist
-    # command: npm run dev
+      - GRPC_PORT=50051
+      - MONGODB_URI=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/ai?authSource=admin
+      - MONGODB_DB_NAME=ai
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
+      - AI_MODEL_PROVIDER=${AI_MODEL_PROVIDER:-ollama}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama2}
 
-  # Analytics Service Development Overrides
-  # Note: In main docker-compose.yml, Analytics service is bound to localhost only (127.0.0.1:3003:3003)
-  # for security. This ensures the service is accessible from the host machine for local development
-  # but not from external networks. Services within Docker network can still communicate using
-  # the service name (http://analytics:3003).
-  analytics:
-    build:
-      context: ..
-      dockerfile: infrastructure/docker/Dockerfile.analytics
-    environment:
-      - NODE_ENV=development
-      - PORT=3003
-      - MONGODB_URI=mongodb://mongodb-analytics:27017/analytics
-      - RABBITMQ_URL=amqp://admin:admin@rabbitmq:5672
-    # Port binding follows main docker-compose.yml (localhost-only for security)
-    # Override only if you need different binding for development
-    # ports:
-    #   - "127.0.0.1:3003:3003"  # Localhost only (default in main config)
-    # Uncomment for hot reload
+  mongodb:
+    # Port already 127.0.0.1:27017 in main compose
     # volumes:
-    #   - ../services/analytics:/app
-    #   - /app/node_modules
-    #   - /app/dist
-    # command: npm run dev
+    #   - ./data/mongodb:/data/db
 
-  # MongoDB Development Overrides
-  mongodb-admin:
-    ports:
-      - "27017:27017"  # Expose MongoDB port for local access
-    # Uncomment to mount local data directory
-    # volumes:
-    #   - ./data/mongodb-admin:/data/db
-
-  mongodb-bot:
-    ports:
-      - "27018:27017"  # Expose MongoDB port for local access
-    # Uncomment to mount local data directory
-    # volumes:
-    #   - ./data/mongodb-bot:/data/db
-
-  mongodb-ai:
-    ports:
-      - "27019:27017"  # Expose MongoDB port for local access
-    # Uncomment to mount local data directory
-    # volumes:
-    #   - ./data/mongodb-ai:/data/db
-
-  mongodb-analytics:
-    ports:
-      - "27020:27017"  # Expose MongoDB port for local access
-    # Uncomment to mount local data directory
-    # volumes:
-    #   - ./data/mongodb-analytics:/data/db
-
-  # RabbitMQ Development Overrides
   rabbitmq:
-    # Ports are already exposed in main docker-compose.yml
-    # Management UI available at http://localhost:15672
-    # Default credentials: admin/admin
+    # Ports already 127.0.0.1:5672 / 127.0.0.1:15672 in main compose
+    # Management UI: http://127.0.0.1:15672 (or SSH tunnel on VPS)
 
-  # Ollama Development Overrides
   ollama:
-    # Port is already exposed in main docker-compose.yml
-    # API available at http://localhost:11434
-    # Uncomment for GPU support (requires NVIDIA Docker runtime)
+    # Requires --profile local-llm; port 127.0.0.1:11434
     # deploy:
     #   resources:
     #     reservations:
@@ -153,4 +79,3 @@ services:
     #         - driver: nvidia
     #           count: 1
     #           capabilities: [gpu]
-

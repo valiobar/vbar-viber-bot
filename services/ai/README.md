@@ -1,31 +1,21 @@
 # AI Service
 
-AI Service for Viber Bot - Node.js Express service with Hexagonal Architecture and LangChain integration.
+AI Service for the Viber bot — Express + gRPC, LangChain providers, Mongo-backed per-user history.
 
 ## Overview
 
-The AI Service provides AI processing capabilities for the Viber bot, including:
-
-- Natural language processing (NLP)
-- Message analysis and intent detection
-- Response generation
-- **LangChain-based chain execution** (simple, RAG, custom chains)
-- **Conversation memory management** (BufferMemory, ConversationSummaryMemory)
-- **RAG (Retrieval Augmented Generation)** with vector stores
-- **Prompt engineering** with template system
-- Multi-provider AI model support (Ollama, OpenAI, Anthropic, Google)
-- **LangSmith observability** integration
-- gRPC API for high-performance communication with Viber Service
-- REST API for Admin Service configuration and management
+- gRPC `ProcessMessage` for viber (primary API)
+- LangChain chains: simple, RAG, custom
+- Per-user conversation history in Mongo (no process-wide shared memory)
+- Multi-provider models: Ollama, OpenAI, Anthropic, Google
+- Optional LangSmith tracing
+- HTTP `GET /api/health` and `/api/knowledge-base/*` ingest — no REST process endpoints, no RabbitMQ
 
 ## Architecture
 
-This service follows **Hexagonal Architecture (Ports and Adapters)** pattern:
-
-- **Domains Layer** (`src/domains/`): Core business logic, entities, and domain rules organized by domain
-- **Application Layer** (`src/application/`): Use cases and application services
-- **Ports** (`src/ports/`): Interfaces for input/output operations
-- **Adapters** (`src/adapters/`): HTTP controllers, database repositories, AI provider clients
+- `ProcessMessageUseCase` builds an `AITask` and calls `ChainExecutor`
+- Provider adapters implement `AIProviderPort` (real multi-implementation boundary)
+- Mongo via `@vbar/shared/infra` (`createMongoConnection` / `getMongoDatabase`)
 
 ## Technology Stack
 
@@ -33,7 +23,6 @@ This service follows **Hexagonal Architecture (Ports and Adapters)** pattern:
 - **Framework**: Express.js
 - **Language**: TypeScript
 - **Database**: MongoDB (ai database)
-- **Message Queue**: RabbitMQ
 - **AI Framework**: **LangChain** (unified AI processing)
 - **AI Providers**: Ollama (self-hosted), OpenAI, Anthropic, Google AI
 
@@ -45,7 +34,6 @@ See `.env.example` for all available environment variables.
 
 - `MONGODB_URI`: MongoDB connection string
 - `MONGODB_DB_NAME`: Database name (default: `ai`)
-- `RABBITMQ_URI`: RabbitMQ connection string
 - `AI_MODEL_PROVIDER`: AI provider to use (`ollama`, `openai`, `anthropic`, `google`)
 
 ### Optional Variables
@@ -58,19 +46,28 @@ See `.env.example` for all available environment variables.
 - `AI_MAX_TOKENS`: Maximum tokens for responses (optional)
 - Provider-specific API keys and model names (see `.env.example`)
 
-**Conversation Memory Configuration**:
-- `CONVERSATION_MEMORY_TYPE`: Memory type (`buffer` or `summary`) - Default: `buffer`
-- `CONVERSATION_MAX_HISTORY`: Maximum conversation history messages - Default: `10`
+**Conversation history**:
+- Loaded and saved per `userId` in Mongo. Chains receive `chat_history` for that request only.
+- `CONVERSATION_MEMORY_TYPE` is unused by the adapter (history is Mongo-only).
 
-**Task Type Configuration**:
-- `AI_TASK_TYPE`: Task type (`simple`, `rag`, `custom`) - Default: `simple`
+**Task type vs RAG (precedence)**:
+- An **explicit** `AI_TASK_TYPE` (`simple` / `rag` / `custom`) on the request or in the environment wins.
+- If `AI_TASK_TYPE` is unset, `RAG_ENABLED=true` selects the RAG chain.
+- `.env.example` sets `AI_TASK_TYPE=simple`, so `RAG_ENABLED=true` alone will not engage RAG until that var is unset or set to `rag`.
+- RAG failures fall back to the simple chain.
 
-**RAG Configuration**:
-- `RAG_ENABLED`: Enable RAG functionality - Default: `false`
-- `RAG_EMBEDDING_PROVIDER`: Embedding provider (`openai`, `ollama`, `local`) - Default: `openai`
-- `RAG_VECTOR_STORE_TYPE`: Vector store type (`mongodb` or `memory`) - Default: `mongodb`
-- `RAG_RETRIEVER_K`: Number of documents to retrieve - Default: `4`
-- `RAG_SIMILARITY_THRESHOLD`: Similarity threshold (0.0-1.0) - Default: `0.7`
+**RAG Configuration** (full guide: [rag.md](../../documentation/rag.md)):
+- `RAG_ENABLED`: Creates the vector store; also selects RAG when `AI_TASK_TYPE` is unset — Default: `false`
+- `RAG_EMBEDDING_PROVIDER`: Embedding provider (`openai`, `ollama`; `local` throws) — Default: `openai`
+- `RAG_VECTOR_STORE_TYPE`: `chroma` (persistent) or `memory` (tests) — Default: `chroma`
+- `CHROMA_URL`: Host `http://localhost:8000`; Compose `http://chromadb:8000`
+- `RAG_VECTOR_STORE_COLLECTION`: Chroma collection name — Default: `embeddings`
+- `RAG_RETRIEVER_K`: Number of documents to retrieve — Default: `4`
+- `RAG_SIMILARITY_THRESHOLD`: Similarity threshold (0.0-1.0) — Default: `0.7`
+- `RAG_CHUNK_SIZE` / `RAG_CHUNK_OVERLAP`: Ingest chunking — Defaults: `1000` / `200`
+- `INGEST_MAX_URLS` / `INGEST_MAX_FILE_SIZE_MB`: Ingest limits — Defaults: `20` / `10`
+- `INGEST_URL_TIMEOUT_MS`: Per-URL fetch timeout — Default: `15000`
+- `AI_SERVICE_TOKEN`: Required for ingest routes; **must match** the token on admin
 
 **Prompt Template Configuration**:
 - `PROMPT_TEMPLATES_ENABLED`: Enable prompt templates - Default: `true`
@@ -89,7 +86,6 @@ See `.env.example` for all available environment variables.
 
 - Node.js 20+
 - MongoDB instance
-- RabbitMQ instance
 - (Optional) Ollama instance for self-hosted AI models
 
 ### Installation
@@ -132,51 +128,31 @@ npm run lint
 
 ### Health Check
 
-- `GET /api/health` - Service health check
+- `GET /api/health` — Mongo + AI provider (no message-queue component). Public.
 
-### AI Processing (REST API)
+### Knowledge Base ingest
 
-- `POST /api/ai/process` - Process message with AI
-- `POST /api/ai/detect-intent` - Detect intent from message
-- `POST /api/ai/batch-process` - Process multiple messages
+All `/api/knowledge-base/*` routes require `X-Service-Token` (`AI_SERVICE_TOKEN`). Responses are `ApiResponse<T>`. Processing is synchronous.
 
-### Model Configuration
+| Method | Path | Body | Returns |
+|--------|------|------|---------|
+| `POST` | `/api/knowledge-base/files` | multipart `files` (≤10 × ≤10 MB, `.pdf` / `.md` / `.txt`) | `IngestResult` |
+| `POST` | `/api/knowledge-base/urls` | `{ "urls": string[] }` (≤20) | `IngestResult` |
+| `GET` | `/api/knowledge-base/sources` | — | `KnowledgeSource[]` |
+| `DELETE` | `/api/knowledge-base/sources/:sourceId` | — | `{ deleted: true }` |
+| `DELETE` | `/api/knowledge-base/sources` | — | `{ cleared: true }` |
 
-- `GET /api/ai/models` - Get available AI models
-- `GET /api/ai/models/:id` - Get model details
-- `PUT /api/ai/models/:id/config` - Update model configuration
+Error codes: `RAG_DISABLED` / `INGEST_NOT_CONFIGURED` (503), `UNAUTHORIZED` (401), `INGEST_VALIDATION` / `INVALID_URLS` / `NO_FILES` (400), `INGEST_FAILED` (500).
 
-### Training
-
-- `POST /api/ai/train` - Trigger model training
-- `GET /api/ai/train/:trainingId` - Get training status
-
-**Note**: For production use, the Viber Service communicates with AI Service via **gRPC** (port 50051) for high-performance message processing. REST endpoints are primarily for Admin Service access and testing.
+There are no REST process / intent / training endpoints. Viber calls **gRPC** on port 50051.
 
 ## gRPC API
 
-The AI Service exposes a gRPC API on port `50051` (configurable via `GRPC_PORT`) for high-performance communication with the Viber Service.
+`AIProcessingService.ProcessMessage` on port `50051` (`GRPC_PORT`). See [API Documentation](../../documentation/api.md#grpc).
 
-### gRPC Methods
+## Database
 
-- `ProcessMessage` - Process a single message with AI
-- `DetectIntent` - Detect intent from a message
-- `BatchProcessMessages` - Process multiple messages in batch
-
-See [API Documentation](../../documentation/api.md#grpc-api) for detailed gRPC API specifications.
-
-## Database Schema
-
-The AI Service uses MongoDB with the following collections:
-
-- **Models**: AI model configurations and metadata
-- **ProcessingLogs**: AI processing history and results
-- **TrainingData**: Datasets for model training
-- **Configurations**: AI service settings and parameters
-
-## Message Queue
-
-The AI Service can consume messages from RabbitMQ for asynchronous processing. Currently, the service is configured to publish processing results to the message queue.
+MongoDB database `ai`: per-user conversation history and prompt templates only. RAG vectors live in Chroma when RAG is on (`--profile rag`). See [rag.md](../../documentation/rag.md).
 
 ## LangChain Integration
 
@@ -188,11 +164,9 @@ The AI Service uses **LangChain** as the core framework for AI processing, provi
 - Consistent interface via `BaseChatModel`
 - Automatic LangSmith tracing when enabled
 
-### Conversation Memory Management
+### Conversation history
 
-- **BufferMemory**: Stores full conversation history (configurable max history)
-- **ConversationSummaryMemory**: Summarizes conversation history to save tokens
-- Memory type configurable via `CONVERSATION_MEMORY_TYPE` environment variable
+Mongo-loaded `chat_history` is the only conversation context. There is no LangChain `BufferMemory` / `ConversationSummaryMemory` at adapter scope.
 
 ### Flexible Task System
 
@@ -203,10 +177,12 @@ The AI Service uses **LangChain** as the core framework for AI processing, provi
 
 ### RAG (Retrieval Augmented Generation)
 
-- Vector store integration (MongoDB Atlas Vector Search or in-memory)
-- Embedding providers (OpenAI, Ollama, or local)
-- Similarity search with configurable K and threshold
-- Automatic context injection into prompts
+- Vector store: Chroma (persistent) or in-memory (tests). Atlas / Mongo vector search is removed.
+- Embedding providers: OpenAI or Ollama (`local` is not implemented)
+- Similarity search with `RAG_RETRIEVER_K` and `RAG_SIMILARITY_THRESHOLD`
+- Retrieved documents are injected into the RAG prompt
+- Ingest via `/api/knowledge-base/*` (Admin UI or REST + `X-Service-Token`)
+- Details: [rag.md](../../documentation/rag.md)
 
 ### Prompt Engineering
 
@@ -284,7 +260,8 @@ services/ai/
 │   │           ├── AnthropicAdapter.ts       # Anthropic implementation
 │   │           ├── GoogleAdapter.ts          # Google implementation
 │   │           ├── ChainExecutor.ts          # Chain execution logic
-│   │           └── factory/                  # Provider factory
+│   │           ├── factory/                  # Provider factory
+│   │           └── rag/                      # Chroma / memory vector stores
 │   ├── application/         # Application layer (use cases)
 │   │   └── use-cases/
 │   │       └── ProcessMessageUseCase.ts
@@ -349,6 +326,7 @@ const response = await chainExecutor.executeCustomChain(
 - [API Documentation](../../documentation/api.md)
 - [Setup Guide](../../documentation/setup.md)
 - [Deployment Guide](../../documentation/deployment.md)
+- [RAG](../../documentation/rag.md)
 
 ## License
 

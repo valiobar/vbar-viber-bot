@@ -6,7 +6,7 @@
  */
 
 import { SignJWT, jwtVerify, decodeJwt } from "jose";
-import { getJWTSecret, getJWTExpiresIn, getJWTRefreshExpiresIn } from "../../config/auth";
+import { getJWTSecret, getJWTExpiresIn, getJWTRefreshExpiresIn } from "./config";
 
 /**
  * JWT payload structure

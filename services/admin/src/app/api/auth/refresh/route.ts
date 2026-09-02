@@ -9,13 +9,13 @@
 
 import { NextResponse } from "next/server";
 import type { ApiResponse } from "@vbar/shared";
-import { RefreshTokenUseCase } from "@/domains/user/application/use-cases/RefreshTokenUseCase";
-import { MongoUserRepository } from "@/domains/user/adapters/out/repositories/UserRepository";
-import { MongoSessionRepository } from "@/domains/user/adapters/out/repositories/SessionRepository";
+import { AuthService } from "@/domains/user/AuthService";
+import { UserRepository } from "@/domains/user/UserRepository";
+import { SessionRepository } from "@/domains/user/SessionRepository";
 import type {
   RefreshTokenRequest,
   RefreshTokenResponse,
-} from "@/domains/user/ports/in/AuthPort";
+} from "@/domains/user/types";
 
 /**
  * POST handler for refresh token endpoint
@@ -75,23 +75,15 @@ export async function POST(
       refreshToken: refreshToken.trim(),
     };
 
-    // Instantiate repositories
-    const userRepository = new MongoUserRepository();
-    const sessionRepository = new MongoSessionRepository();
-
-    // Instantiate use case
-    const refreshTokenUseCase = new RefreshTokenUseCase(
-      userRepository,
-      sessionRepository
+    const authService = new AuthService(
+      new UserRepository(),
+      new SessionRepository()
     );
 
-    // Execute refresh token use case
-    const refreshTokenResponse = await refreshTokenUseCase.execute(
-      refreshTokenRequest
-    );
+    const refreshTokenResponse = await authService.refresh(refreshTokenRequest);
 
-    // Create response with new tokens
-    const response = NextResponse.json<ApiResponse<RefreshTokenResponse>>(
+    // Return response with new tokens
+    return NextResponse.json<ApiResponse<RefreshTokenResponse>>(
       {
         data: refreshTokenResponse,
       },

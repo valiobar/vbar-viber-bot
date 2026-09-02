@@ -5,9 +5,8 @@
  */
 
 import { Router, Request, Response } from "express";
-import { HealthCheckResponse } from "@vbar/shared";
-import { connectToDatabase } from "../../../config/database";
-import { getConnection } from "../../../config/messageQueue";
+import { ConfigHelper, HealthCheckResponse } from "@vbar/shared";
+import { createMongoConnection } from "@vbar/shared/infra";
 import mongoose from "mongoose";
 
 const router = Router();
@@ -29,7 +28,13 @@ router.get("/", async (req: Request, res: Response) => {
 
   // Check MongoDB connection
   try {
-    await connectToDatabase();
+    await createMongoConnection({
+      uri: ConfigHelper.getEnv(
+        "MONGODB_URI",
+        "mongodb://ai:ai123@localhost:27019/ai?authSource=admin"
+      ),
+      dbName: ConfigHelper.getEnv("MONGODB_DB_NAME", "ai"),
+    });
     const db = mongoose.connection.db;
     if (db) {
       await db.admin().ping();
@@ -41,15 +46,6 @@ router.get("/", async (req: Request, res: Response) => {
   } catch (error) {
     health.status = "error";
     health.dependencies!.database = "disconnected";
-  }
-
-  // Check RabbitMQ connection
-  try {
-    await getConnection();
-    health.dependencies!.messageQueue = "connected";
-  } catch (error) {
-    health.status = "error";
-    health.dependencies!.messageQueue = "disconnected";
   }
 
   // Check AI provider connection (placeholder for future implementation)

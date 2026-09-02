@@ -1,135 +1,55 @@
 /**
- * Step by ID API Route
- *
- * GET /api/steps/[id] - Get step by ID
- * PUT /api/steps/[id] - Update step
- * DELETE /api/steps/[id] - Delete step
- *
- * This is an input adapter following Hexagonal Architecture principles.
- * Authentication is handled by middleware.ts
+ * GET /api/steps/[id] — get step
+ * PUT /api/steps/[id] — update step
+ * DELETE /api/steps/[id] — delete step
  */
 
-import { NextResponse } from "next/server";
-import type { ApiResponse } from "@vbar/shared";
-import { GetStepUseCaseImpl } from "@/domains/step/application/use-cases/GetStepUseCaseImpl";
-import { UpdateStepUseCaseImpl } from "@/domains/step/application/use-cases/UpdateStepUseCaseImpl";
-import { DeleteStepUseCaseImpl } from "@/domains/step/application/use-cases/DeleteStepUseCaseImpl";
-import { MongoStepRepository } from "@/domains/step/adapters/out/repositories/MongoStepRepository";
-import { StepModel } from "@/domains/step/adapters/out/models/StepModel";
-import { MongoMessageRepository } from "@/domains/message/adapters/out/repositories/MongoMessageRepository";
-import { MessageModel } from "@/domains/message/adapters/out/models/MessageModel";
-import { MongoKeyboardRepository } from "@/domains/keyboard/adapters/out/repositories/MongoKeyboardRepository";
-import { KeyboardModel } from "@/domains/keyboard/adapters/out/models/KeyboardModel";
-import type { UpdateStepInput } from "@/domains/step/ports/in/UpdateStepUseCase";
-import type { StepDTO } from "@/domains/step/application/dto/StepDTO";
-import { publishRefreshEvent } from "@/lib/message-queue-publisher";
+import { StepRepository } from "@/domains/step/StepRepository";
+import { StepModel } from "@/domains/step/StepModel";
+import { MessageRepository } from "@/domains/message/MessageRepository";
+import { MessageModel } from "@/domains/message/MessageModel";
+import { KeyboardRepository } from "@/domains/keyboard/KeyboardRepository";
+import { KeyboardModel } from "@/domains/keyboard/KeyboardModel";
+import {
+  StepService,
+  type UpdateStepInput,
+} from "@/domains/step/StepService";
+import {
+  withDb,
+  jsonOk,
+  requireId,
+  notifyRefresh,
+  noContent,
+} from "@/lib/api/routeHelpers";
 
-/**
- * GET handler for getting a step by ID
- *
- * @param request - Next.js Request object
- * @param params - Route parameters containing the step ID
- * @returns NextResponse with step or error
- */
-export async function GET(
-  request: Request,
-  { params }: { params: { id: string } }
-): Promise<NextResponse<ApiResponse<StepDTO>>> {
-  try {
-    const { id } = params;
+const createStepService = (): StepService =>
+  new StepService(
+    new StepRepository(StepModel),
+    new MessageRepository(MessageModel),
+    new KeyboardRepository(KeyboardModel)
+  );
 
-    // Validate ID
-    if (!id) {
-      return NextResponse.json<ApiResponse<StepDTO>>(
-        {
-          error: {
-            code: "STEP_003",
-            message: "Step ID is required",
-          },
-        },
-        { status: 400 }
-      );
+type IdParams = { params: { id: string } };
+
+export async function GET(_request: Request, { params }: IdParams) {
+  return withDb(async () => {
+    const idError = requireId(params.id, "Step");
+    if (idError) {
+      return idError;
     }
-
-    // Instantiate repository
-    const stepRepository = new MongoStepRepository(StepModel);
-
-    // Instantiate use case
-    const getStepUseCase = new GetStepUseCaseImpl(stepRepository);
-
-    // Execute use case
-    const stepDTO = await getStepUseCase.execute(id);
-
-    // Return success response
-    return NextResponse.json<ApiResponse<StepDTO>>(
-      {
-        data: stepDTO,
-      },
-      { status: 200 }
-    );
-  } catch (error) {
-    // Handle not found errors
-    if (error instanceof Error && error.message.includes("not found")) {
-      return NextResponse.json<ApiResponse<StepDTO>>(
-        {
-          error: {
-            code: "STEP_003",
-            message: error.message,
-          },
-        },
-        { status: 404 }
-      );
-    }
-
-    // Handle other errors
-    return NextResponse.json<ApiResponse<StepDTO>>(
-      {
-        error: {
-          code: "STEP_003",
-          message:
-            error instanceof Error
-              ? error.message
-              : "An unexpected error occurred while retrieving step",
-        },
-      },
-      { status: 500 }
-    );
-  }
+    const stepDTO = await createStepService().get(params.id);
+    return jsonOk(stepDTO);
+  }, { fallback: "An unexpected error occurred while retrieving step" });
 }
 
-/**
- * PUT handler for updating a step
- *
- * Request body: UpdateStepInput (all fields optional except those being updated)
- *
- * @param request - Next.js Request object
- * @param params - Route parameters containing the step ID
- * @returns NextResponse with updated step or error
- */
-export async function PUT(
-  request: Request,
-  { params }: { params: { id: string } }
-): Promise<NextResponse<ApiResponse<StepDTO>>> {
-  try {
-    const { id } = params;
-
-    // Validate ID
-    if (!id) {
-      return NextResponse.json<ApiResponse<StepDTO>>(
-        {
-          error: {
-            code: "STEP_004",
-            message: "Step ID is required",
-          },
-        },
-        { status: 400 }
-      );
+export async function PUT(request: Request, { params }: IdParams) {
+  return withDb(async () => {
+    const idError = requireId(params.id, "Step");
+    if (idError) {
+      return idError;
     }
 
-    // Parse request body
     const body = await request.json();
-    console.log(body);
-    // Build input (all fields are optional for updates)
     const input: UpdateStepInput = {};
     if (body.humanReadableName !== undefined) {
       input.humanReadableName = body.humanReadableName.trim();
@@ -146,175 +66,24 @@ export async function PUT(
     if (body.hidden !== undefined) {
       input.hidden = body.hidden;
     }
-    // Explicitly handle isAi for both true and false values
     if (body.isAi !== undefined && body.isAi !== null) {
       input.isAi = Boolean(body.isAi);
     }
 
-    // Instantiate repositories
-    const stepRepository = new MongoStepRepository(StepModel);
-    const messageRepository = new MongoMessageRepository(MessageModel);
-    const keyboardRepository = new MongoKeyboardRepository(KeyboardModel);
-
-    // Instantiate use case
-    const updateStepUseCase = new UpdateStepUseCaseImpl(
-      stepRepository,
-      messageRepository,
-      keyboardRepository
-    );
-
-    // Execute use case
-    const stepDTO = await updateStepUseCase.execute(id, input);
-
-    // Notify viber service to refresh cache (fire-and-forget)
-    try {
-      publishRefreshEvent("steps");
-    } catch (error) {
-      console.error("Failed to publish refresh event:", error);
-    }
-
-    // Return success response
-    return NextResponse.json<ApiResponse<StepDTO>>(
-      {
-        data: stepDTO,
-      },
-      { status: 200 }
-    );
-  } catch (error) {
-    // Handle not found errors
-    if (error instanceof Error && error.message.includes("not found")) {
-      return NextResponse.json<ApiResponse<StepDTO>>(
-        {
-          error: {
-            code: "STEP_004",
-            message: error.message,
-          },
-        },
-        { status: 404 }
-      );
-    }
-
-    // Handle validation errors
-    if (
-      error instanceof Error &&
-      (error.message.includes("validation") ||
-        error.message.includes("invalid") ||
-        error.message.includes("required"))
-    ) {
-      return NextResponse.json<ApiResponse<StepDTO>>(
-        {
-          error: {
-            code: "STEP_004",
-            message: error.message,
-          },
-        },
-        { status: 400 }
-      );
-    }
-
-    // Handle other errors
-    return NextResponse.json<ApiResponse<StepDTO>>(
-      {
-        error: {
-          code: "STEP_004",
-          message:
-            error instanceof Error
-              ? error.message
-              : "An unexpected error occurred while updating step",
-        },
-      },
-      { status: 500 }
-    );
-  }
+    const stepDTO = await createStepService().update(params.id, input);
+    notifyRefresh("steps");
+    return jsonOk(stepDTO);
+  }, { fallback: "An unexpected error occurred while updating step" });
 }
 
-/**
- * DELETE handler for deleting a step
- *
- * @param request - Next.js Request object
- * @param params - Route parameters containing the step ID
- * @returns NextResponse with success or error
- */
-export async function DELETE(
-  request: Request,
-  { params }: { params: { id: string } }
-): Promise<NextResponse<ApiResponse<void>>> {
-  try {
-    const { id } = params;
-
-    // Validate ID
-    if (!id) {
-      return NextResponse.json<ApiResponse<void>>(
-        {
-          error: {
-            code: "STEP_005",
-            message: "Step ID is required",
-          },
-        },
-        { status: 400 }
-      );
+export async function DELETE(_request: Request, { params }: IdParams) {
+  return withDb(async () => {
+    const idError = requireId(params.id, "Step");
+    if (idError) {
+      return idError;
     }
-
-    // Instantiate repository
-    const stepRepository = new MongoStepRepository(StepModel);
-
-    // Instantiate use case
-    const deleteStepUseCase = new DeleteStepUseCaseImpl(stepRepository);
-
-    // Execute use case
-    await deleteStepUseCase.execute(id);
-
-    // Notify viber service to refresh cache (fire-and-forget)
-    try {
-      publishRefreshEvent("steps");
-    } catch (error) {
-      console.error("Failed to publish refresh event:", error);
-    }
-
-    // Return success response (204 No Content)
-    return new NextResponse(null, { status: 204 });
-  } catch (error) {
-    // Handle not found errors
-    if (error instanceof Error && error.message.includes("not found")) {
-      return NextResponse.json<ApiResponse<void>>(
-        {
-          error: {
-            code: "STEP_005",
-            message: error.message,
-          },
-        },
-        { status: 404 }
-      );
-    }
-
-    // Handle errors (e.g., step in use)
-    if (
-      error instanceof Error &&
-      (error.message.includes("in use") || error.message.includes("referenced"))
-    ) {
-      return NextResponse.json<ApiResponse<void>>(
-        {
-          error: {
-            code: "STEP_005",
-            message: error.message,
-          },
-        },
-        { status: 409 }
-      );
-    }
-
-    // Handle other errors
-    return NextResponse.json<ApiResponse<void>>(
-      {
-        error: {
-          code: "STEP_005",
-          message:
-            error instanceof Error
-              ? error.message
-              : "An unexpected error occurred while deleting step",
-        },
-      },
-      { status: 500 }
-    );
-  }
+    await createStepService().delete(params.id);
+    notifyRefresh("steps");
+    return noContent();
+  }, { fallback: "An unexpected error occurred while deleting step" });
 }

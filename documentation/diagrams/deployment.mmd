@@ -1,292 +1,49 @@
 %%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#ff6b6b','primaryTextColor':'#fff','primaryBorderColor':'#7C0000','lineColor':'#F8B229','secondaryColor':'#006100','tertiaryColor':'#fff'}}}%%
-graph TB
-    %% External
-    Internet[Internet<br/>External Traffic]
-    
-    %% Kubernetes Namespace
-    subgraph K8sNamespace["Kubernetes Namespace: vbar-production"]
-        direction TB
-        
-        %% Ingress Layer
-        subgraph IngressLayer["Ingress Layer"]
-            Ingress[Ingress Controller<br/>nginx-ingress<br/>Port: 80, 443]
-        end
-        
-        %% Application Services Layer
-        subgraph AppServices["Application Services"]
-            direction TB
-            
-            %% Admin Service Deployment
-            subgraph AdminDeployment["Admin Service Deployment"]
-                direction TB
-                AdminPod1[Admin Pod 1<br/>Next.js<br/>Replica 1]
-                AdminPod2[Admin Pod 2<br/>Next.js<br/>Replica 2]
-                AdminPod3[Admin Pod 3<br/>Next.js<br/>Replica 3]
-                AdminServiceK8s[Admin Service<br/>ClusterIP<br/>Port: 3000]
-                
-                AdminPod1 --> AdminServiceK8s
-                AdminPod2 --> AdminServiceK8s
-                AdminPod3 --> AdminServiceK8s
-            end
-            
-            %% Viber Service Deployment
-            subgraph ViberDeployment["Viber Service Deployment"]
-                direction TB
-                ViberPod1[Viber Pod 1<br/>Express<br/>Replica 1]
-                ViberPod2[Viber Pod 2<br/>Express<br/>Replica 2]
-                ViberServiceK8s[Viber Service<br/>ClusterIP<br/>Port: 3001]
-                
-                ViberPod1 --> ViberServiceK8s
-                ViberPod2 --> ViberServiceK8s
-            end
-            
-            %% AI Service Deployment
-            subgraph AIDeployment["AI Service Deployment"]
-                direction TB
-                AIPod1[AI Pod 1<br/>Express + gRPC<br/>Replica 1]
-                AIPod2[AI Pod 2<br/>Express + gRPC<br/>Replica 2]
-                AIServiceK8s[AI Service<br/>ClusterIP<br/>Port: 3002]
-                AIServiceGRPC[AI Service gRPC<br/>ClusterIP<br/>Port: 50051]
-                
-                AIPod1 --> AIServiceK8s
-                AIPod2 --> AIServiceK8s
-                AIPod1 --> AIServiceGRPC
-                AIPod2 --> AIServiceGRPC
-            end
-            
-            %% Analytics Service Deployment
-            subgraph AnalyticsDeployment["Analytics Service Deployment"]
-                direction TB
-                AnalyticsPod1[Analytics Pod 1<br/>Express<br/>Replica 1]
-                AnalyticsPod2[Analytics Pod 2<br/>Express<br/>Replica 2]
-                AnalyticsServiceK8s[Analytics Service<br/>ClusterIP<br/>Port: 3003]
-                
-                AnalyticsPod1 --> AnalyticsServiceK8s
-                AnalyticsPod2 --> AnalyticsServiceK8s
-            end
-            
-            %% Web3 Service Deployment
-            subgraph Web3Deployment["Web3 Service Deployment"]
-                direction TB
-                Web3Pod1[Web3 Pod 1<br/>Express + gRPC<br/>Replica 1]
-                Web3Pod2[Web3 Pod 2<br/>Express + gRPC<br/>Replica 2]
-                Web3ServiceK8s[Web3 Service<br/>ClusterIP<br/>Port: 3004]
-                Web3ServiceGRPC[Web3 Service gRPC<br/>ClusterIP<br/>Port: 50052]
-                
-                Web3Pod1 --> Web3ServiceK8s
-                Web3Pod2 --> Web3ServiceK8s
-                Web3Pod1 --> Web3ServiceGRPC
-                Web3Pod2 --> Web3ServiceGRPC
-            end
-        end
-        
-        %% Message Queue Layer
-        subgraph MQLayer["Message Queue Layer"]
-            direction TB
-            RabbitMQStatefulSet[RabbitMQ StatefulSet<br/>Replicas: 3]
-            RabbitMQPod1[RabbitMQ Pod 1<br/>Master]
-            RabbitMQPod2[RabbitMQ Pod 2<br/>Replica]
-            RabbitMQPod3[RabbitMQ Pod 3<br/>Replica]
-            RabbitMQService[RabbitMQ Service<br/>ClusterIP<br/>Port: 5672, 15672]
-            RabbitMQPV1[RabbitMQ PV 1<br/>Persistent Volume]
-            RabbitMQPV2[RabbitMQ PV 2<br/>Persistent Volume]
-            RabbitMQPV3[RabbitMQ PV 3<br/>Persistent Volume]
-            
-            RabbitMQStatefulSet --> RabbitMQPod1
-            RabbitMQStatefulSet --> RabbitMQPod2
-            RabbitMQStatefulSet --> RabbitMQPod3
-            RabbitMQPod1 --> RabbitMQService
-            RabbitMQPod2 --> RabbitMQService
-            RabbitMQPod3 --> RabbitMQService
-            RabbitMQPod1 -.->|Mount| RabbitMQPV1
-            RabbitMQPod2 -.->|Mount| RabbitMQPV2
-            RabbitMQPod3 -.->|Mount| RabbitMQPV3
-        end
-        
-        %% Database Layer
-        subgraph DatabaseLayer["Database Layer (StatefulSets)"]
-            direction TB
-            
-            %% Admin MongoDB
-            subgraph AdminMongoDB["Admin MongoDB StatefulSet"]
-                AdminMongoPod1[Admin MongoDB Pod 1<br/>Primary<br/>Replica 1]
-                AdminMongoPod2[Admin MongoDB Pod 2<br/>Secondary<br/>Replica 2]
-                AdminMongoPod3[Admin MongoDB Pod 3<br/>Secondary<br/>Replica 3]
-                AdminMongoService[Admin MongoDB Service<br/>ClusterIP<br/>Port: 27017]
-                AdminMongoPV1[Admin MongoDB PV 1<br/>Persistent Volume<br/>100GB]
-                AdminMongoPV2[Admin MongoDB PV 2<br/>Persistent Volume<br/>100GB]
-                AdminMongoPV3[Admin MongoDB PV 3<br/>Persistent Volume<br/>100GB]
-                
-                AdminMongoPod1 --> AdminMongoService
-                AdminMongoPod2 --> AdminMongoService
-                AdminMongoPod3 --> AdminMongoService
-                AdminMongoPod1 -.->|Mount| AdminMongoPV1
-                AdminMongoPod2 -.->|Mount| AdminMongoPV2
-                AdminMongoPod3 -.->|Mount| AdminMongoPV3
-            end
-            
-            %% Bot MongoDB
-            subgraph BotMongoDB["Bot MongoDB StatefulSet"]
-                BotMongoPod1[Bot MongoDB Pod 1<br/>Primary<br/>Replica 1]
-                BotMongoPod2[Bot MongoDB Pod 2<br/>Secondary<br/>Replica 2]
-                BotMongoPod3[Bot MongoDB Pod 3<br/>Secondary<br/>Replica 3]
-                BotMongoService[Bot MongoDB Service<br/>ClusterIP<br/>Port: 27017]
-                BotMongoPV1[Bot MongoDB PV 1<br/>Persistent Volume<br/>500GB]
-                BotMongoPV2[Bot MongoDB PV 2<br/>Persistent Volume<br/>500GB]
-                BotMongoPV3[Bot MongoDB PV 3<br/>Persistent Volume<br/>500GB]
-                
-                BotMongoPod1 --> BotMongoService
-                BotMongoPod2 --> BotMongoService
-                BotMongoPod3 --> BotMongoService
-                BotMongoPod1 -.->|Mount| BotMongoPV1
-                BotMongoPod2 -.->|Mount| BotMongoPV2
-                BotMongoPod3 -.->|Mount| BotMongoPV3
-            end
-            
-            %% AI MongoDB
-            subgraph AIMongoDB["AI MongoDB StatefulSet"]
-                AIMongoPod1[AI MongoDB Pod 1<br/>Primary<br/>Replica 1]
-                AIMongoPod2[AI MongoDB Pod 2<br/>Secondary<br/>Replica 2]
-                AIMongoService[AIMongoDB Service<br/>ClusterIP<br/>Port: 27017]
-                AIMongoPV1[AI MongoDB PV 1<br/>Persistent Volume<br/>200GB]
-                AIMongoPV2[AI MongoDB PV 2<br/>Persistent Volume<br/>200GB]
-                
-                AIMongoPod1 --> AIMongoService
-                AIMongoPod2 --> AIMongoService
-                AIMongoPod1 -.->|Mount| AIMongoPV1
-                AIMongoPod2 -.->|Mount| AIMongoPV2
-            end
-            
-            %% Analytics MongoDB
-            subgraph AnalyticsMongoDB["Analytics MongoDB StatefulSet"]
-                AnalyticsMongoPod1[Analytics MongoDB Pod 1<br/>Primary<br/>Replica 1]
-                AnalyticsMongoPod2[Analytics MongoDB Pod 2<br/>Secondary<br/>Replica 2]
-                AnalyticsMongoPod3[Analytics MongoDB Pod 3<br/>Secondary<br/>Replica 3]
-                AnalyticsMongoService[Analytics MongoDB Service<br/>ClusterIP<br/>Port: 27017]
-                AnalyticsMongoPV1[Analytics MongoDB PV 1<br/>Persistent Volume<br/>1TB]
-                AnalyticsMongoPV2[Analytics MongoDB PV 2<br/>Persistent Volume<br/>1TB]
-                AnalyticsMongoPV3[Analytics MongoDB PV 3<br/>Persistent Volume<br/>1TB]
-                
-                AnalyticsMongoPod1 --> AnalyticsMongoService
-                AnalyticsMongoPod2 --> AnalyticsMongoService
-                AnalyticsMongoPod3 --> AnalyticsMongoService
-                AnalyticsMongoPod1 -.->|Mount| AnalyticsMongoPV1
-                AnalyticsMongoPod2 -.->|Mount| AnalyticsMongoPV2
-                AnalyticsMongoPod3 -.->|Mount| AnalyticsMongoPV3
-            end
-            
-            %% Web3 MongoDB
-            subgraph Web3MongoDB["Web3 MongoDB StatefulSet"]
-                Web3MongoPod1[Web3 MongoDB Pod 1<br/>Primary<br/>Replica 1]
-                Web3MongoPod2[Web3 MongoDB Pod 2<br/>Secondary<br/>Replica 2]
-                Web3MongoPod3[Web3 MongoDB Pod 3<br/>Secondary<br/>Replica 3]
-                Web3MongoService[Web3 MongoDB Service<br/>ClusterIP<br/>Port: 27017]
-                Web3MongoPV1[Web3 MongoDB PV 1<br/>Persistent Volume<br/>200GB]
-                Web3MongoPV2[Web3 MongoDB PV 2<br/>Persistent Volume<br/>200GB]
-                Web3MongoPV3[Web3 MongoDB PV 3<br/>Persistent Volume<br/>200GB]
-                
-                Web3MongoPod1 --> Web3MongoService
-                Web3MongoPod2 --> Web3MongoService
-                Web3MongoPod3 --> Web3MongoService
-                Web3MongoPod1 -.->|Mount| Web3MongoPV1
-                Web3MongoPod2 -.->|Mount| Web3MongoPV2
-                Web3MongoPod3 -.->|Mount| Web3MongoPV3
-            end
-        end
-        
-        %% Ollama Service (Optional, for self-hosted AI)
-        subgraph OllamaDeployment["Ollama Service Deployment (Optional)"]
-            direction TB
-            OllamaPod1[Ollama Pod 1<br/>LLM Service<br/>GPU Enabled]
-            OllamaPod2[Ollama Pod 2<br/>LLM Service<br/>GPU Enabled]
-            OllamaService[Ollama Service<br/>ClusterIP<br/>Port: 11434]
-            OllamaPV1[Ollama PV 1<br/>Persistent Volume<br/>Model Storage]
-            OllamaPV2[Ollama PV 2<br/>Persistent Volume<br/>Model Storage]
-            
-            OllamaPod1 --> OllamaService
-            OllamaPod2 --> OllamaService
-            OllamaPod1 -.->|Mount| OllamaPV1
-            OllamaPod2 -.->|Mount| OllamaPV2
-        end
-    end
-    
-    %% External Connections
-    Internet -->|HTTPS:443<br/>HTTP:80| Ingress
-    
-    %% Ingress to Services
-    Ingress -->|Route: /admin/*| AdminServiceK8s
-    Ingress -->|Route: /api/viber/*| ViberServiceK8s
-    Ingress -->|Route: /api/ai/*| AIServiceK8s
-    Ingress -->|Route: /api/analytics/*| AnalyticsServiceK8s
-    Ingress -->|Route: /api/web3/*| Web3ServiceK8s
-    
-    %% Service-to-Service Communication
-    AdminPod1 -->|REST API| ViberServiceK8s
-    AdminPod2 -->|REST API| ViberServiceK8s
-    AdminPod3 -->|REST API| ViberServiceK8s
-    AdminPod1 -->|REST API| AIServiceK8s
-    AdminPod2 -->|REST API| AIServiceK8s
-    AdminPod3 -->|REST API| AIServiceK8s
-    AdminPod1 -->|REST API| AnalyticsServiceK8s
-    AdminPod2 -->|REST API| AnalyticsServiceK8s
-    AdminPod3 -->|REST API| AnalyticsServiceK8s
-    AdminPod1 -->|REST API| Web3ServiceK8s
-    AdminPod2 -->|REST API| Web3ServiceK8s
-    AdminPod3 -->|REST API| Web3ServiceK8s
-    
-    ViberPod1 -->|gRPC:50051| AIServiceGRPC
-    ViberPod2 -->|gRPC:50051| AIServiceGRPC
-    ViberPod1 -->|gRPC:50052| Web3ServiceGRPC
-    ViberPod2 -->|gRPC:50052| Web3ServiceGRPC
-    
-    AIPod1 -->|gRPC:50052| Web3ServiceGRPC
-    AIPod2 -->|gRPC:50052| Web3ServiceGRPC
-    
-    ViberPod1 -->|Publish Events| RabbitMQService
-    ViberPod2 -->|Publish Events| RabbitMQService
-    Web3Pod1 -->|Publish Events| RabbitMQService
-    Web3Pod2 -->|Publish Events| RabbitMQService
-    RabbitMQService -->|Consume Events| AnalyticsPod1
-    RabbitMQService -->|Consume Events| AnalyticsPod2
-    
-    %% Database Connections
-    AdminPod1 -->|MongoDB:27017| AdminMongoService
-    AdminPod2 -->|MongoDB:27017| AdminMongoService
-    AdminPod3 -->|MongoDB:27017| AdminMongoService
-    
-    ViberPod1 -->|MongoDB:27017| BotMongoService
-    ViberPod2 -->|MongoDB:27017| BotMongoService
-    
-    AIPod1 -->|MongoDB:27017| AIMongoService
-    AIPod2 -->|MongoDB:27017| AIMongoService
-    
-    AnalyticsPod1 -->|MongoDB:27017| AnalyticsMongoService
-    AnalyticsPod2 -->|MongoDB:27017| AnalyticsMongoService
-    
-    Web3Pod1 -->|MongoDB:27017| Web3MongoService
-    Web3Pod2 -->|MongoDB:27017| Web3MongoService
-    
-    %% AI Service to Ollama (Optional)
-    AIPod1 -.->|HTTP:11434<br/>Optional| OllamaService
-    AIPod2 -.->|HTTP:11434<br/>Optional| OllamaService
-    
-    %% Styling
-    classDef ingressBox fill:#FF6B6B,stroke:#333,stroke-width:3px,color:#fff
-    classDef deploymentBox fill:#4ECDC4,stroke:#333,stroke-width:2px,color:#000
-    classDef serviceBox fill:#95E1D3,stroke:#333,stroke-width:2px,color:#000
-    classDef podBox fill:#FFF9CA,stroke:#333,stroke-width:1px,color:#000
-    classDef dbBox fill:#F38181,stroke:#333,stroke-width:2px,color:#fff
-    classDef mqBox fill:#AA96DA,stroke:#333,stroke-width:2px,color:#fff
-    classDef pvBox fill:#FCBAD3,stroke:#333,stroke-width:1px,color:#000
-    classDef externalBox fill:#C7CEEA,stroke:#333,stroke-width:2px,color:#000
-    
-    class Ingress ingressBox
-    class AdminDeployment,ViberDeployment,AIDeployment,AnalyticsDeployment,Web3Deployment,OllamaDeployment deploymentBox
-    class AdminServiceK8s,ViberServiceK8s,AIServiceK8s,AIServiceGRPC,AnalyticsServiceK8s,Web3ServiceK8s,Web3ServiceGRPC,RabbitMQService serviceBox
-    class AdminPod1,AdminPod2,AdminPod3,ViberPod1,ViberPod2,AIPod1,AIPod2,AnalyticsPod1,AnalyticsPod2,Web3Pod1,Web3Pod2,OllamaPod1,OllamaPod2 podBox
-    class AdminMongoDB,BotMongoDB,AIMongoDB,AnalyticsMongoDB,Web3MongoDB dbBox
-    class RabbitMQStatefulSet,RabbitMQPod1,RabbitMQPod2,RabbitMQPod3 mqBox
-    class AdminMongoPod1,AdminMongoPod2,AdminMongoPod3,BotMongoPod1,BotMongoPod2,BotMongoPod3,AIMongoPod1,AIMongoPod2,AnalyticsMongoPod1,AnalyticsMongoPod2,AnalyticsMongoPod3,Web3MongoPod1,Web3MongoPod2,Web3MongoPod3 dbBox
-    class AdminMongoPV1,AdminMongoPV2,AdminMongoPV3,BotMongoPV1,BotMongoPV2,BotMongoPV3,AIMongoPV1,AIMongoPV2,AnalyticsMongoPV1,AnalyticsMongoPV2,AnalyticsMongoPV3,Web3MongoPV1,Web3MongoPV2,Web3MongoPV3,RabbitMQPV1,RabbitMQPV2,RabbitMQPV3,OllamaPV1,OllamaPV2 pvBox
-    class Internet externalBox
+flowchart TB
+    Internet[Internet]
+    GHA[GitHub Actions]
+    GHCR[(GHCR<br/>vbar-admin / vbar-viber / vbar-ai)]
 
+    subgraph VPS["VPS — Docker Compose"]
+        Deploy[deploy.sh<br/>compose pull + up]
+        Proxy[Reverse proxy<br/>Caddy / TLS]
+
+        subgraph Default["Default profile — 5 containers"]
+            Admin[vbar-admin :3000]
+            Viber[vbar-viber :3001]
+            AI[vbar-ai<br/>127.0.0.1:3002<br/>gRPC 50051 internal]
+            Mongo[(mongodb<br/>127.0.0.1:27017)]
+            Rabbit[rabbitmq<br/>127.0.0.1:5672 / 15672]
+        end
+
+        Ollama[ollama<br/>profile: local-llm]
+        Chroma[chromadb<br/>profile: rag]
+    end
+
+    GHA -->|build + push| GHCR
+    GHA -->|SSH| Deploy
+    GHCR -->|images| Deploy
+
+    Internet --> Proxy
+    Proxy --> Admin
+    Proxy -->|/webhook/viber| Viber
+
+    Viber -->|gRPC| AI
+    Viber -->|REST| Admin
+    Admin -->|publish viber.refresh| Rabbit
+    Rabbit -->|consume refresh| Viber
+    Admin --> Mongo
+    Viber --> Mongo
+    AI --> Mongo
+    AI -.-> Ollama
+    AI -.-> Chroma
+
+    classDef svc fill:#4ECDC4,stroke:#333,stroke-width:2px,color:#000
+    classDef db fill:#95E1D3,stroke:#333,stroke-width:2px,color:#000
+    classDef mq fill:#F38181,stroke:#333,stroke-width:2px,color:#000
+    classDef ext fill:#C7CEEA,stroke:#333,stroke-width:2px,color:#000
+
+    class Admin,Viber,AI,Ollama,Chroma,Proxy,Deploy svc
+    class Mongo db
+    class Rabbit mq
+    class GHA,GHCR,Internet ext

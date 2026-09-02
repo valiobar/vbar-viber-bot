@@ -8,26 +8,32 @@ import mongoose from "mongoose";
 import { ConfigHelper } from "@vbar/shared";
 import { seedAdminUser } from "./seed";
 // Import models to ensure they're registered
-import { UserModel } from "@/domains/user/adapters/out/models/UserModel";
-import { SessionModel } from "@/domains/user/adapters/out/models/SessionModel";
-import { KeyboardModel } from "@/domains/keyboard/adapters/out/models/KeyboardModel";
+import { UserModel } from "@/domains/user/UserModel";
+import { SessionModel } from "@/domains/user/SessionModel";
+import { KeyboardModel } from "@/domains/keyboard/KeyboardModel";
 
 // Default database name - using 'admin_service' to avoid conflicts with MongoDB's 'admin' auth database
 const dbName = ConfigHelper.getEnv("MONGODB_DB_NAME", "admin_service");
 
-// Build connection URI with authSource to authenticate against 'admin' database
-// but use a different database for application data
-const defaultUri = `mongodb://admin:admin123@localhost:27017/${dbName}?authSource=admin`;
-let uri = ConfigHelper.getEnv("MONGODB_URI", defaultUri);
+/**
+ * Resolve MONGODB_URI at runtime (not module load) so Next.js build-time
+ * imports succeed without the env var set. Fail fast on first DB use.
+ */
+function resolveMongoUri(): string {
+  const rawUri = process.env.MONGODB_URI;
+  if (!rawUri) {
+    throw new Error(
+      "MONGODB_URI is required but not set. Add it to the environment or .env file."
+    );
+  }
 
-// Ensure authSource is included if not already present (for custom URIs)
-if (uri && !uri.includes("authSource=")) {
-  const separator = uri.includes("?") ? "&" : "?";
-  uri = `${uri}${separator}authSource=admin`;
-}
+  // Authenticate against 'admin' when URI lacks authSource (custom/local URIs)
+  if (!rawUri.includes("authSource=")) {
+    const separator = rawUri.includes("?") ? "&" : "?";
+    return `${rawUri}${separator}authSource=admin`;
+  }
 
-if (!uri) {
-  throw new Error("Please add your Mongo URI to the .env file");
+  return rawUri;
 }
 
 /**
@@ -80,6 +86,7 @@ export async function connectToDatabase(): Promise<typeof mongoose> {
 
   if (!cached.promise) {
     console.log("Creating new MongoDB connection...");
+    const uri = resolveMongoUri();
     const opts = {
       bufferCommands: false,
       dbName,

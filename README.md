@@ -1,15 +1,14 @@
 # vbar-viber-bot
 
-A microservices-based Viber bot platform with AI-powered message processing, analytics, and administrative dashboard. Built with Node.js, Next.js, TypeScript, MongoDB (Mongoose ODM), and RabbitMQ, following Hexagonal Architecture (Ports and Adapters) principles.
+A microservices-based Viber bot platform with AI-powered message processing and an administrative dashboard. Built with Node.js, Next.js, TypeScript, MongoDB (Mongoose ODM), and RabbitMQ. Admin content CRUD is `route → service → repository`; the admin UI is Feature-Sliced Design.
 
 ## 🏗️ Architecture Overview
 
-This project follows a **microservices architecture** with four independent services:
+This project follows a **microservices architecture** with three core services:
 
 - **Admin Service** (Next.js): Administrative dashboard and user interface
 - **Viber Service** (Node.js/Express): Viber bot webhook handling and message processing
 - **AI Service** (Node.js/Express): AI model integration and natural language processing
-- **Analytics Service** (Node.js/Express): Data aggregation, reporting, and analytics
 
 ### Architecture Diagram
 
@@ -17,16 +16,16 @@ For a detailed visual representation of the system architecture, see:
 
 - [Architecture Diagram](./documentation/diagrams/architecture.mmd) - High-level system architecture
 - [Data Flow Diagram](./documentation/diagrams/data-flow.mmd) - Request/response and event flows
-- [Deployment Diagram](./documentation/diagrams/deployment.mmd) - Kubernetes deployment architecture
+- [Deployment Diagram](./documentation/diagrams/deployment.mmd) - Compose-on-VPS deployment architecture
 
 ### Key Features
 
-- **Hexagonal Architecture**: All services follow Ports and Adapters pattern for clean separation of concerns
+- **Clear layering**: admin server is `route → service → repository`; admin client is FSD (`app → views → widgets → features → entities → shared`)
 - **Multi-Provider AI Support**: Supports both self-hosted (Ollama) and external AI APIs (OpenAI, Anthropic, Google)
-- **Event-Driven Communication**: Asynchronous messaging via RabbitMQ for analytics events
+- **Event-Driven Communication**: Asynchronous messaging via RabbitMQ for cache-refresh events
 - **High-Performance gRPC**: Viber ↔ AI communication using gRPC for low-latency message processing
-- **Database per Service**: Each service maintains its own MongoDB database instance
-- **Containerized**: Docker and Kubernetes ready for production deployment
+- **Shared MongoDB**: Single MongoDB instance with per-service databases (`admin_service`, `bot`, `ai`)
+- **Containerized**: Docker Compose on a VPS; images built in CI and pushed to GHCR
 
 ## 🚀 Quick Start
 
@@ -51,36 +50,30 @@ For a detailed visual representation of the system architecture, see:
    npm install
    ```
 
-3. **Configure environment variables**:
+3. **Configure environment variables** (single file for the whole system):
 
    ```bash
-   # Copy example environment files
    cp .env.example .env
-   cp services/admin/.env.example services/admin/.env
-   cp services/viber/.env.example services/viber/.env
-   cp services/ai/.env.example services/ai/.env
-   cp services/analytics/.env.example services/analytics/.env
-
-   # Edit each .env file with your configuration
+   # Edit .env once — Compose, deploy.sh, and local npm all read it
    ```
 
-4. **Start infrastructure services** (MongoDB, RabbitMQ, Ollama):
+4. **Start the Compose stack** (MongoDB, RabbitMQ + app services):
 
    ```bash
-   docker compose -f infrastructure/docker-compose.yml up -d
+   npm run docker:up -- --build -d
+   # or: docker compose --env-file .env -f infrastructure/docker-compose.yml up -d --build
    ```
 
-5. **Run services in development mode**:
+5. **Or run services in development mode**:
 
    ```bash
    # Option 1: Run all services from root
    npm run dev
 
    # Option 2: Run services individually
-   npm run admin:dev    # Admin service on http://localhost:3000
-   npm run viber:dev    # Viber service on http://localhost:3001
-   npm run ai:dev       # AI service on http://localhost:3002
-   npm run analytics:dev # Analytics service on http://localhost:3003
+   npm run dev:admin    # Admin service on http://localhost:3000
+   npm run dev:viber    # Viber service on http://localhost:3001
+   npm run dev:ai       # AI service on http://localhost:3002
    ```
 
 ### Verify Installation
@@ -90,26 +83,26 @@ Check service health:
 ```bash
 curl http://localhost:3000/api/health  # Admin Service
 curl http://localhost:3001/health      # Viber Service
-curl http://localhost:3002/health      # AI Service
-curl http://localhost:3003/health      # Analytics Service
+curl http://localhost:3002/api/health  # AI Service
 ```
 
 ## 📚 Documentation
 
 Comprehensive documentation is available in the `documentation/` directory:
 
-- **[Architecture Documentation](./documentation/architecture.md)** - System architecture, service descriptions, database schemas, communication patterns, and Hexagonal Architecture details
+- **[Architecture Documentation](./documentation/architecture.md)** - System architecture, service descriptions, communication patterns, and admin FSD layout
 - **[Setup Guide](./documentation/setup.md)** - Detailed development environment setup, service-specific configuration, and troubleshooting
 - **[API Documentation](./documentation/api.md)** - Complete API reference for all services, including REST APIs, gRPC APIs, and message queue contracts
-- **[Deployment Guide](./documentation/deployment.md)** - Docker and Kubernetes deployment procedures, production configuration, and scaling strategies
+- **[Deployment Guide](./documentation/deployment.md)** - Compose-on-VPS deployment, GHCR images, production configuration
+- **[RAG](./documentation/rag.md)** - How RAG is implemented, configured, and used (Chroma + memory)
 
 ### Architecture Diagrams
 
 Visual representations of the system:
 
-- [Architecture Diagram](./documentation/diagrams/architecture.mmd) - Service architecture with Hexagonal Architecture layers
+- [Architecture Diagram](./documentation/diagrams/architecture.mmd) - Service architecture (5-container topology)
 - [Data Flow Diagram](./documentation/diagrams/data-flow.mmd) - Request/response flows and event processing
-- [Deployment Diagram](./documentation/diagrams/deployment.mmd) - Kubernetes deployment architecture
+- [Deployment Diagram](./documentation/diagrams/deployment.mmd) - Compose-on-VPS deployment architecture
 
 ## 🛠️ Development Workflow
 
@@ -117,24 +110,22 @@ Visual representations of the system:
 
 ```
 vbar-viber-bot/
-├── services/              # Microservices
+├── services/              # Microservices (Dockerfiles live here)
 │   ├── admin/             # Next.js admin service
 │   ├── viber/             # Viber bot service
-│   ├── ai/                # AI processing service
-│   └── analytics/         # Analytics service
+│   └── ai/                # AI processing service
 ├── packages/              # Shared packages
 │   └── shared/            # Common types, utilities, and configurations
-├── infrastructure/        # Infrastructure as Code
-│   ├── docker/            # Dockerfiles
-│   ├── docker-compose.yml # Docker Compose configuration
-│   └── k8s/               # Kubernetes manifests
+├── infrastructure/        # Docker Compose stack
+│   ├── docker-compose.yml
+│   └── docker-compose.override.yml.example
 ├── documentation/         # Project documentation
 │   ├── architecture.md    # Architecture documentation
 │   ├── setup.md           # Setup guide
 │   ├── api.md             # API documentation
 │   ├── deployment.md      # Deployment guide
 │   └── diagrams/          # Architecture diagrams
-└── plans/                 # Implementation plans
+└── .github/workflows/     # CI/CD (build → GHCR → VPS deploy)
 ```
 
 ### Available Scripts
@@ -150,15 +141,14 @@ vbar-viber-bot/
 
 **Service-Specific**:
 
-- `npm run admin:dev` - Run admin service
-- `npm run viber:dev` - Run viber service
-- `npm run ai:dev` - Run AI service
-- `npm run analytics:dev` - Run analytics service
+- `npm run dev:admin` - Run admin service
+- `npm run dev:viber` - Run viber service
+- `npm run dev:ai` - Run AI service
 
 ### Development Best Practices
 
-1. **Follow Hexagonal Architecture**: All services must follow the Ports and Adapters pattern
-2. **Use Shared Package**: Import types and utilities from `@shared` package
+1. **Follow the documented layering**: `route → service → repository` on the server; FSD on the admin client
+2. **Use Shared Package**: Import types and utilities from `@vbar/shared`
 3. **TypeScript First**: All code must be TypeScript with strict type checking
 4. **Write Tests**: Add tests for new features and maintain test coverage
 5. **Document Changes**: Update relevant documentation when making changes
@@ -169,7 +159,7 @@ vbar-viber-bot/
 - **TypeScript**: Strict mode enabled
 - **Linting**: ESLint with project-specific rules
 - **Formatting**: Prettier for consistent code formatting
-- **Imports**: Use absolute imports from `@shared` package
+- **Imports**: Use `@vbar/shared` and `@vbar/shared/infra` (Mongo/RabbitMQ helpers)
 
 ## 🐳 Docker Development
 
@@ -178,37 +168,25 @@ vbar-viber-bot/
 Start all services with Docker Compose:
 
 ```bash
-# Start all services
-docker compose -f infrastructure/docker-compose.yml up --build
+# Start all services (reads root .env)
+docker compose --env-file .env -f infrastructure/docker-compose.yml up --build
 
 # Start in detached mode
-docker compose -f infrastructure/docker-compose.yml up -d
+docker compose --env-file .env -f infrastructure/docker-compose.yml up -d
 
 # View logs
-docker compose -f infrastructure/docker-compose.yml logs -f
+docker compose --env-file .env -f infrastructure/docker-compose.yml logs -f
 
 # Stop services
-docker compose -f infrastructure/docker-compose.yml down
+docker compose --env-file .env -f infrastructure/docker-compose.yml down
 ```
 
 ### Development vs Production
 
-- **Development**: Services run individually with hot reload
-- **Production**: Services containerized with Docker Compose or Kubernetes
+- **Development**: `docker compose ... up --build` (or run services individually with hot reload)
+- **Production**: GitHub Actions builds images → GHCR → VPS runs `deploy.sh` (`pull` + `up -d`, no build)
 
-## ☸️ Kubernetes Deployment
-
-Kubernetes manifests are available in `infrastructure/k8s/`:
-
-```bash
-# Apply all Kubernetes resources
-kubectl apply -f infrastructure/k8s/namespace.yaml
-kubectl apply -f infrastructure/k8s/configmap.yaml
-kubectl apply -f infrastructure/k8s/secrets.yaml
-kubectl apply -f infrastructure/k8s/
-```
-
-See [Deployment Guide](./documentation/deployment.md) for detailed deployment procedures.
+See [Deployment Guide](./documentation/deployment.md) for the full VPS + reverse-proxy setup.
 
 ## 🤝 Contributing
 
@@ -228,8 +206,8 @@ We welcome contributions! Please follow these guidelines:
 
    - Follow TypeScript best practices
    - Maintain test coverage
-   - Follow Hexagonal Architecture principles
-   - Use shared types from `@shared` package
+   - Follow `route → service → repository` (server) and FSD (admin client)
+   - Use shared types from `@vbar/shared`
 
 2. **Documentation**:
 
@@ -275,12 +253,11 @@ Before contributing, ensure you have:
 
 This project is in active development. Current status:
 
-- ✅ Project structure and documentation
-- ✅ All four services with Hexagonal Architecture
-- ✅ Docker and Kubernetes configurations
+- ✅ Three core services (admin, viber, ai) on a 5-container Compose stack
+- ✅ Docker Compose stack (5 default containers) + GHCR deploy workflow
 - ✅ Shared package with common types and utilities
 - 🚧 Feature implementation (in progress)
-- 🚧 Testing and CI/CD (in progress)
+- 🚧 Testing (in progress)
 
 ## 🔗 Related Resources
 
@@ -288,6 +265,7 @@ This project is in active development. Current status:
 - [Setup Guide](./documentation/setup.md)
 - [API Documentation](./documentation/api.md)
 - [Deployment Guide](./documentation/deployment.md)
+- [RAG](./documentation/rag.md)
 
 ## 📝 License
 

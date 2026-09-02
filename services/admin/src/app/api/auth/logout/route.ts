@@ -9,12 +9,10 @@
 
 import { NextResponse } from "next/server";
 import type { ApiResponse } from "@vbar/shared";
-import { LogoutUseCase } from "@/domains/user/application/use-cases/LogoutUseCase";
-import { MongoSessionRepository } from "@/domains/user/adapters/out/repositories/SessionRepository";
-import type {
-  LogoutRequest,
-  LogoutResponse,
-} from "@/domains/user/ports/in/AuthPort";
+import { AuthService } from "@/domains/user/AuthService";
+import { UserRepository } from "@/domains/user/UserRepository";
+import { SessionRepository } from "@/domains/user/SessionRepository";
+import type { LogoutRequest, LogoutResponse } from "@/domains/user/types";
 
 /**
  * POST handler for logout endpoint
@@ -76,14 +74,12 @@ export async function POST(
       refreshToken: refreshToken.trim(),
     };
 
-    // Instantiate repository
-    const sessionRepository = new MongoSessionRepository();
+    const authService = new AuthService(
+      new UserRepository(),
+      new SessionRepository()
+    );
 
-    // Instantiate use case
-    const logoutUseCase = new LogoutUseCase(sessionRepository);
-
-    // Execute logout use case
-    const logoutResponse = await logoutUseCase.execute(logoutRequest);
+    const logoutResponse = await authService.logout(logoutRequest);
 
     // Create response
     const response = NextResponse.json<ApiResponse<LogoutResponse>>(

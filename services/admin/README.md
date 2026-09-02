@@ -4,60 +4,44 @@ Next.js application for the Viber bot administrative dashboard.
 
 ## Overview
 
-The Admin Service provides a web-based interface for managing the Viber bot system, including:
+The Admin Service provides a web-based CMS for the Viber bot:
 
-- User management and authentication
-- System configuration and settings
-- Service monitoring and health checks
-- Content management for bot responses
-- Analytics dashboard
+- Login / session (JWT)
+- Messages, keyboards, and steps CRUD
+- Singleton bot settings
+- Knowledge Base page (`/knowledge-base`): upload files, ingest URLs, list / delete / clear sources (thin proxy to AI)
+- Health check
+- RabbitMQ refresh events so viber reloads its cache
 
 ## Technology Stack
 
 - **Framework**: Next.js 14+ (App Router)
 - **Language**: TypeScript
-- **Database**: MongoDB (admin database)
-- **Architecture**: Hexagonal Architecture (adapted for Next.js)
+- **Database**: MongoDB (`admin_service`)
+- **Server**: `route → service → repository`
+- **Client**: Feature-Sliced Design (`app → views → widgets → features → entities → shared`)
 
 ## Project Structure
 
 ```
-services/admin/
-├── src/
-│   ├── app/                    # Next.js App Router
-│   │   ├── api/                # API routes (input adapters)
-│   │   ├── layout.tsx          # Root layout
-│   │   └── page.tsx            # Home page
-│   ├── domains/                # Domains layer (organized by domain)
-│   │   └── user/               # User domain
-│   │       ├── entities/      # Domain entities
-│   │       ├── adapters/      # Domain adapters (in/out)
-│   │       ├── application/   # Use cases
-│   │       ├── ports/         # Ports (interfaces)
-│   │       └── lib/           # Domain utilities (auth, jwt, password)
-│   ├── lib/                    # Shared utilities
-│   │   └── mongodb.ts          # MongoDB connection
-│   └── types/                  # Service-specific types
-├── package.json
-├── tsconfig.json
-├── next.config.js
-├── .env.example
-├── Dockerfile
-└── README.md
+services/admin/src/
+├── app/                         # App Router + FSD app layer
+│   ├── api/                     # REST routes (server; not FSD-sliced)
+│   ├── layout.tsx               # ThemeProvider, AuthProvider, DashboardLayoutWrapper
+│   └── **/page.tsx              # Thin default-export wrappers → views
+├── views/                       # FSD pages layer (one slice per route)
+├── widgets/                     # Layout, side menu, list screens
+├── features/                    # Forms, filters, auth UI
+├── entities/                    # DTO types, client api/, presentational ui/, stores
+├── shared/                      # Pagination, theme, http, useResourceList
+├── domains/                     # Server: flat per-domain folders
+│   └── <x>/                     # Model / Repository / Service / DTO / types / index
+│                                # Repositories are concrete Mongo classes (no ports)
+├── lib/                         # mongodb, auth, api helpers, refresh publisher
+└── middleware.ts
 ```
 
-## Hexagonal Architecture
-
-The Admin Service follows Hexagonal Architecture principles organized by domain:
-
-- **Next.js App Router** serves as the input adapter (HTTP layer)
-- **Domains Layer** contains business logic, entities, use cases, ports, and adapters organized by domain (e.g., `user/`)
-- Each domain contains:
-  - **Entities**: Domain models and business logic
-  - **Application**: Use cases and application services
-  - **Ports**: Interfaces for input/output operations
-  - **Adapters**: Infrastructure implementations (repositories, API routes)
-  - **Lib**: Domain-specific utilities
+Client import rules: slices only through `index.ts`; the only `@/domains` imports on the client are `entities/*/model/types.ts` (`import type`). Do not add root `components/`, `store/`, or `types/` folders.
 
 ## Setup
 
@@ -78,12 +62,13 @@ The Admin Service follows Hexagonal Architecture principles organized by domain:
 2. Copy environment variables:
 
    ```bash
-   cp .env.example .env
+   cp ../../.env.example ../../.env
+   # Edit the repo-root .env (single system config)
    ```
 
 3. Configure environment variables in `.env`:
    - `MONGODB_URI`: MongoDB connection string
-   - `MONGODB_DB_NAME`: Database name (default: `admin`)
+   - `MONGODB_DB_NAME`: Database name (Compose: `admin_service`)
 
 ### Development
 
@@ -120,15 +105,13 @@ npm start
 | `NODE_ENV`                | Node environment                                                                   | `development`                       |
 | `NEXT_PUBLIC_APP_URL`     | Public app URL                                                                     | `http://localhost:3000`             |
 | `MONGODB_URI`             | MongoDB connection string                                                          | `mongodb://localhost:27017`         |
-| `MONGODB_DB_NAME`         | MongoDB database name                                                              | `admin`                             |
+| `MONGODB_DB_NAME`         | MongoDB database name                                                              | `admin_service`                     |
 | `VIBER_SERVICE_URL`       | Viber service URL                                                                  | `http://localhost:3001`             |
 | `AI_SERVICE_URL`          | AI service URL                                                                     | `http://localhost:3002`             |
-| `ANALYTICS_SERVICE_URL`   | Analytics service URL                                                              | `http://localhost:3003`             |
 | `LOG_LEVEL`               | Logging level                                                                      | `info`                              |
 | `SERVICE_TOKEN`           | General service token for service-to-service authentication                        | -                                   |
 | `VIBER_SERVICE_TOKEN`     | Viber service specific token (should match `ADMIN_SERVICE_TOKEN` in viber service) | -                                   |
-| `AI_SERVICE_TOKEN`        | AI service specific token                                                          | -                                   |
-| `ANALYTICS_SERVICE_TOKEN` | Analytics service specific token                                                   | -                                   |
+| `AI_SERVICE_TOKEN`        | AI ingest token — **must match** `AI_SERVICE_TOKEN` on the AI service               | -                                   |
 | `RABBITMQ_URI`            | RabbitMQ connection URI for refresh notifications                                  | `amqp://admin:admin@localhost:5672` |
 
 ### Service Token Authentication
@@ -162,9 +145,23 @@ The admin service supports service-to-service authentication using service token
 - **GET** `/api/health`
 - Returns service health status and database connection status
 
+### Knowledge Base (proxy)
+
+JWT-protected thin proxy to the AI service (`AI_SERVICE_URL` + `X-Service-Token`). Admin stores no knowledge-base data.
+
+| Method | Path |
+|--------|------|
+| `POST` | `/api/knowledge-base/files` |
+| `POST` | `/api/knowledge-base/urls` |
+| `GET` | `/api/knowledge-base/sources` |
+| `DELETE` | `/api/knowledge-base/sources/:id` |
+| `DELETE` | `/api/knowledge-base/sources` |
+
+UI: `/knowledge-base` — upload ≤10 files (≤10 MB, `.pdf` / `.md` / `.txt`), paste ≤20 URLs, list sources, delete one, or clear all. Ingest is synchronous (a large batch can take 30–60 s). `AI_SERVICE_TOKEN` must match the value on AI.
+
 ## Bot Data Refresh Notification
 
-The admin service automatically notifies all viber service instances when bot data changes. This ensures that all viber service instances (including multiple replicas in Kubernetes) stay synchronized.
+The admin service automatically notifies all viber service instances when bot data changes. This ensures that all viber service instances stay synchronized.
 
 ### How It Works
 
@@ -192,26 +189,15 @@ When steps, messages, keyboards, or bot-settings are created, updated, or delete
 
 ## Database
 
-The Admin Service uses MongoDB with the following collections:
-
-- **Users**: User accounts, roles, and permissions
-- **Configurations**: System-wide settings and bot configurations
-- **Sessions**: User authentication sessions
-- **Audit Logs**: Administrative actions and system events
+The Admin Service uses MongoDB (`admin_service`) with users, sessions, messages, keyboards, steps, and singleton bot settings.
 
 ## Shared Package
 
-The service uses the `@vbar/shared` package for:
-
-- Common TypeScript types (`User`, `Config`, `ApiResponse`, etc.)
-- Configuration helpers (`ConfigHelper`)
-- Shared utilities
-
-Import from the shared package:
-
 ```typescript
-import { User, Config, ApiResponse, ConfigHelper } from "@vbar/shared";
+import { User, ApiResponse, RefreshEvent, ConfigHelper } from "@vbar/shared";
 ```
+
+Admin's `lib/mongodb.ts` stays Next.js-specific (build guard, seed, indexes). Viber/ai use `@vbar/shared/infra` for connections.
 
 ## Docker
 

@@ -1,174 +1,66 @@
 %%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#ff6b6b','primaryTextColor':'#fff','primaryBorderColor':'#7C0000','lineColor':'#F8B229','secondaryColor':'#006100','tertiaryColor':'#fff'}}}%%
-graph TB
-    %% External Systems
-    ViberAPI[Viber API<br/>External]
-    Users[Users<br/>Admin Dashboard]
-    
-    %% Shared Package
-    SharedPackage[Shared Package<br/>@vbar/shared<br/>Types, Utils, Config]
-    
-    %% Admin Service with Hexagonal Architecture
-    subgraph AdminService["Admin Service (Next.js)"]
-        direction TB
-        AdminAdapterIn[Input Adapters<br/>Next.js App Router<br/>API Routes]
-        AdminPortsIn[Input Ports<br/>Use Case Interfaces]
-        AdminApp[Application Layer<br/>Use Cases, Services, DTOs]
-        AdminDomain[Domain Layer<br/>Entities, Business Rules]
-        AdminPortsOut[Output Ports<br/>Repository Interfaces]
-        AdminAdapterOut[Output Adapters<br/>MongoDB Repositories<br/>External Service Clients]
-        
-        AdminAdapterIn --> AdminPortsIn
-        AdminPortsIn --> AdminApp
-        AdminApp --> AdminDomain
-        AdminApp --> AdminPortsOut
-        AdminPortsOut --> AdminAdapterOut
+flowchart TB
+    ViberAPI[Viber API]
+    Users[Admin users]
+    ExternalAI[Cloud LLMs<br/>OpenAI / Anthropic / Google]
+    Ollama[Ollama<br/>profile local-llm]
+    SharedPackage["@vbar/shared<br/>types, config, infra"]
+
+    subgraph AdminService["Admin :3000"]
+        AdminIn[App Router API]
+        AdminApp[Services + FSD CMS]
+        AdminOut[Mongo + MQ publisher]
+        AdminIn --> AdminApp --> AdminOut
     end
-    
-    %% Viber Service with Hexagonal Architecture
-    subgraph ViberService["Viber Service (Express)"]
-        direction TB
-        ViberAdapterIn[Input Adapters<br/>Express Routes<br/>Webhook Handlers]
-        ViberPortsIn[Input Ports<br/>Use Case Interfaces]
-        ViberApp[Application Layer<br/>Use Cases, Services, DTOs]
-        ViberDomain[Domain Layer<br/>Entities, Business Rules]
-        ViberPortsOut[Output Ports<br/>Repository Interfaces]
-        ViberAdapterOut[Output Adapters<br/>MongoDB Repositories<br/>Message Publishers]
-        
-        ViberAdapterIn --> ViberPortsIn
-        ViberPortsIn --> ViberApp
-        ViberApp --> ViberDomain
-        ViberApp --> ViberPortsOut
-        ViberPortsOut --> ViberAdapterOut
+
+    subgraph ViberService["Viber :3001"]
+        ViberIn[Webhook]
+        ViberApp[Steps / messaging]
+        ViberOut[Admin client + AI gRPC + MQ consumer]
+        ViberIn --> ViberApp --> ViberOut
     end
-    
-    %% AI Service with Hexagonal Architecture
-    subgraph AIService["AI Service (Express)"]
-        direction TB
-        AIAdapterIn[Input Adapters<br/>Express Routes<br/>gRPC Server]
-        AIPortsIn[Input Ports<br/>Use Case Interfaces]
-        AIApp[Application Layer<br/>Use Cases, Services, DTOs]
-        AIDomain[Domain Layer<br/>Entities, Business Rules]
-        AIPortsOut[Output Ports<br/>Repository Interfaces]
-        AIAdapterOut[Output Adapters<br/>MongoDB Repositories<br/>AI Provider Clients]
-        
-        AIAdapterIn --> AIPortsIn
-        AIPortsIn --> AIApp
-        AIApp --> AIDomain
-        AIApp --> AIPortsOut
-        AIPortsOut --> AIAdapterOut
+
+    subgraph AIService["AI :3002 / gRPC 50051"]
+        AIIn[gRPC ProcessMessage]
+        AIHttp[HTTP /api/knowledge-base]
+        AIApp[LangChain / providers]
+        AIOut[Mongo + optional Chroma + LLM]
+        AIIn --> AIApp --> AIOut
+        AIHttp --> AIApp
     end
-    
-    %% Analytics Service with Hexagonal Architecture
-    subgraph AnalyticsService["Analytics Service (Express)"]
-        direction TB
-        AnalyticsAdapterIn[Input Adapters<br/>Express Routes<br/>Message Queue Consumers]
-        AnalyticsPortsIn[Input Ports<br/>Use Case Interfaces]
-        AnalyticsApp[Application Layer<br/>Use Cases, Services, DTOs]
-        AnalyticsDomain[Domain Layer<br/>Entities, Business Rules]
-        AnalyticsPortsOut[Output Ports<br/>Repository Interfaces]
-        AnalyticsAdapterOut[Output Adapters<br/>MongoDB Repositories]
-        
-        AnalyticsAdapterIn --> AnalyticsPortsIn
-        AnalyticsPortsIn --> AnalyticsApp
-        AnalyticsApp --> AnalyticsDomain
-        AnalyticsApp --> AnalyticsPortsOut
-        AnalyticsPortsOut --> AnalyticsAdapterOut
-    end
-    
-    %% Web3 Service with Hexagonal Architecture
-    subgraph Web3Service["Web3 Service (Express)"]
-        direction TB
-        Web3AdapterIn[Input Adapters<br/>Express Routes<br/>gRPC Server]
-        Web3PortsIn[Input Ports<br/>Use Case Interfaces]
-        Web3App[Application Layer<br/>Use Cases, Services, DTOs]
-        Web3Domain[Domain Layer<br/>Entities, Business Rules]
-        Web3PortsOut[Output Ports<br/>Repository Interfaces]
-        Web3AdapterOut[Output Adapters<br/>MongoDB Repositories<br/>Blockchain Providers<br/>Message Publishers]
-        
-        Web3AdapterIn --> Web3PortsIn
-        Web3PortsIn --> Web3App
-        Web3App --> Web3Domain
-        Web3App --> Web3PortsOut
-        Web3PortsOut --> Web3AdapterOut
-    end
-    
-    %% Databases
-    AdminDB[(MongoDB<br/>admin database<br/>Users, Configs, Sessions)]
-    BotDB[(MongoDB<br/>bot database<br/>Conversations, Messages, Users)]
-    AIDB[(MongoDB<br/>ai database<br/>Models, Processing Logs)]
-    AnalyticsDB[(MongoDB<br/>analytics database<br/>Events, Metrics, Reports)]
-    Web3DB[(MongoDB<br/>web3 database<br/>Wallets, Transactions, Contracts)]
-    
-    %% Message Queue
-    RabbitMQ[RabbitMQ<br/>Message Queue<br/>analytics.events]
-    
-    %% AI Model Providers
-    Ollama[Ollama<br/>Self-Hosted LLMs<br/>Llama 2, Mistral, etc.]
-    ExternalAI[External AI APIs<br/>OpenAI, Anthropic, etc.]
-    
-    %% Blockchain Networks
-    BlockchainNetworks[Blockchain Networks<br/>Ethereum, Polygon<br/>BSC, Arbitrum]
-    
-    %% User Connections
-    Users -->|HTTP| AdminAdapterIn
-    
-    %% Viber API Connection
-    ViberAPI -->|Webhook| ViberAdapterIn
-    
-    %% REST API Communications (Admin to other services)
-    AdminAdapterOut -->|REST API<br/>Configuration, Control| ViberAdapterIn
-    AdminAdapterOut -->|REST API<br/>Model Config, Training| AIAdapterIn
-    AdminAdapterOut -->|REST API<br/>Dashboard, Reports| AnalyticsAdapterIn
-    AdminAdapterOut -->|REST API<br/>Wallet, Transaction, Token, Contract| Web3AdapterIn
-    
-    %% gRPC Communication (Viber to AI, Viber to Web3, AI to Web3)
-    ViberAdapterOut -->|gRPC<br/>Message Processing<br/>Intent Detection| AIAdapterIn
-    ViberAdapterOut -->|gRPC<br/>Wallet, Transaction, Token| Web3AdapterIn
-    AIAdapterOut -->|gRPC<br/>Wallet, Transaction, Token| Web3AdapterIn
-    
-    %% RabbitMQ Communication (Viber to Analytics, Web3 to Analytics)
-    ViberAdapterOut -->|RabbitMQ<br/>Async Events<br/>analytics.events| RabbitMQ
-    Web3AdapterOut -->|RabbitMQ<br/>Async Events<br/>analytics.events| RabbitMQ
-    RabbitMQ -->|Consume Events| AnalyticsAdapterIn
-    
-    %% Database Connections
-    AdminAdapterOut -->|Read/Write| AdminDB
-    ViberAdapterOut -->|Read/Write| BotDB
-    AIAdapterOut -->|Read/Write| AIDB
-    AnalyticsAdapterOut -->|Read/Write| AnalyticsDB
-    Web3AdapterOut -->|Read/Write| Web3DB
-    
-    %% AI Model Provider Connections
-    AIAdapterOut -->|HTTP API<br/>Local Models| Ollama
-    AIAdapterOut -->|REST API<br/>Cloud Models| ExternalAI
-    
-    %% Blockchain Network Connections
-    Web3AdapterOut -->|RPC API<br/>Multi-Chain| BlockchainNetworks
-    
-    %% Shared Package Dependencies
-    SharedPackage -.->|Imports| AdminApp
-    SharedPackage -.->|Imports| ViberApp
-    SharedPackage -.->|Imports| AIApp
-    SharedPackage -.->|Imports| AnalyticsApp
-    SharedPackage -.->|Imports| Web3App
-    
-    %% Styling
-    classDef serviceBox fill:#4ECDC4,stroke:#333,stroke-width:3px,color:#000
+
+    Mongo[(Shared MongoDB<br/>admin_service / bot / ai)]
+    Chroma[(Chroma embeddings)]
+    RabbitMQ[RabbitMQ<br/>exchange viber-bot<br/>queue viber.refresh]
+
+    Users -->|HTTPS/HTTP| AdminIn
+    ViberAPI -->|POST/GET /webhook/viber| ViberIn
+
+    AdminOut -->|Read/Write| Mongo
+    ViberOut -->|Read/Write| Mongo
+    AIOut -->|Read/Write| Mongo
+    AIOut -.->|optional RAG| Chroma
+
+    AdminOut -->|publish viber.refresh| RabbitMQ
+    RabbitMQ -->|consume| ViberOut
+
+    ViberOut -->|REST + service token| AdminIn
+    ViberOut -->|gRPC ProcessMessage| AIIn
+    AdminApp -->|REST + X-Service-Token| AIHttp
+
+    AIOut -.->|optional| Ollama
+    AIOut -.->|optional| ExternalAI
+
+    AdminApp -.->|imports| SharedPackage
+    ViberApp -.->|imports| SharedPackage
+    AIApp -.->|imports| SharedPackage
+
+    classDef serviceBox fill:#4ECDC4,stroke:#333,stroke-width:2px,color:#000
     classDef dbBox fill:#95E1D3,stroke:#333,stroke-width:2px,color:#000
     classDef mqBox fill:#F38181,stroke:#333,stroke-width:2px,color:#000
     classDef externalBox fill:#AA96DA,stroke:#333,stroke-width:2px,color:#000
-    classDef sharedBox fill:#FCBAD3,stroke:#333,stroke-width:2px,color:#000
-    classDef layerBox fill:#FFF9CA,stroke:#333,stroke-width:1px,color:#000
-    
-    class AdminService,ViberService,AIService,AnalyticsService,Web3Service serviceBox
-    class AdminDB,BotDB,AIDB,AnalyticsDB,Web3DB dbBox
-    class RabbitMQ mqBox
-    class ViberAPI,Users,ExternalAI externalBox
-    class Ollama,BlockchainNetworks serviceBox
-    class SharedPackage sharedBox
-    class AdminAdapterIn,AdminPortsIn,AdminApp,AdminDomain,AdminPortsOut,AdminAdapterOut layerBox
-    class ViberAdapterIn,ViberPortsIn,ViberApp,ViberDomain,ViberPortsOut,ViberAdapterOut layerBox
-    class AIAdapterIn,AIPortsIn,AIApp,AIDomain,AIPortsOut,AIAdapterOut layerBox
-    class AnalyticsAdapterIn,AnalyticsPortsIn,AnalyticsApp,AnalyticsDomain,AnalyticsPortsOut,AnalyticsAdapterOut layerBox
-    class Web3AdapterIn,Web3PortsIn,Web3App,Web3Domain,Web3PortsOut,Web3AdapterOut layerBox
 
+    class AdminIn,AdminApp,AdminOut,ViberIn,ViberApp,ViberOut,AIIn,AIHttp,AIApp,AIOut,Ollama serviceBox
+    class Mongo,Chroma dbBox
+    class RabbitMQ mqBox
+    class ViberAPI,Users,ExternalAI,SharedPackage externalBox

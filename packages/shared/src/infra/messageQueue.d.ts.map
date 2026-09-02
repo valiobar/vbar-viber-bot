@@ -1,0 +1,1 @@
+{"version":3,"file":"messageQueue.d.ts","sourceRoot":"","sources":["messageQueue.ts"],"names":[],"mappings":"AAAA;;;;;;GAMG;AAGH,OAAO,KAAK,EAAE,OAAO,EAAc,MAAM,SAAS,CAAC;AAGnD,MAAM,WAAW,mBAAmB;IAClC,GAAG,EAAE,MAAM,CAAC;CACb;AAMD;;GAEG;AACH,eAAO,MAAM,kBAAkB,GAC7B,SAAS,mBAAmB,KAC3B,OAAO,CAAC,OAAO,CAwCjB,CAAC;AAEF,eAAO,MAAM,UAAU,QAAa,OAAO,CAAC,IAAI,CAoB/C,CAAC"}

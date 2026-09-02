@@ -11,24 +11,20 @@ The Viber Service is responsible for:
 - User interaction management
 - Bot state management
 - Integration with Viber API
-- Publishing analytics events to RabbitMQ
+- Consuming bot-data refresh events from RabbitMQ
 
 ## Architecture
 
-This service follows **Hexagonal Architecture (Ports and Adapters)** pattern:
+Webhook + cache + step routing. Mongo/RabbitMQ connections go through `@vbar/shared/infra`.
 
 ```
 services/viber/
 ├── src/
-│   ├── domains/             # Domains layer (organized by domain)
-│   ├── application/         # Application layer (use cases, services)
-│   ├── ports/
-│   │   ├── in/              # Input ports (use case interfaces)
-│   │   └── out/             # Output ports (repository, publisher interfaces)
+│   ├── application/         # Handlers, BotDataService, cache
 │   ├── adapters/
-│   │   ├── in/              # Input adapters (Express routes, webhook handlers)
-│   │   └── out/             # Output adapters (MongoDB repos, message publishers)
-│   ├── config/              # Configuration (database, message queue, Viber)
+│   │   ├── in/              # Express routes, webhook
+│   │   └── out/             # Admin REST client, AI gRPC, Mongo models
+│   ├── config/              # Viber / env (connections use @vbar/shared/infra)
 │   └── index.ts             # Entry point
 ├── package.json
 ├── tsconfig.json
@@ -63,7 +59,7 @@ RABBITMQ_URI=amqp://localhost:5672
 
 # Viber Bot Configuration
 VIBER_BOT_TOKEN=your_viber_bot_token_here
-VIBER_BOT_WEBHOOK_URL=https://your-domain.com/api/viber/webhook
+VIBER_BOT_WEBHOOK_URL=https://your-domain.com/webhook/viber
 
 # Admin Service Configuration
 # Base URL for the admin service (used to fetch bot settings)
@@ -95,7 +91,6 @@ ADMIN_SERVICE_URL=http://localhost:3000
 SERVICE_TOKEN=your_service_token_here
 ADMIN_SERVICE_TOKEN=your_admin_service_token_here
 AI_SERVICE_TOKEN=your_ai_service_token_here
-ANALYTICS_SERVICE_TOKEN=your_analytics_service_token_here
 
 # Rate Limiting Configuration
 # Time window for rate limiting in milliseconds (default: 60000 = 1 minute)
@@ -259,7 +254,6 @@ Service tokens are configured via environment variables:
 - `SERVICE_TOKEN`: General service token
 - `ADMIN_SERVICE_TOKEN`: Admin service specific token
 - `AI_SERVICE_TOKEN`: AI service specific token
-- `ANALYTICS_SERVICE_TOKEN`: Analytics service specific token
 
 **Token Validation**:
 
@@ -288,7 +282,7 @@ The security middleware is applied in the following order:
 
 All security settings are configurable via environment variables (see [Environment Variables](#environment-variables) section):
 
-- Service tokens: `SERVICE_TOKEN`, `ADMIN_SERVICE_TOKEN`, `AI_SERVICE_TOKEN`, `ANALYTICS_SERVICE_TOKEN`
+- Service tokens: `SERVICE_TOKEN`, `ADMIN_SERVICE_TOKEN`, `AI_SERVICE_TOKEN`
 - Rate limit window: `RATE_LIMIT_WINDOW_MS` (default: 60000ms = 1 minute)
 - Rate limit values: `RATE_LIMIT_MAX_REQUESTS`, `RATE_LIMIT_HEALTH_MAX`, `RATE_LIMIT_WEBHOOK_MAX`, `RATE_LIMIT_SERVICE_MAX`
 
@@ -305,28 +299,19 @@ All security settings are configurable via environment variables (see [Environme
 
 The service uses MongoDB with the `bot` database. Key collections:
 
-- **Conversations**: User conversation threads and history
-- **Messages**: Incoming and outgoing messages
-- **ViberUsers**: Viber user profiles and metadata
-- **BotState**: Current bot state and context for each user
-- **Webhooks**: Webhook event logs and processing status
+- **Viber users** and bot runtime state in the `bot` database
 
-See `documentation/architecture.md` for detailed schema definitions.
+See `documentation/architecture.md`.
 
 ## Message Queue Integration
 
-The service publishes analytics events to RabbitMQ:
+The service consumes bot-data refresh events from RabbitMQ:
 
 - **Exchange**: `viber-bot`
-- **Queue**: `analytics.events`
-- **Routing Keys**: `analytics.*`
+- **Queue**: `viber.refresh`
+- **Routing Key**: `viber.refresh`
 
-Events published:
-
-- `analytics.message.received` - When a message is received
-- `analytics.message.sent` - When a message is sent
-- `analytics.user.action` - User action events
-- `analytics.bot.interaction` - Bot interaction events
+When admin updates steps/messages/keyboards/settings, a refresh event is published and this service reloads its in-memory cache.
 
 ## Viber Bot Integration
 
@@ -352,7 +337,7 @@ npm install
 
 # Start MongoDB and RabbitMQ (using Docker Compose from root)
 cd ../..
-docker-compose up -d mongodb-bot rabbitmq
+docker-compose up -d mongodb rabbitmq
 
 # Run in development mode with hot reload
 npm run dev
@@ -382,26 +367,21 @@ docker run -p 3001:3001 --env-file .env vbar-viber:latest
 
 ## Communication Patterns
 
-### REST API (Synchronous)
+### REST
 
-- **Admin Service → Viber Service**: Configuration updates, bot control commands
+- **Viber → Admin**: content + bot-settings fetch (service token)
 
-### gRPC (Synchronous, High-Performance)
+### gRPC
 
-- **Viber Service → AI Service**: Message processing requests, intent detection (via gRPC on port 50051)
+- **Viber → AI**: `ProcessMessage` on port 50051
 
 ### RabbitMQ (Asynchronous)
 
-- **Viber Service → Analytics Service**: Analytics events (queue: `analytics.events`)
+- **Admin Service → Viber Service**: Bot-data refresh events (queue: `viber.refresh`)
 
 ## Shared Package
 
-The service uses the `@vbar/shared` package for:
-
-- Common TypeScript types (`Message`, `ApiResponse`, etc.)
-- Configuration helpers (`ConfigHelper`)
-- Message queue types and constants
-- Error codes
+The service uses `@vbar/shared` for `ApiResponse`, `RefreshEvent`, `ConfigHelper`, and `@vbar/shared/infra` for `createMongoConnection` / `createQueueChannel`.
 
 ## Testing
 

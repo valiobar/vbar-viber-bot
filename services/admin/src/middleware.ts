@@ -10,7 +10,7 @@
 
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { verifyToken } from "./domains/user/lib/jwt";
+import { verifyToken } from "./lib/auth/jwt";
 import { validateServiceToken } from "./lib/security/serviceTokens";
 
 /**

@@ -1,1606 +1,232 @@
-# System Architecture Documentation
+# System Architecture
+
+Accurate as of Phases 2–4. Three app services (admin, viber, ai), one Viber bot per deployment, one shared MongoDB, one RabbitMQ used for cache refresh.
 
 ## Table of Contents
 
-1. [System Architecture Overview](#system-architecture-overview)
-2. [Service Descriptions](#service-descriptions)
-3. [Database Schemas](#database-schemas)
-4. [Communication Patterns](#communication-patterns)
-5. [Hexagonal Architecture Details](#hexagonal-architecture-details)
-6. [Shared Package](#shared-package)
-7. [Infrastructure Components](#infrastructure-components)
+1. [Overview](#overview)
+2. [Services](#services)
+3. [Admin layering](#admin-layering)
+4. [Databases](#databases) — summary; full collection/field list in [databases.md](./databases.md)
+5. [Communication](#communication)
+6. [Shared package](#shared-package)
+7. [Infrastructure](#infrastructure)
+8. [Diagrams](#diagrams)
+9. [Future / not implemented](#future--not-implemented)
 
-## System Architecture Overview
-
-The vbar-viber-bot project follows a **microservices architecture** pattern, consisting of five independent services that communicate through REST APIs, gRPC, and message queues. Each service is designed using the **Hexagonal Architecture (Ports and Adapters)** pattern to ensure separation of concerns, testability, and independence from external frameworks.
-
-### Architecture Principles
-
-- **Service Independence**: Each service has its own database and can be developed, deployed, and scaled independently
-- **Hexagonal Architecture**: All services follow the Ports and Adapters pattern for clean separation of business logic from infrastructure
-- **Event-Driven Communication**: Asynchronous communication via RabbitMQ message queue for decoupled service interactions
-- **Synchronous Communication**: REST APIs for direct service-to-service communication when needed
-- **Database per Service**: Each service maintains its own MongoDB database instance
-
-### High-Level Architecture
+## Overview
 
 ```
-                    ┌─────────────────┐
-                    │   Admin Service │
-                    │    (Next.js)    │
-                    └────────┬────────┘
-                             │
-                ┌────────────┼────────────┬────────────┐
-                │            │            │            │
-            REST│        REST│        REST│        REST│
-                │            │            │            │
-        ┌───────▼───┐  ┌─────▼────┐  ┌───▼────────┐  ┌───▼────────┐
-        │   Viber   │  │    AI    │  │  Analytics │  │   Web3    │
-        │  Service  │  │ Service  │  │  Service   │  │  Service  │
-        │ (Express) │  │(Express) │  │ (Express)  │  │ (Express) │
-        └─────┬─────┘  └─────┬────┘  └─────┬──────┘  └─────┬─────┘
-              │              │             │               │
-              │              │             │               │
-         gRPC │          gRPC│             │               │
-              │              │             │               │
-              └──────┬───────┘             │               │
-                     │ gRPC                │               │
-                     │                     │               │
-                     └──────────┬──────────┘               │
-                                │ gRPC                      │
-                                │                           │
-                                │                           │
-                     ┌──────────▼──────────┐               │
-                     │   Web3 Service      │               │
-                     │   (gRPC + REST)      │               │
-                     └──────────┬───────────┘               │
-                                │                           │
-                     ┌──────────┼───────────┐               │
-                     │          │           │               │
-             RabbitMQ│(async)   │           │               │
-                     │          │           │               │
-              ┌──────▼──────┐   │           │               │
-              │  RabbitMQ   │   │           │               │
-              │(analytics.  │   │           │               │
-              │  events)    │   │           │               │
-              └─────────────┘   │           │               │
-                                │           │               │
-        ┌──────────┐  ┌──────────┐  ┌──────▼─────┐  ┌──────▼─────┐  ┌──────────┐
-        │ MongoDB  │  │ MongoDB  │  │  MongoDB   │  │ MongoDB  │  │ MongoDB  │
-        │  (bot)   │  │   (ai)   │  │(analytics) │  │ (admin)  │  │  (web3)  │
-        └──────────┘  └──────────┘  └────────────┘  └──────────┘  └──────────┘
-                                                                         │
-                                                              ┌──────────▼──────────┐
-                                                              │  Blockchain Networks │
-                                                              │ (Ethereum, Polygon,  │
-                                                              │  BSC, Arbitrum)     │
-                                                              └─────────────────────┘
-
-Communication Protocols:
-━━━━━━ REST API (Admin ↔ Viber, Admin ↔ AI, Admin ↔ Analytics, Admin ↔ Web3)
-══════ gRPC (Viber ↔ AI, Viber ↔ Web3, AI ↔ Web3)
-────── RabbitMQ (Viber → Analytics, Web3 → Analytics, asynchronous)
+Admin (Next.js :3000)  --REST+JWT / service token-->  CMS APIs
+        | publish RefreshEvent
+        | REST + X-Service-Token  /api/knowledge-base
+        v
+RabbitMQ (viber.refresh) --> Viber (Express :3001)
+                                | REST (content cache)
+                                | gRPC ProcessMessage
+                                v
+                             AI (Express :3002 + gRPC :50051)
 ```
 
-## Service Descriptions
+Default Compose stack is **5 containers**: `admin`, `viber`, `ai`, `mongodb`, `rabbitmq`. Optional profile `local-llm` adds Ollama. Optional profile `rag` adds Chroma for RAG vectors.
 
-### Admin Service
+Principles:
 
-**Technology Stack**: Next.js 14+ (App Router), TypeScript, MongoDB, Mongoose
+- **One bot per deployment.** Singleton `bot-settings` is the config viber consumes.
+- **Server:** `route → service → repository`. Routes never contain business logic or inline DB queries. Admin repositories are concrete Mongo classes — do not add a port interface unless a second implementation is real.
+- **Admin client:** Feature-Sliced Design (`app → views → widgets → features → entities → shared`).
+- **Full Ports & Adapters** only where there are multiple implementations or dense rules (e.g. `AIProviderPort` in ai). Admin does not use ports/adapters/use-cases.
 
-**Purpose and Responsibilities**:
+## Services
 
-- Administrative dashboard and user interface
-- User management and authentication
-- System configuration and settings
-- Service monitoring and health checks
-- Content management for bot responses
+### Admin (`services/admin`)
 
-**Database**: `admin` MongoDB database
+Next.js 14 App Router, MongoDB (`admin_service`), RabbitMQ publisher.
 
-**Database Schema Overview**:
+- CMS for messages, keyboards, steps, and singleton bot settings
+- Knowledge Base page (`/knowledge-base`): upload files, ingest URLs, list / delete / clear sources
+- JWT login / refresh / logout
+- Service-token access so viber can pull content
+- Publishes `viber.refresh` on content mutations
+- Thin proxy to AI for knowledge-base ingest (`AI_SERVICE_URL` + `AI_SERVICE_TOKEN`)
 
-- **Users**: User accounts, roles, and permissions
-- **Configurations**: System-wide settings and bot configurations
-- **Sessions**: User authentication sessions
-- **Audit Logs**: Administrative actions and system events
-- **BotSettings**: Global bot configuration (singleton pattern - only one settings document exists)
+**Server** lives in `src/app/api/**`, `src/domains/**`, `src/lib/**`, `src/middleware.ts`. Each domain is a flat folder (`Model` / `Repository` / `Service` / `DTO` / `types` / `index`). Repositories are concrete Mongo classes. Auth is `AuthService` (`login` / `logout` / `refresh`); bot settings is `BotSettingsService` (`get` / `update`).
 
-**Hexagonal Architecture Adaptation**:
+**Client** is FSD (see [Admin layering](#admin-layering)).
 
-- Next.js App Router serves as the input adapter (HTTP layer)
-- Domain and Application layers contain business logic
-- MongoDB repository adapters implement output ports
-- API routes act as input adapters for REST endpoints
+### Viber (`services/viber`)
 
-### Viber Service
+Express, MongoDB (`bot`), RabbitMQ consumer, Viber webhook.
 
-**Technology Stack**: Node.js, Express.js, TypeScript, MongoDB, Mongoose
+- `GET/POST /webhook/viber` — Viber events
+- `GET /health` — Mongo + RabbitMQ
+- In-memory content cache loaded from admin REST (`ADMIN_SERVICE_URL` + service token)
+- Step routing; AI steps call gRPC `ProcessMessage`
+- Reloads cache when a `RefreshEvent` arrives
 
-**Purpose and Responsibilities**:
+Connects to Mongo and RabbitMQ via `@vbar/shared/infra` (`createMongoConnection`, `createQueueChannel`).
 
-- Viber bot webhook handling
-- Message processing and routing
-- User interaction management
-- Bot state management
-- Integration with Viber API
+### AI (`services/ai`)
 
-**Database**: `bot` MongoDB database
+Express + gRPC, MongoDB (`ai`). **Does not use RabbitMQ.**
 
-**Database Schema Overview**:
+- HTTP `GET /api/health` — Mongo + provider (no message-queue component)
+- HTTP `/api/knowledge-base/*` — file / URL ingest and source management (`X-Service-Token`)
+- gRPC `AIProcessingService.ProcessMessage` on `:50051` (Compose network only)
+- LangChain providers: Ollama, OpenAI, Anthropic, Google
+- Per-user conversation history and prompt templates in Mongo (no process-wide shared memory)
+- Optional RAG: embeddings live in **Chroma** (Compose profile `rag`), not in the `ai` Mongo database. `memory` is available for tests. Ingest writes chunks into that store.
 
-- **Conversations**: User conversation threads and history
-- **Messages**: Incoming and outgoing messages
-- **Users**: Viber user profiles and metadata
-- **Bot State**: Current bot state and context for each user
-- **Webhooks**: Webhook event logs and processing status
+**RAG precedence:** an explicit `AI_TASK_TYPE` (`simple` / `rag` / `custom`) wins. If `AI_TASK_TYPE` is unset, `RAG_ENABLED=true` selects the RAG chain. `.env.example` still sets `AI_TASK_TYPE=simple`, so `RAG_ENABLED=true` alone will not engage RAG until that var is unset or set to `rag`. The vector store is created only when `RAG_ENABLED=true`; RAG failures fall back to the simple chain. Full flow: [rag.md](./rag.md).
 
-**Hexagonal Architecture Structure**:
+## Admin layering
 
-- Express routes as input adapters
-- Domain layer contains bot logic and business rules
-- Application layer orchestrates use cases
-- MongoDB repositories as output adapters
-- Message queue publishers for async communication
+### Server — `route → service → repository`
 
-**Security Architecture**:
+```
+app/api/messages/route.ts
+        → MessageService.list/get/create/update/delete
+        → MessageRepository (concrete Mongo class)
+```
 
-The Viber Service implements a comprehensive security middleware layer following Hexagonal Architecture principles:
+Same shape for keyboards, steps, bot-settings, and auth. Routes use `withDb`, shared error codes, `parsePagination`, and `notifyRefresh` from `src/lib/api/`. Do not add `ports/in/`, `adapters/`, or `*UseCaseImpl`.
 
-- **Security Middleware Layer** (`src/adapters/in/middleware/`): All security middleware is located in the Input Adapters layer, as it handles HTTP request security concerns
-  - **Webhook Signature Verification** (`webhookSignature.ts`): Verifies HMAC-SHA256 signatures for Viber webhook requests
-  - **Service-to-Service Authentication** (`serviceAuth.ts`): Validates service tokens for internal service communication
-  - **Rate Limiting** (`rateLimiters.ts`): Implements different rate limits for different route types
-- **Security Configuration** (`src/config/security.ts`): Centralized security configuration helper for service tokens and rate limit settings
-- **Middleware Order**: Security middleware is applied in a specific order to ensure proper request processing:
-  1. Raw body preservation (for webhook signature verification)
-  2. JSON/URL parsing
-  3. Request logging
-  4. General rate limiting (base layer)
-  5. Route-specific middleware (webhook verification, service auth, specific rate limits)
-  6. Route handlers
-  7. Error handling
+**Deviation — knowledge-base proxy:** `app/api/knowledge-base/*` forwards to the AI service (`lib/aiService.ts` + `X-Service-Token`) and does not use `route → service → repository`. Admin owns no knowledge-base data (vectors live in Chroma behind AI), so there is no admin repository or domain service. Justified as a transport adapter, not a second CMS domain.
 
-**Authentication Flow**:
+Per-domain folder (under `src/domains/<x>/`):
 
-1. **Webhook Requests**:
+```
+<X>.ts             # domain entity class
+<X>Model.ts        # mongoose schema + document interface
+<X>Repository.ts   # concrete Mongo repository class
+<X>Service.ts      # business logic + input/filter/result types
+<X>DTO.ts
+lib/               # domain helpers (keyboard, bot-settings)
+types.ts
+index.ts           # public barrel
+```
 
-   - Extract `X-Viber-Content-Signature` header
-   - Calculate expected signature using HMAC-SHA256 with bot token
-   - Compare signatures using timing-safe comparison
-   - Reject if invalid (401 Unauthorized)
+Client entities import server types only from the domain barrel via `import type` (e.g. `import type { MessageDTO } from "@/domains/message"`).
 
-2. **Service-to-Service Requests** (for future API routes):
-   - Extract `X-Service-Token` header
-   - Validate token against configured service tokens
-   - Optional `X-Service-Name` header for logging
-   - Reject if invalid (401 Unauthorized)
+### Client — Feature-Sliced Design
 
-**Rate Limiting Strategy**:
+```
+app → views → widgets → features → entities → shared
+```
 
-The service implements a multi-tier rate limiting strategy:
+| Layer | Role |
+|-------|------|
+| `app/` | App Router + FSD app layer: thin `page.tsx` wrappers, `layout.tsx` (ThemeProvider, AuthProvider, DashboardLayoutWrapper), `globals.css`, `api/**` |
+| `views/` | FSD pages layer (named `views` because Next.js reserves `pages/` and `app/`). One slice per route. |
+| `widgets/` | Composite UI: dashboard layout, side menu, list screens |
+| `features/` | User actions: forms, filters, auth UI |
+| `entities/` | DTO types, client `api/`, presentational `ui/`, Zustand `model/` |
+| `shared/` | Pagination, ErrorMessage, theme, `http`, `useResourceList`. Imports no other FSD layer and never `@/domains`. |
 
-- **General Routes** (`/`): 100 requests/minute per IP (base layer)
-- **Health Check** (`/health`): 10 requests/minute per IP (strict, prevents abuse)
-- **Webhook** (`/webhook/viber`): 1000 requests/minute per IP (higher limit for Viber events)
-- **API Routes** (`/api/*`): 5000 requests/minute per service token (when implemented)
+Rules:
 
-Rate limit information is included in all responses via standard headers (`RateLimit-*`) and legacy headers (`X-RateLimit-*`).
+- A layer imports only from layers strictly below it; slices never import each other.
+- Import a slice only through its public `index.ts` (`@/entities/message`).
+- The only client files that may reference `@/domains` are `entities/*/model/types.ts`, and only via `import type`.
+- Do not recreate root `components/`, `store/`, or `types/` folders.
 
-### AI Service
+A new content domain on the client is `entities/<x>` + `features/<x>-manage` + `widgets/<x>-list` + `views/<xs>` (plus create/edit views).
 
-**Technology Stack**: Node.js, Express.js, TypeScript, MongoDB, Mongoose, LangChain
+Current content / feature slices:
 
-**Purpose and Responsibilities**:
+| Slice | entities | features | widgets | views |
+|-------|----------|----------|---------|-------|
+| messages | `message` | `message-manage` | `message-list` | `messages` |
+| keyboards | `keyboard` | `keyboard-manage` | `keyboard-list` | `keyboards` |
+| steps | `step` | `step-manage` | `step-list` | `steps` |
+| bot-settings | `bot-settings` | `bot-settings-manage` | — | `settings` |
+| knowledge-base | `knowledge-base` | `knowledge-base-ingest` | `knowledge-base-sources` | `knowledge-base` |
 
-- AI model integration and processing
-- Natural language processing (NLP)
-- Message analysis and intent detection
-- Response generation
-- AI model training and fine-tuning (if applicable)
-- Multi-provider AI model support (External APIs and Self-hosted)
-- LangChain-based chain execution (simple, RAG, custom chains)
-- Conversation memory management (BufferMemory, ConversationSummaryMemory)
-- Retrieval Augmented Generation (RAG) with vector stores
-- Prompt engineering and template management
-- LangSmith observability integration
+Knowledge-base types are mirrored from the AI inbound port (not `@vbar/shared`). The entity API talks only to admin `/api/knowledge-base/*`.
 
-**Database**: `ai` MongoDB database
+## Databases
 
-**Database Schema Overview**:
+One MongoDB container. Databases appear on first write:
 
-- **Models**: AI model configurations and metadata
-- **Training Data**: Datasets for model training
-- **Processing Logs**: AI processing history and results
-- **Configurations**: AI service settings and parameters
-- **Analytics**: AI performance metrics and statistics
-- **Prompt Templates**: Stored prompt templates for custom chains (if using MongoDB storage)
-- **Embeddings**: Vector embeddings for RAG (if using MongoDB vector store)
+| Service | `MONGODB_DB_NAME` | What is stored |
+|---------|-------------------|----------------|
+| admin | `admin_service` | Users, sessions, messages, keyboards, steps, singleton bot settings |
+| viber | `bot` | Viber users and bot runtime state |
+| ai | `ai` | Per-user conversation history and prompt templates. RAG vectors live in Chroma, not Mongo. |
 
-**LangChain Integration Architecture**:
+Admin content documents do not have a `botId`. Existing leftover `botId` fields on old documents are ignored.
 
-The AI Service uses **LangChain** as the core framework for AI processing, providing:
+Collection names, fields, and indexes: [databases.md](./databases.md).
 
-1. **Unified AI Provider Interface**:
+## Communication
 
-   - LangChain adapters for OpenAI, Anthropic, Google, and Ollama
-   - Consistent interface across all providers via `BaseChatModel`
-   - Automatic LangSmith tracing when enabled
+| Path | Protocol | Notes |
+|------|----------|--------|
+| Browser → Admin | REST + JWT | CMS + Knowledge Base UI |
+| Viber platform → Viber | HTTPS webhook | `GET/POST /webhook/viber` |
+| Viber → Admin | REST + `X-Service-Token` | Content + bot-settings fetch |
+| Admin → Viber | RabbitMQ `viber.refresh` | Cache invalidation (`RefreshEvent`) |
+| Admin → AI | REST + `X-Service-Token` | Knowledge-base ingest / sources. `AI_SERVICE_TOKEN` must match on both services. |
+| Viber → AI | gRPC `:50051` | `ProcessMessage` only |
 
-2. **Conversation Memory Management**:
-
-   - **BufferMemory**: Stores full conversation history (configurable max history)
-   - **ConversationSummaryMemory**: Summarizes conversation history to save tokens
-   - Memory type configurable via `CONVERSATION_MEMORY_TYPE` environment variable
-
-3. **Flexible Task System**:
-
-   - **Simple Chains**: Direct prompts to AI models
-   - **RAG Chains**: Retrieval Augmented Generation with vector store retrieval
-   - **Custom Chains**: Template-based chains with variable substitution
-   - Task type configurable via `AI_TASK_TYPE` environment variable
-
-4. **RAG (Retrieval Augmented Generation) Architecture**:
-
-   - Vector store integration (MongoDB Atlas Vector Search or in-memory)
-   - Embedding providers (OpenAI, Ollama, or local)
-   - Similarity search with configurable K and threshold
-   - Automatic context injection into prompts
-
-5. **Prompt Engineering System**:
-
-   - Template storage (MongoDB or file-based)
-   - Variable substitution and rendering
-   - Default template configuration
-   - Template management via repository pattern
-
-6. **LangSmith Observability**:
-   - Optional tracing integration for debugging and monitoring
-   - Automatic trace collection for all LangChain operations
-   - Token usage tracking (when available from providers)
-   - Latency and error tracking
-
-**AI Model Providers**:
-
-The AI Service supports a **hybrid approach** with multiple AI model providers through LangChain:
-
-1. **External AI API Services (SaaS)**:
-
-   - OpenAI (GPT-4, GPT-3.5, etc.) - via `ChatOpenAI` LangChain adapter
-   - Anthropic (Claude) - via `ChatAnthropic` LangChain adapter
-   - Google (Gemini) - via `ChatGoogleGenerativeAI` LangChain adapter
-   - Accessed via LangChain's unified interface
-
-2. **Self-Hosted AI Models (Ollama)**:
-   - Local LLM models (Llama 2, Mistral, etc.) - via `ChatOllama` LangChain adapter
-   - Deployed via Ollama service
-   - Accessed via HTTP API through LangChain
-   - Provides data privacy and cost control
-
-The AI Service can dynamically switch between providers based on configuration, allowing for:
-
-- Fallback mechanisms (if one provider fails, use another)
-- Cost optimization (use Ollama for simple tasks, external APIs for complex ones)
-- Data privacy control (use Ollama for sensitive data)
-- Load balancing across providers
-
-**Hexagonal Architecture Structure**:
-
-The AI Service follows Hexagonal Architecture with the following layer organization:
-
-- **Input Adapters** (`src/adapters/in/`):
-
-  - Express routes for REST API endpoints
-  - gRPC server for high-performance Viber Service communication
-  - Message queue consumers (if implemented)
-
-- **Application Layer** (`src/application/`):
-
-  - Use cases (e.g., `ProcessMessageUseCase`)
-  - Orchestrates domain logic and chain execution
-  - DTOs and application services
-
-- **Domain Layer** (`src/domains/ai/`):
-
-  - Entities: `MessageRequest`, `MessageResponse`, `AITask`, `ConversationContext`
-  - Value Objects: `AIProvider`, `AITaskType`
-  - Domain Services: `PromptTemplateService`
-  - Business rules and validations
-
-- **Output Adapters** (`src/adapters/out/`):
-
-  - **LangChain Adapters**: Provider-specific implementations (`OpenAIAdapter`, `OllamaAdapter`, etc.)
-  - **Chain Executor**: `LangChainExecutor` for executing different chain types
-  - **Vector Store Adapters**: MongoDB vector store implementation
-  - **Repositories**: MongoDB repositories for conversations, prompt templates
-  - **Ports**: Interfaces for `AIProviderPort`, `ChainExecutorPort`, `VectorStorePort`, `ConversationRepository`
-
-- **Ports** (`src/ports/`):
-  - **Input Ports** (`in/`): Use case interfaces (e.g., `ProcessMessageUseCase`)
-  - **Output Ports** (`out/`): Repository and service interfaces (e.g., `ChainExecutorPort`, `AIProviderPort`, `VectorStorePort`)
-
-**Key Components**:
-
-- **LangChainAdapter**: Abstract base class for all AI provider adapters, provides common functionality (memory management, message formatting, retry logic)
-- **LangChainExecutor**: Executes different types of chains (simple, RAG, custom) based on task configuration
-- **ConversationRepository**: Manages conversation history persistence
-- **VectorStorePort**: Interface for vector store operations (similarity search, document storage)
-- **PromptTemplateRepository**: Manages prompt template storage and retrieval
-
-### Analytics Service
-
-**Technology Stack**: Node.js, Express.js, TypeScript, MongoDB, Mongoose
-
-**Purpose and Responsibilities**:
-
-- Data aggregation and analysis
-- Reporting and dashboards
-- User behavior analytics
-- Performance metrics collection
-- Business intelligence queries
-
-**Database**: `analytics` MongoDB database
-
-**Database Schema Overview**:
-
-- **Events**: User events and interactions
-- **Metrics**: Aggregated performance metrics
-- **Reports**: Generated reports and analytics
-- **Dashboards**: Dashboard configurations
-- **Aggregations**: Pre-computed analytics data
-
-**Hexagonal Architecture Structure**:
-
-- Express routes as input adapters
-- Domain layer contains analytics business logic
-- Application layer handles analytics use cases
-- MongoDB repositories for data storage
-- Message queue consumers for event processing
-
-### Web3 Service
-
-**Technology Stack**: Node.js, Express.js, TypeScript, MongoDB, Mongoose, ethers.js v6
-
-**Purpose and Responsibilities**:
-
-- Blockchain wallet management (create, import, balance queries)
-- Transaction tracking and monitoring (send, track, history)
-- Token operations (ERC-20 token balance, transfers)
-- NFT operations (ERC-721/ERC-1155 NFT queries and transfers)
-- Smart contract interactions (read contract state, execute contract functions)
-- Multi-chain support (Ethereum, Polygon, BSC, Arbitrum)
-- Blockchain provider management with RPC endpoint fallback
-
-**Database**: `web3` MongoDB database
-
-**Database Schema Overview**:
-
-- **Wallets**: User wallet addresses, encrypted private keys, network associations
-- **Transactions**: Transaction history, status tracking, confirmations
-- **Contracts**: Stored contract ABIs and metadata for smart contract interactions
-
-**Hexagonal Architecture Structure**:
-
-- Express routes as input adapters (REST API for Admin Service - exposes all Web3 functionality)
-- gRPC server as input adapter (for Viber Service and AI Service - high-performance operations)
-- Domain layer contains blockchain business logic (wallet, transaction, token, contract domains)
-- Application layer handles use cases (wallet management, transaction operations, token operations, contract interactions)
-- MongoDB repositories for data persistence (wallets, transactions, contracts)
-- Blockchain provider adapters (ethers.js v6) for multi-chain interactions
-- Message queue publishers for async analytics events
-
-**API Architecture**:
-
-The Web3 Service exposes functionality through two APIs:
-
-- **REST API** (port 3004): Full Web3 functionality accessible to Admin Service
-  - All wallet operations (create, list, get balance, delete)
-  - All transaction operations (send, track, history)
-  - All token operations (balance, transfer, info, NFTs)
-  - All smart contract operations (read, write, ABI management)
-  - Service-to-service authentication via `X-Service-Token` header
-
-- **gRPC API** (port 50052): High-performance operations for Viber and AI services
-  - Same functionality as REST API, optimized for low-latency operations
-  - Binary Protocol Buffers serialization
-  - Used by Viber Service and AI Service for blockchain operations
-
-**Multi-Chain Support**:
-
-The Web3 Service supports multiple blockchain networks through a unified interface:
-
-- **Ethereum**: Mainnet and testnets
-- **Polygon**: Polygon network
-- **Binance Smart Chain (BSC)**: BSC network
-- **Arbitrum**: Arbitrum network
-
-**Blockchain Provider Architecture**:
-
-- Factory pattern for network provider creation
-- RPC endpoint fallback mechanism for reliability
-- Network-agnostic interface for consistent operations across chains
-- Gas price estimation and transaction signing
-- Encrypted private key storage for secure wallet management
-
-**Security Architecture**:
-
-- Private keys encrypted at rest using environment-configured encryption keys
-- Never log sensitive data (private keys, transaction details)
-- Service-to-service authentication for REST API endpoints
-- Secure key management and storage practices
-
-## Database Schemas
-
-### Admin Database Schema
+`RefreshEvent` (`@vbar/shared`):
 
 ```typescript
-// User Collection
-interface User {
-  _id: ObjectId;
-  email: string;
-  passwordHash: string;
-  role: "admin" | "operator" | "viewer";
-  createdAt: Date;
-  updatedAt: Date;
-  lastLoginAt?: Date;
-}
-
-// Configuration Collection
-interface Configuration {
-  _id: ObjectId;
-  key: string;
-  value: any;
-  description?: string;
-  updatedBy: ObjectId; // User ID
-  updatedAt: Date;
-}
-
-// Session Collection
-interface Session {
-  _id: ObjectId;
-  userId: ObjectId;
-  token: string;
-  expiresAt: Date;
-  createdAt: Date;
-}
-
-// Audit Log Collection
-interface AuditLog {
-  _id: ObjectId;
-  userId: ObjectId;
-  action: string;
-  resource: string;
-  details: Record<string, any>;
-  timestamp: Date;
-}
-
-// BotSettings Collection (Singleton Pattern)
-interface BotSettings {
-  _id: ObjectId;
-  avatarURL: string | null;
-  botName: string;
-  botViberName: string | null;
-  status: "active" | "inactive" | "maintenance";
-  buttonsBackground: string | null; // Hex color code
-  buttonsTextColor: string | null; // Hex color code
-  buttonsPrefix: string | null;
-  welcomeStepId: ObjectId | null; // Reference to Step collection
-  GAKey: string | null; // Google Analytics key
-  createdAt: Date;
-  updatedAt: Date;
+interface RefreshEvent {
+  type: "bot_data_refresh";
+  timestamp: string;
+  source: "admin_service";
+  dataType?: "all" | "steps" | "messages" | "keyboards" | "bot_settings";
 }
 ```
 
-**Note**: BotSettings follows a **singleton pattern** - only one settings document exists in the collection. The repository uses `findOne()` to retrieve the single settings document, and `findOneAndUpdate()` with upsert to ensure only one document exists.
+## Shared package
 
-````
+`@vbar/shared` (root barrel) and `@vbar/shared/infra` (Mongo/RabbitMQ helpers — not on the root barrel so Edge middleware can import `ConfigHelper` without mongoose/amqplib).
 
-### Bot Database Schema
+- **Types:** `common.ts` (`ApiResponse`, `PaginationParams`, `HealthCheckResponse`, `RefreshEvent`, queue names) and `admin.ts` (content DTOs, `User`)
+- **Utils:** `Logger` / `ConsoleLogger`, `PathUtils`
+- **Config:** `ConfigHelper`, `EnvironmentConfig`, `resolveRootEnvPath`
+- **Infra:** `createMongoConnection`, `createQueueChannel` — mandated for new connections in viber/ai. Admin `lib/mongodb.ts` stays Next.js-specific.
 
-```typescript
-// Conversation Collection
-interface Conversation {
-  _id: ObjectId;
-  viberUserId: string;
-  status: "active" | "paused" | "ended";
-  context: Record<string, any>;
-  createdAt: Date;
-  updatedAt: Date;
-  lastMessageAt: Date;
-}
+## Infrastructure
 
-// Message Collection
-interface Message {
-  _id: ObjectId;
-  conversationId: ObjectId;
-  viberUserId: string;
-  type: "incoming" | "outgoing";
-  content: string;
-  timestamp: Date;
-  processed: boolean;
-  metadata?: Record<string, any>;
-}
+Compose file: `infrastructure/docker-compose.yml`. Images built in GitHub Actions and pushed to GHCR; a VPS pulls and runs `deploy.sh`. See [deployment.md](./deployment.md).
 
-// Viber User Collection
-interface ViberUser {
-  _id: ObjectId;
-  viberUserId: string;
-  name: string;
-  avatar?: string;
-  language?: string;
-  country?: string;
-  subscribed: boolean;
-  subscribedAt?: Date;
-  metadata?: Record<string, any>;
-}
+| Container | Host bind | Role |
+|-----------|-----------|------|
+| `vbar-admin` | `:3000` | CMS |
+| `vbar-viber` | `:3001` | Webhooks |
+| `vbar-ai` | `127.0.0.1:3002` | HTTP health; gRPC 50051 internal |
+| `vbar-mongodb` | `127.0.0.1:27017` | Shared Mongo |
+| `vbar-rabbitmq` | `127.0.0.1:5672` / `:15672` | Refresh events |
 
-// Bot State Collection
-interface BotState {
-  _id: ObjectId;
-  viberUserId: string;
-  currentFlow: string;
-  context: Record<string, any>;
-  variables: Record<string, any>;
-  updatedAt: Date;
-}
-````
+Profile `local-llm` adds Ollama on `127.0.0.1:11434`. Set `AI_MODEL_PROVIDER=ollama` and `OLLAMA_BASE_URL=http://ollama:11434` inside Compose.
 
-### AI Database Schema
-
-```typescript
-// AI Model Collection
-interface AIModel {
-  _id: ObjectId;
-  name: string;
-  type: "nlp" | "generative" | "classification";
-  version: string;
-  configuration: Record<string, any>;
-  status: "active" | "training" | "inactive";
-  performance: {
-    accuracy?: number;
-    latency?: number;
-    lastEvaluated?: Date;
-  };
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-// Processing Log Collection
-interface ProcessingLog {
-  _id: ObjectId;
-  requestId: string;
-  modelId: ObjectId;
-  input: string;
-  output: string;
-  confidence?: number;
-  processingTime: number;
-  timestamp: Date;
-  metadata?: Record<string, any>;
-}
-
-// Training Data Collection
-interface TrainingData {
-  _id: ObjectId;
-  modelId: ObjectId;
-  input: string;
-  expectedOutput: string;
-  tags: string[];
-  createdAt: Date;
-}
-```
-
-### Analytics Database Schema
-
-```typescript
-// Event Collection
-interface Event {
-  _id: ObjectId;
-  type: string;
-  userId: string;
-  service: "admin" | "viber" | "ai" | "analytics" | "web3";
-  properties: Record<string, any>;
-  timestamp: Date;
-}
-
-// Metric Collection
-interface Metric {
-  _id: ObjectId;
-  name: string;
-  value: number;
-  unit: string;
-  tags: Record<string, string>;
-  timestamp: Date;
-  aggregation?: {
-    period: "hour" | "day" | "week" | "month";
-    value: number;
-  };
-}
-
-// Report Collection
-interface Report {
-  _id: ObjectId;
-  name: string;
-  type: "daily" | "weekly" | "monthly" | "custom";
-  parameters: Record<string, any>;
-  data: Record<string, any>;
-  generatedAt: Date;
-  generatedBy?: ObjectId; // User ID if manual
-}
-```
-
-### Web3 Database Schema
-
-```typescript
-// Wallet Collection
-interface Wallet {
-  _id: ObjectId;
-  viberUserId: string; // Link to Viber user
-  address: string; // Blockchain address (EIP-55 checksummed)
-  network: "ethereum" | "polygon" | "bsc" | "arbitrum";
-  encryptedPrivateKey: string; // Encrypted private key (never stored in plain text)
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-// Transaction Collection
-interface Transaction {
-  _id: ObjectId;
-  walletId: ObjectId; // Reference to Wallet
-  txHash: string; // Transaction hash (unique per network)
-  network: "ethereum" | "polygon" | "bsc" | "arbitrum";
-  from: string; // Sender address
-  to: string; // Recipient address
-  value: string; // Amount in wei (native token) or token amount
-  tokenAddress?: string; // ERC-20 token address (if token transfer)
-  status: "pending" | "confirmed" | "failed";
-  confirmations: number; // Number of block confirmations
-  blockNumber?: number; // Block number when confirmed
-  gasUsed?: string; // Gas used (in wei)
-  gasPrice?: string; // Gas price (in wei)
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-// Contract Collection
-interface Contract {
-  _id: ObjectId;
-  address: string; // Contract address (EIP-55 checksummed)
-  network: "ethereum" | "polygon" | "bsc" | "arbitrum";
-  abi: any; // Contract ABI JSON (Application Binary Interface)
-  name?: string; // Human-readable contract name
-  createdAt: Date;
-  updatedAt: Date;
-}
-```
-
-**Schema Relationships**:
-
-- **Wallet → Transaction**: One-to-many relationship (one wallet can have many transactions)
-- **Wallet → viberUserId**: Links wallet to Viber user for user-specific wallet management
-- **Transaction → Wallet**: Many-to-one relationship (transactions reference their originating wallet)
-- **Contract**: Standalone collection for storing contract ABIs and metadata
-
-**Security Considerations**:
-
-- Private keys are **never** stored in plain text - always encrypted using `WEB3_ENCRYPTION_KEY`
-- Addresses are stored in EIP-55 checksummed format for validation
-- Transaction hashes are unique per network (same hash can exist on different networks)
-
-### Database Relationships
-
-- **No Direct Foreign Keys**: Services maintain loose coupling through identifiers
-- **Event-Based Synchronization**: Services communicate user/entity IDs through events
-- **Shared Identifiers**: Common identifiers (e.g., `viberUserId`) used across services for correlation
-
-## Communication Patterns
-
-### REST API Communication (Synchronous)
-
-Services communicate synchronously through REST APIs for most direct service-to-service interactions:
-
-- **Admin Service → Viber Service**: Configuration updates, bot control commands
-- **Admin Service → AI Service**: Model configuration, training triggers
-- **Admin Service → Analytics Service**: Report generation, dashboard data, analytics queries
-- **Admin Service → Web3 Service**: All Web3 operations via REST API (wallet management, transaction operations, token operations, NFT operations, smart contract interactions, monitoring and dashboard data)
-
-**Communication Flow**:
-
-```
-Client → Service A → REST API → Service B → Response → Service A → Client
-```
-
-### gRPC Communication (Synchronous, High-Performance)
-
-Services communicate using **gRPC** for high-performance, low-latency operations:
-
-- **Viber Service → AI Service**: Message processing requests, intent detection (via gRPC)
-- **Viber Service → Web3 Service**: Blockchain operations (wallet creation, balance queries, transaction sending)
-- **AI Service → Web3 Service**: AI agent tool calls for blockchain operations
-
-**Why gRPC for High-Performance Operations**:
-
-- Binary serialization (Protocol Buffers) is faster than JSON
-- HTTP/2 multiplexing reduces connection overhead
-- Lower latency for real-time operations
-- Type-safe contracts with Protocol Buffers
-- Supports streaming for advanced use cases
-
-**Communication Flow**:
-
-```
-Viber Service → gRPC Call → AI Service → gRPC Response → Viber Service
-Viber Service → gRPC Call → Web3 Service → gRPC Response → Viber Service
-AI Service → gRPC Call → Web3 Service → gRPC Response → AI Service
-```
-
-**gRPC Endpoints**:
-- AI Service: `localhost:50051` (development)
-- Web3 Service: `localhost:50052` (development)
-
-### Message Queue Communication (Asynchronous)
-
-RabbitMQ is used for asynchronous communication between services. This allows services to send analytics events without blocking, and the Analytics Service to process them asynchronously.
-
-**Queue Configuration**:
-
-- **Queue Name**: `analytics.events`
-- **Publishers**: Viber Service, Web3 Service
-- **Consumer**: Analytics Service
-
-**Routing Keys**:
-
-- `analytics.event` - General analytics event
-- `analytics.message.received` - Message received event
-- `analytics.message.sent` - Message sent event
-- `analytics.user.action` - User action event
-- `analytics.bot.interaction` - Bot interaction event
-- `web3.transaction.sent` - Transaction sent event (from Web3 Service)
-- `web3.transaction.confirmed` - Transaction confirmed event (from Web3 Service)
-- `web3.wallet.created` - Wallet created event (from Web3 Service)
-- `web3.token.transferred` - Token transfer event (from Web3 Service)
-
-**Communication Flow**:
-
-```
-Viber Service → Publisher → RabbitMQ (analytics.events) → Consumer → Analytics Service
-Web3 Service → Publisher → RabbitMQ (analytics.events) → Consumer → Analytics Service
-                                                                          ↓
-                                                                    Store in MongoDB
-                                                                          ↓
-Admin Service ← REST API ← Analytics Service (reads from MongoDB)
-```
-
-**Note**: The Admin Service retrieves all analytics data from the Analytics Service via REST API endpoints. The Analytics Service stores events received from RabbitMQ in its MongoDB database, and the Admin Service queries this data through REST endpoints.
-
-### Service-to-Service Communication Summary
-
-| From Service | To Service | Communication Method | Purpose                                                 |
-| ------------ | ---------- | -------------------- | ------------------------------------------------------- |
-| Admin        | Viber      | REST API             | Configuration, bot control                              |
-| Admin        | AI         | REST API             | Model configuration, training                           |
-| Admin        | Analytics  | REST API             | Dashboard data, reports, queries                        |
-| Admin        | Web3       | REST API             | All Web3 operations (wallet management, transactions, tokens, NFTs, contracts, monitoring) |
-| Viber        | AI         | gRPC                 | Message processing, intent detection (high-performance) |
-| Viber        | Web3       | gRPC                 | Blockchain operations (wallet, transactions, tokens)    |
-| Viber        | Analytics  | RabbitMQ             | Asynchronous analytics events                           |
-| AI           | Web3       | gRPC                 | AI agent tool calls for blockchain operations          |
-| Web3         | Analytics  | RabbitMQ             | Asynchronous transaction and wallet events              |
-
-## Hexagonal Architecture Details
-
-All services follow the **Hexagonal Architecture (Ports and Adapters)** pattern to ensure clean separation of concerns and testability.
-
-### Architecture Layers
-
-#### Domain Layer (`src/domains/`)
-
-**Purpose**: Core business logic, entities, and domain rules (innermost layer)
-
-**Structure**: Organized by domain with subfolders for each domain (e.g., `user/`, `auth/`, `config/`)
-
-**Contents**:
-
-- Domain entities (business objects)
-- Value objects (immutable data structures)
-- Domain services (business logic that doesn't belong to a single entity)
-- Business rules and validations
-- Domain events
-
-**Organization**:
-
-Each domain has its own folder structure:
-
-```
-domains/
-├── user/
-│   ├── entities/
-│   ├── value-objects/
-│   ├── services/
-│   └── events/
-├── auth/
-│   ├── entities/
-│   ├── value-objects/
-│   └── services/
-└── [other-domains]/
-```
-
-**Rules**:
-
-- **MUST NOT** depend on external frameworks
-- **MUST NOT** depend on infrastructure
-- Contains pure business logic
-- Framework-agnostic
-- Each domain should be self-contained with minimal coupling to other domains
-
-#### Application Layer (`src/application/`)
-
-**Purpose**: Use cases and application services
-
-**Contents**:
-
-- Use case implementations
-- Application services (orchestration logic)
-- DTOs (Data Transfer Objects)
-- Application-specific interfaces
-- Command and Query handlers
-
-**Rules**:
-
-- **MUST NOT** depend on infrastructure adapters
-- **CAN** depend on domain layer
-- Orchestrates domain logic
-- Defines application workflows
-
-#### Ports (Interfaces)
-
-**Input Ports** (`src/ports/in/`):
-
-- Interfaces for incoming operations (use cases)
-- Define what the application can do
-- Examples: `CreateUserUseCase`, `ProcessMessageUseCase`
-
-**Output Ports** (`src/ports/out/`):
-
-- Interfaces for outgoing operations
-- Define what the application needs from outside
-- Examples: `UserRepository`, `MessagePublisher`, `AIServiceClient`
-
-**Rules**:
-
-- Define contracts, not implementations
-- Framework-agnostic
-- Used by application layer
-
-#### Adapters (Infrastructure)
-
-**Input Adapters** (`src/adapters/in/`):
-
-- HTTP controllers (Express routes, Next.js API routes)
-- Message queue consumers
-- WebSocket handlers
-- CLI interfaces
-
-**Output Adapters** (`src/adapters/out/`):
-
-- Database repositories (MongoDB implementations using Mongoose ODM)
-- Message queue publishers (RabbitMQ)
-- External API clients (Viber API, AI services)
-- File system adapters
-- Email services
-
-**Rules**:
-
-- Implement ports/interfaces
-- **CAN** depend on frameworks (Express, Mongoose, RabbitMQ, etc.)
-- Translate between external world and application
-
-### Dependency Direction
-
-```
-┌─────────────────────────────────────┐
-│      Infrastructure Adapters        │
-│  (Express, Mongoose, RabbitMQ)       │
-└──────────────┬──────────────────────┘
-               │ depends on
-┌──────────────▼──────────────────────┐
-│           Ports (Interfaces)         │
-│  (Input Ports, Output Ports)        │
-└──────────────┬──────────────────────┘
-               │ depends on
-┌──────────────▼──────────────────────┐
-│        Application Layer             │
-│    (Use Cases, Services, DTOs)       │
-└──────────────┬──────────────────────┘
-               │ depends on
-┌──────────────▼──────────────────────┐
-│          Domain Layer                │
-│  (Entities, Value Objects, Rules)   │
-└──────────────────────────────────────┘
-```
-
-**Key Rules**:
-
-- Dependencies point **inward** (toward domain)
-- Domain has **no dependencies**
-- Application depends only on **Domain**
-- Adapters depend on **Ports** and **Application**
-
-### Service-Specific Hexagonal Structure
-
-#### Node.js Express Services (Viber, AI, Analytics)
-
-```
-service/
-├── src/
-│   ├── domains/             # Domain layer (organized by domain)
-│   │   ├── user/
-│   │   │   ├── entities/
-│   │   │   ├── value-objects/
-│   │   │   ├── services/
-│   │   │   └── events/
-│   │   ├── auth/
-│   │   │   ├── entities/
-│   │   │   ├── value-objects/
-│   │   │   └── services/
-│   │   └── [other-domains]/
-│   ├── application/         # Application layer
-│   │   ├── use-cases/
-│   │   ├── services/
-│   │   └── dto/
-│   ├── ports/
-│   │   ├── in/              # Input ports (use case interfaces)
-│   │   └── out/              # Output ports (repository, publisher interfaces)
-│   ├── adapters/
-│   │   ├── in/               # Input adapters (HTTP controllers, consumers)
-│   │   └── out/              # Output adapters (MongoDB repos, publishers)
-│   └── config/              # Configuration and DI setup
-```
-
-#### Next.js Admin Service
-
-```
-admin/
-├── src/
-│   ├── app/                  # Next.js App Router (acts as input adapter)
-│   │   ├── api/              # API routes (input adapters)
-│   │   └── (pages)/          # Pages
-│   ├── domains/              # Domain layer (organized by domain)
-│   │   ├── user/
-│   │   │   ├── entities/
-│   │   │   ├── value-objects/
-│   │   │   └── services/
-│   │   ├── auth/
-│   │   │   ├── entities/
-│   │   │   └── services/
-│   │   └── [other-domains]/
-│   ├── application/          # Application layer
-│   ├── ports/
-│   │   ├── in/
-│   │   └── out/
-│   ├── adapters/
-│   │   ├── in/               # Additional input adapters if needed
-│   │   └── out/              # MongoDB repos, external services
-│   └── lib/                  # Shared utilities
-```
-
-## Shared Package
-
-**Location**: `packages/shared/`
-
-**Purpose**: Common utilities, types, and configurations shared across all services
-
-### Contents
-
-#### Common TypeScript Types
-
-- API request/response types
-- Message queue event types
-- Database entity types (for reference)
-- Service configuration types
-- Error types
-
-#### Shared Utilities
-
-- Logging utilities
-- Validation helpers
-- Date/time utilities
-- String manipulation
-- Error handling utilities
-
-#### Configuration Helpers
-
-- Environment variable validation
-- Configuration loading
-- Service discovery helpers
-- Connection string builders
-
-#### Message Queue Types
-
-- Event type definitions
-- Message schemas
-- Queue name constants
-- Routing key definitions
-
-### Usage Pattern
-
-Services import from the shared package:
-
-```typescript
-import { ApiResponse, MessageEvent, validateConfig } from "@vbar/shared";
-```
-
-### Benefits
-
-- **Consistency**: Shared types ensure consistency across services
-- **DRY Principle**: Common utilities avoid duplication
-- **Type Safety**: Shared types provide compile-time safety
-- **Maintainability**: Single source of truth for common code
-
-## Infrastructure Components
-
-### MongoDB Instances
-
-Each service has its own MongoDB database instance:
-
-- **Admin MongoDB**: Stores admin service data
-- **Bot MongoDB**: Stores viber service data
-- **AI MongoDB**: Stores AI service data
-- **Analytics MongoDB**: Stores analytics service data
-- **Web3 MongoDB**: Stores web3 service data (wallets, transactions, contracts)
-
-**Configuration**:
-
-- Each service connects to its own database using **Mongoose ODM**
-- Connection strings configured via environment variables
-- Database names: `admin`, `bot`, `ai`, `analytics`, `web3`
-- **Connection Pattern**: Singleton pattern with connection caching to reuse connections across requests
-- **Connection Management**: Services use `connectToDatabase()` function that implements connection pooling and reuse
-
-### RabbitMQ Message Queue
-
-**Purpose**: Asynchronous communication between services
-
-**Configuration**:
-
-- Single RabbitMQ instance for all services
-- Multiple queues for different event types
-- Exchange-based routing for pub/sub patterns
-- Connection configured via environment variables
-
-**Queue Management**:
-
-- Durable queues for reliability
-- Message acknowledgments for guaranteed delivery
-- Dead letter queues for failed messages
-
-### Blockchain Network Providers (RPC Endpoints)
-
-**Purpose**: External blockchain network access for Web3 Service operations
-
-**Configuration**:
-
-- Multiple RPC endpoints per network for redundancy and fallback
-- Network-specific configurations (Ethereum, Polygon, BSC, Arbitrum)
-- Environment variable configuration for each network's RPC endpoint
-- Support for public RPC endpoints and private node endpoints
-
-**Supported Networks**:
-
-- **Ethereum**: Mainnet and testnets (Sepolia, Goerli)
-- **Polygon**: Polygon network
-- **Binance Smart Chain (BSC)**: BSC network
-- **Arbitrum**: Arbitrum network
-
-**Integration**:
-
-- Web3 Service connects to blockchain networks via RPC endpoints
-- Factory pattern for network provider creation
-- Automatic fallback to secondary RPC endpoints on failure
-- Rate limiting and connection pooling for reliability
-
-**Benefits**:
-
-- **Multi-Chain Support**: Unified interface for multiple blockchain networks
-- **Reliability**: RPC endpoint fallback mechanism ensures service availability
-- **Flexibility**: Easy addition of new blockchain networks
-- **Performance**: Connection pooling and caching for efficient operations
-
-**Deployment Options**:
-
-- Public RPC endpoints (Infura, Alchemy, QuickNode, etc.)
-- Private blockchain nodes
-- Hybrid approach (primary private, fallback public)
-
-### Ollama (Self-Hosted AI Models)
-
-**Purpose**: Local deployment of large language models (LLMs) for AI processing
-
-**Configuration**:
-
-- Deployed as a separate service/container
-- Provides HTTP API for model inference
-- Supports multiple model types (Llama 2, Mistral, CodeLlama, etc.)
-- Can run on CPU or GPU (NVIDIA CUDA support)
-
-**Integration**:
-
-- AI Service connects to Ollama via HTTP API
-- Models are pulled and cached locally
-- Supports streaming responses
-- Can be used as primary or fallback AI provider
-
-**Benefits**:
-
-- **Data Privacy**: All processing happens on-premises
-- **Cost Control**: No per-request API costs
-- **Offline Capability**: Works without internet connection
-- **Custom Models**: Support for fine-tuned or custom models
-- **Low Latency**: No network round-trip to external APIs
-
-**Deployment Options**:
-
-- Docker container (recommended)
-- Kubernetes deployment with GPU support
-- Local installation for development
-
-### Docker Containerization
-
-**Structure**:
-
-- Multi-stage Dockerfiles for each service
-- Optimized production images
-- Development-friendly configurations
-- Volume mounts for local development
-
-**Services Containerized**:
-
-- Admin service (Next.js)
-- Viber service (Node.js)
-- AI service (Node.js)
-- Analytics service (Node.js)
-- Web3 service (Node.js)
-- MongoDB instances (one per service)
-- RabbitMQ
-- Ollama (self-hosted AI models)
-
-### Kubernetes Orchestration
-
-**Deployment Strategy**:
-
-- Namespace-based isolation
-- Deployment manifests for each service
-- StatefulSets for MongoDB instances
-- ConfigMaps for configuration
-- Secrets for sensitive data
-- Ingress for external access
-
-**Scaling**:
-
-- Horizontal pod autoscaling
-- Resource limits and requests
-- Health checks and probes
-- Rolling update strategies
+Profile `rag` adds Chroma on `127.0.0.1:8000`. Compose sets `CHROMA_URL=http://chromadb:8000` on the `ai` service. Default `docker compose up` does not start Chroma. See [rag.md](./rag.md).
 
 ## Diagrams
 
-For visual representations of the architecture, see:
-
-**Note**: The architecture diagrams (architecture.mmd, data-flow.mmd, deployment.mmd) will be updated in Step 2 to include the Web3 service. The diagrams below show the current state and will be enhanced with Web3 service integration.
-
-### Architecture Diagram
-
-High-level system architecture showing all services, databases, message queue, and communication patterns:
-
-```mermaid
-%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#ff6b6b','primaryTextColor':'#fff','primaryBorderColor':'#7C0000','lineColor':'#F8B229','secondaryColor':'#006100','tertiaryColor':'#fff'}}}%%
-graph TB
-    %% External Systems
-    ViberAPI[Viber API<br/>External]
-    Users[Users<br/>Admin Dashboard]
-
-    %% Shared Package
-    SharedPackage[Shared Package<br/>@vbar/shared<br/>Types, Utils, Config]
-
-    %% Admin Service with Hexagonal Architecture
-    subgraph AdminService["Admin Service (Next.js)"]
-        direction TB
-        AdminAdapterIn[Input Adapters<br/>Next.js App Router<br/>API Routes]
-        AdminPortsIn[Input Ports<br/>Use Case Interfaces]
-        AdminApp[Application Layer<br/>Use Cases, Services, DTOs]
-        AdminDomain[Domain Layer<br/>Entities, Business Rules]
-        AdminPortsOut[Output Ports<br/>Repository Interfaces]
-        AdminAdapterOut[Output Adapters<br/>MongoDB Repositories<br/>External Service Clients]
-
-        AdminAdapterIn --> AdminPortsIn
-        AdminPortsIn --> AdminApp
-        AdminApp --> AdminDomain
-        AdminApp --> AdminPortsOut
-        AdminPortsOut --> AdminAdapterOut
-    end
-
-    %% Viber Service with Hexagonal Architecture
-    subgraph ViberService["Viber Service (Express)"]
-        direction TB
-        ViberAdapterIn[Input Adapters<br/>Express Routes<br/>Webhook Handlers]
-        ViberPortsIn[Input Ports<br/>Use Case Interfaces]
-        ViberApp[Application Layer<br/>Use Cases, Services, DTOs]
-        ViberDomain[Domain Layer<br/>Entities, Business Rules]
-        ViberPortsOut[Output Ports<br/>Repository Interfaces]
-        ViberAdapterOut[Output Adapters<br/>MongoDB Repositories<br/>Message Publishers]
-
-        ViberAdapterIn --> ViberPortsIn
-        ViberPortsIn --> ViberApp
-        ViberApp --> ViberDomain
-        ViberApp --> ViberPortsOut
-        ViberPortsOut --> ViberAdapterOut
-    end
-
-    %% AI Service with Hexagonal Architecture
-    subgraph AIService["AI Service (Express)"]
-        direction TB
-        AIAdapterIn[Input Adapters<br/>Express Routes<br/>gRPC Server]
-        AIPortsIn[Input Ports<br/>Use Case Interfaces]
-        AIApp[Application Layer<br/>Use Cases, Services, DTOs]
-        AIDomain[Domain Layer<br/>Entities, Business Rules]
-        AIPortsOut[Output Ports<br/>Repository Interfaces]
-        AIAdapterOut[Output Adapters<br/>MongoDB Repositories<br/>AI Provider Clients]
-
-        AIAdapterIn --> AIPortsIn
-        AIPortsIn --> AIApp
-        AIApp --> AIDomain
-        AIApp --> AIPortsOut
-        AIPortsOut --> AIAdapterOut
-    end
-
-    %% Analytics Service with Hexagonal Architecture
-    subgraph AnalyticsService["Analytics Service (Express)"]
-        direction TB
-        AnalyticsAdapterIn[Input Adapters<br/>Express Routes<br/>Message Queue Consumers]
-        AnalyticsPortsIn[Input Ports<br/>Use Case Interfaces]
-        AnalyticsApp[Application Layer<br/>Use Cases, Services, DTOs]
-        AnalyticsDomain[Domain Layer<br/>Entities, Business Rules]
-        AnalyticsPortsOut[Output Ports<br/>Repository Interfaces]
-        AnalyticsAdapterOut[Output Adapters<br/>MongoDB Repositories]
-
-        AnalyticsAdapterIn --> AnalyticsPortsIn
-        AnalyticsPortsIn --> AnalyticsApp
-        AnalyticsApp --> AnalyticsDomain
-        AnalyticsApp --> AnalyticsPortsOut
-        AnalyticsPortsOut --> AnalyticsAdapterOut
-    end
-
-    %% Databases
-    AdminDB[(MongoDB<br/>admin database<br/>Users, Configs, Sessions)]
-    BotDB[(MongoDB<br/>bot database<br/>Conversations, Messages, Users)]
-    AIDB[(MongoDB<br/>ai database<br/>Models, Processing Logs)]
-    AnalyticsDB[(MongoDB<br/>analytics database<br/>Events, Metrics, Reports)]
-
-    %% Message Queue
-    RabbitMQ[RabbitMQ<br/>Message Queue<br/>analytics.events]
-
-    %% AI Model Providers
-    Ollama[Ollama<br/>Self-Hosted LLMs<br/>Llama 2, Mistral, etc.]
-    ExternalAI[External AI APIs<br/>OpenAI, Anthropic, etc.]
-
-    %% User Connections
-    Users -->|HTTP| AdminAdapterIn
-
-    %% Viber API Connection
-    ViberAPI -->|Webhook| ViberAdapterIn
-
-    %% REST API Communications (Admin to other services)
-    AdminAdapterOut -->|REST API<br/>Configuration, Control| ViberAdapterIn
-    AdminAdapterOut -->|REST API<br/>Model Config, Training| AIAdapterIn
-    AdminAdapterOut -->|REST API<br/>Dashboard, Reports| AnalyticsAdapterIn
-
-    %% gRPC Communication (Viber to AI)
-    ViberAdapterOut -->|gRPC<br/>Message Processing<br/>Intent Detection| AIAdapterIn
-
-    %% RabbitMQ Communication (Viber to Analytics)
-    ViberAdapterOut -->|RabbitMQ<br/>Async Events<br/>analytics.events| RabbitMQ
-    RabbitMQ -->|Consume Events| AnalyticsAdapterIn
-
-    %% Database Connections
-    AdminAdapterOut -->|Read/Write| AdminDB
-    ViberAdapterOut -->|Read/Write| BotDB
-    AIAdapterOut -->|Read/Write| AIDB
-    AnalyticsAdapterOut -->|Read/Write| AnalyticsDB
-
-    %% AI Model Provider Connections
-    AIAdapterOut -->|HTTP API<br/>Local Models| Ollama
-    AIAdapterOut -->|REST API<br/>Cloud Models| ExternalAI
-
-    %% Shared Package Dependencies
-    SharedPackage -.->|Imports| AdminApp
-    SharedPackage -.->|Imports| ViberApp
-    SharedPackage -.->|Imports| AIApp
-    SharedPackage -.->|Imports| AnalyticsApp
-
-    %% Styling
-    classDef serviceBox fill:#4ECDC4,stroke:#333,stroke-width:3px,color:#000
-    classDef dbBox fill:#95E1D3,stroke:#333,stroke-width:2px,color:#000
-    classDef mqBox fill:#F38181,stroke:#333,stroke-width:2px,color:#000
-    classDef externalBox fill:#AA96DA,stroke:#333,stroke-width:2px,color:#000
-    classDef sharedBox fill:#FCBAD3,stroke:#333,stroke-width:2px,color:#000
-    classDef layerBox fill:#FFF9CA,stroke:#333,stroke-width:1px,color:#000
-
-    class AdminService,ViberService,AIService,AnalyticsService serviceBox
-    class AdminDB,BotDB,AIDB,AnalyticsDB dbBox
-    class RabbitMQ mqBox
-    class ViberAPI,Users,ExternalAI externalBox
-    class Ollama serviceBox
-    class SharedPackage sharedBox
-    class AdminAdapterIn,AdminPortsIn,AdminApp,AdminDomain,AdminPortsOut,AdminAdapterOut layerBox
-    class ViberAdapterIn,ViberPortsIn,ViberApp,ViberDomain,ViberPortsOut,ViberAdapterOut layerBox
-    class AIAdapterIn,AIPortsIn,AIApp,AIDomain,AIPortsOut,AIAdapterOut layerBox
-    class AnalyticsAdapterIn,AnalyticsPortsIn,AnalyticsApp,AnalyticsDomain,AnalyticsPortsOut,AnalyticsAdapterOut layerBox
-```
-
-**Source file**: [architecture.mmd](./diagrams/architecture.mmd)
-
-### Data Flow Diagram
-
-Data flow between services showing request/response flows, message queue event flows, and database operations:
-
-**Source file**: [data-flow.mmd](./diagrams/data-flow.mmd)
-
-### Deployment Diagram
-
-Kubernetes deployment architecture showing container structure, service pods and replicas, database StatefulSets, message queue deployment, ingress and networking, and persistent volumes:
-
-%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#ff6b6b','primaryTextColor':'#fff','primaryBorderColor':'#7C0000','lineColor':'#F8B229','secondaryColor':'#006100','tertiaryColor':'#fff'}}}%%
-graph TB
-%% External
-Internet[Internet<br/>External Traffic]
-
-    %% Kubernetes Namespace
-    subgraph K8sNamespace["Kubernetes Namespace: vbar-production"]
-        direction TB
-
-        %% Ingress Layer
-        subgraph IngressLayer["Ingress Layer"]
-            Ingress[Ingress Controller<br/>nginx-ingress<br/>Port: 80, 443]
-        end
-
-        %% Application Services Layer
-        subgraph AppServices["Application Services"]
-            direction TB
-
-            %% Admin Service Deployment
-            subgraph AdminDeployment["Admin Service Deployment"]
-                direction TB
-                AdminPod1[Admin Pod 1<br/>Next.js<br/>Replica 1]
-                AdminPod2[Admin Pod 2<br/>Next.js<br/>Replica 2]
-                AdminPod3[Admin Pod 3<br/>Next.js<br/>Replica 3]
-                AdminServiceK8s[Admin Service<br/>ClusterIP<br/>Port: 3000]
-
-                AdminPod1 --> AdminServiceK8s
-                AdminPod2 --> AdminServiceK8s
-                AdminPod3 --> AdminServiceK8s
-            end
-
-            %% Viber Service Deployment
-            subgraph ViberDeployment["Viber Service Deployment"]
-                direction TB
-                ViberPod1[Viber Pod 1<br/>Express<br/>Replica 1]
-                ViberPod2[Viber Pod 2<br/>Express<br/>Replica 2]
-                ViberServiceK8s[Viber Service<br/>ClusterIP<br/>Port: 3001]
-
-                ViberPod1 --> ViberServiceK8s
-                ViberPod2 --> ViberServiceK8s
-            end
-
-            %% AI Service Deployment
-            subgraph AIDeployment["AI Service Deployment"]
-                direction TB
-                AIPod1[AI Pod 1<br/>Express + gRPC<br/>Replica 1]
-                AIPod2[AI Pod 2<br/>Express + gRPC<br/>Replica 2]
-                AIServiceK8s[AI Service<br/>ClusterIP<br/>Port: 3002]
-                AIServiceGRPC[AI Service gRPC<br/>ClusterIP<br/>Port: 50051]
-
-                AIPod1 --> AIServiceK8s
-                AIPod2 --> AIServiceK8s
-                AIPod1 --> AIServiceGRPC
-                AIPod2 --> AIServiceGRPC
-            end
-
-            %% Analytics Service Deployment
-            subgraph AnalyticsDeployment["Analytics Service Deployment"]
-                direction TB
-                AnalyticsPod1[Analytics Pod 1<br/>Express<br/>Replica 1]
-                AnalyticsPod2[Analytics Pod 2<br/>Express<br/>Replica 2]
-                AnalyticsServiceK8s[Analytics Service<br/>ClusterIP<br/>Port: 3003]
-
-                AnalyticsPod1 --> AnalyticsServiceK8s
-                AnalyticsPod2 --> AnalyticsServiceK8s
-            end
-        end
-
-        %% Message Queue Layer
-        subgraph MQLayer["Message Queue Layer"]
-            direction TB
-            RabbitMQStatefulSet[RabbitMQ StatefulSet<br/>Replicas: 3]
-            RabbitMQPod1[RabbitMQ Pod 1<br/>Master]
-            RabbitMQPod2[RabbitMQ Pod 2<br/>Replica]
-            RabbitMQPod3[RabbitMQ Pod 3<br/>Replica]
-            RabbitMQService[RabbitMQ Service<br/>ClusterIP<br/>Port: 5672, 15672]
-            RabbitMQPV1[RabbitMQ PV 1<br/>Persistent Volume]
-            RabbitMQPV2[RabbitMQ PV 2<br/>Persistent Volume]
-            RabbitMQPV3[RabbitMQ PV 3<br/>Persistent Volume]
-
-            RabbitMQStatefulSet --> RabbitMQPod1
-            RabbitMQStatefulSet --> RabbitMQPod2
-            RabbitMQStatefulSet --> RabbitMQPod3
-            RabbitMQPod1 --> RabbitMQService
-            RabbitMQPod2 --> RabbitMQService
-            RabbitMQPod3 --> RabbitMQService
-            RabbitMQPod1 -.->|Mount| RabbitMQPV1
-            RabbitMQPod2 -.->|Mount| RabbitMQPV2
-            RabbitMQPod3 -.->|Mount| RabbitMQPV3
-        end
-
-        %% Database Layer
-        subgraph DatabaseLayer["Database Layer (StatefulSets)"]
-            direction TB
-
-            %% Admin MongoDB
-            subgraph AdminMongoDB["Admin MongoDB StatefulSet"]
-                AdminMongoPod1[Admin MongoDB Pod 1<br/>Primary<br/>Replica 1]
-                AdminMongoPod2[Admin MongoDB Pod 2<br/>Secondary<br/>Replica 2]
-                AdminMongoPod3[Admin MongoDB Pod 3<br/>Secondary<br/>Replica 3]
-                AdminMongoService[Admin MongoDB Service<br/>ClusterIP<br/>Port: 27017]
-                AdminMongoPV1[Admin MongoDB PV 1<br/>Persistent Volume<br/>100GB]
-                AdminMongoPV2[Admin MongoDB PV 2<br/>Persistent Volume<br/>100GB]
-                AdminMongoPV3[Admin MongoDB PV 3<br/>Persistent Volume<br/>100GB]
-
-                AdminMongoPod1 --> AdminMongoService
-                AdminMongoPod2 --> AdminMongoService
-                AdminMongoPod3 --> AdminMongoService
-                AdminMongoPod1 -.->|Mount| AdminMongoPV1
-                AdminMongoPod2 -.->|Mount| AdminMongoPV2
-                AdminMongoPod3 -.->|Mount| AdminMongoPV3
-            end
-
-            %% Bot MongoDB
-            subgraph BotMongoDB["Bot MongoDB StatefulSet"]
-                BotMongoPod1[Bot MongoDB Pod 1<br/>Primary<br/>Replica 1]
-                BotMongoPod2[Bot MongoDB Pod 2<br/>Secondary<br/>Replica 2]
-                BotMongoPod3[Bot MongoDB Pod 3<br/>Secondary<br/>Replica 3]
-                BotMongoService[Bot MongoDB Service<br/>ClusterIP<br/>Port: 27017]
-                BotMongoPV1[Bot MongoDB PV 1<br/>Persistent Volume<br/>500GB]
-                BotMongoPV2[Bot MongoDB PV 2<br/>Persistent Volume<br/>500GB]
-                BotMongoPV3[Bot MongoDB PV 3<br/>Persistent Volume<br/>500GB]
-
-                BotMongoPod1 --> BotMongoService
-                BotMongoPod2 --> BotMongoService
-                BotMongoPod3 --> BotMongoService
-                BotMongoPod1 -.->|Mount| BotMongoPV1
-                BotMongoPod2 -.->|Mount| BotMongoPV2
-                BotMongoPod3 -.->|Mount| BotMongoPV3
-            end
-
-            %% AI MongoDB
-            subgraph AIMongoDB["AI MongoDB StatefulSet"]
-                AIMongoPod1[AI MongoDB Pod 1<br/>Primary<br/>Replica 1]
-                AIMongoPod2[AI MongoDB Pod 2<br/>Secondary<br/>Replica 2]
-                AIMongoService[AIMongoDB Service<br/>ClusterIP<br/>Port: 27017]
-                AIMongoPV1[AI MongoDB PV 1<br/>Persistent Volume<br/>200GB]
-                AIMongoPV2[AI MongoDB PV 2<br/>Persistent Volume<br/>200GB]
-
-                AIMongoPod1 --> AIMongoService
-                AIMongoPod2 --> AIMongoService
-                AIMongoPod1 -.->|Mount| AIMongoPV1
-                AIMongoPod2 -.->|Mount| AIMongoPV2
-            end
-
-            %% Analytics MongoDB
-            subgraph AnalyticsMongoDB["Analytics MongoDB StatefulSet"]
-                AnalyticsMongoPod1[Analytics MongoDB Pod 1<br/>Primary<br/>Replica 1]
-                AnalyticsMongoPod2[Analytics MongoDB Pod 2<br/>Secondary<br/>Replica 2]
-                AnalyticsMongoPod3[Analytics MongoDB Pod 3<br/>Secondary<br/>Replica 3]
-                AnalyticsMongoService[Analytics MongoDB Service<br/>ClusterIP<br/>Port: 27017]
-                AnalyticsMongoPV1[Analytics MongoDB PV 1<br/>Persistent Volume<br/>1TB]
-                AnalyticsMongoPV2[Analytics MongoDB PV 2<br/>Persistent Volume<br/>1TB]
-                AnalyticsMongoPV3[Analytics MongoDB PV 3<br/>Persistent Volume<br/>1TB]
-
-                AnalyticsMongoPod1 --> AnalyticsMongoService
-                AnalyticsMongoPod2 --> AnalyticsMongoService
-                AnalyticsMongoPod3 --> AnalyticsMongoService
-                AnalyticsMongoPod1 -.->|Mount| AnalyticsMongoPV1
-                AnalyticsMongoPod2 -.->|Mount| AnalyticsMongoPV2
-                AnalyticsMongoPod3 -.->|Mount| AnalyticsMongoPV3
-            end
-        end
-
-        %% Ollama Service (Optional, for self-hosted AI)
-        subgraph OllamaDeployment["Ollama Service Deployment (Optional)"]
-            direction TB
-            OllamaPod1[Ollama Pod 1<br/>LLM Service<br/>GPU Enabled]
-            OllamaPod2[Ollama Pod 2<br/>LLM Service<br/>GPU Enabled]
-            OllamaService[Ollama Service<br/>ClusterIP<br/>Port: 11434]
-            OllamaPV1[Ollama PV 1<br/>Persistent Volume<br/>Model Storage]
-            OllamaPV2[Ollama PV 2<br/>Persistent Volume<br/>Model Storage]
-
-            OllamaPod1 --> OllamaService
-            OllamaPod2 --> OllamaService
-            OllamaPod1 -.->|Mount| OllamaPV1
-            OllamaPod2 -.->|Mount| OllamaPV2
-        end
-    end
-
-    %% External Connections
-    Internet -->|HTTPS:443<br/>HTTP:80| Ingress
-
-    %% Ingress to Services
-    Ingress -->|Route: /admin/*| AdminServiceK8s
-    Ingress -->|Route: /api/viber/*| ViberServiceK8s
-    Ingress -->|Route: /api/ai/*| AIServiceK8s
-    Ingress -->|Route: /api/analytics/*| AnalyticsServiceK8s
-
-    %% Service-to-Service Communication
-    AdminPod1 -->|REST API| ViberServiceK8s
-    AdminPod2 -->|REST API| ViberServiceK8s
-    AdminPod3 -->|REST API| ViberServiceK8s
-    AdminPod1 -->|REST API| AIServiceK8s
-    AdminPod2 -->|REST API| AIServiceK8s
-    AdminPod3 -->|REST API| AIServiceK8s
-    AdminPod1 -->|REST API| AnalyticsServiceK8s
-    AdminPod2 -->|REST API| AnalyticsServiceK8s
-    AdminPod3 -->|REST API| AnalyticsServiceK8s
-
-    ViberPod1 -->|gRPC:50051| AIServiceGRPC
-    ViberPod2 -->|gRPC:50051| AIServiceGRPC
-
-    ViberPod1 -->|Publish Events| RabbitMQService
-    ViberPod2 -->|Publish Events| RabbitMQService
-    RabbitMQService -->|Consume Events| AnalyticsPod1
-    RabbitMQService -->|Consume Events| AnalyticsPod2
-
-    %% Database Connections
-    AdminPod1 -->|MongoDB:27017| AdminMongoService
-    AdminPod2 -->|MongoDB:27017| AdminMongoService
-    AdminPod3 -->|MongoDB:27017| AdminMongoService
-
-    ViberPod1 -->|MongoDB:27017| BotMongoService
-    ViberPod2 -->|MongoDB:27017| BotMongoService
-
-    AIPod1 -->|MongoDB:27017| AIMongoService
-    AIPod2 -->|MongoDB:27017| AIMongoService
-
-    AnalyticsPod1 -->|MongoDB:27017| AnalyticsMongoService
-    AnalyticsPod2 -->|MongoDB:27017| AnalyticsMongoService
-
-    %% AI Service to Ollama (Optional)
-    AIPod1 -.->|HTTP:11434<br/>Optional| OllamaService
-    AIPod2 -.->|HTTP:11434<br/>Optional| OllamaService
-
-    %% Styling
-    classDef ingressBox fill:#FF6B6B,stroke:#333,stroke-width:3px,color:#fff
-    classDef deploymentBox fill:#4ECDC4,stroke:#333,stroke-width:2px,color:#000
-    classDef serviceBox fill:#95E1D3,stroke:#333,stroke-width:2px,color:#000
-    classDef podBox fill:#FFF9CA,stroke:#333,stroke-width:1px,color:#000
-    classDef dbBox fill:#F38181,stroke:#333,stroke-width:2px,color:#fff
-    classDef mqBox fill:#AA96DA,stroke:#333,stroke-width:2px,color:#fff
-    classDef pvBox fill:#FCBAD3,stroke:#333,stroke-width:1px,color:#000
-    classDef externalBox fill:#C7CEEA,stroke:#333,stroke-width:2px,color:#000
-
-    class Ingress ingressBox
-    class AdminDeployment,ViberDeployment,AIDeployment,AnalyticsDeployment,OllamaDeployment deploymentBox
-    class AdminServiceK8s,ViberServiceK8s,AIServiceK8s,AIServiceGRPC,AnalyticsServiceK8s,RabbitMQService serviceBox
-    class AdminPod1,AdminPod2,AdminPod3,ViberPod1,ViberPod2,AIPod1,AIPod2,AnalyticsPod1,AnalyticsPod2,OllamaPod1,OllamaPod2 podBox
-    class AdminMongoDB,BotMongoDB,AIMongoDB,AnalyticsMongoDB dbBox
-    class RabbitMQStatefulSet,RabbitMQPod1,RabbitMQPod2,RabbitMQPod3 mqBox
-    class AdminMongoPod1,AdminMongoPod2,AdminMongoPod3,BotMongoPod1,BotMongoPod2,BotMongoPod3,AIMongoPod1,AIMongoPod2,AnalyticsMongoPod1,AnalyticsMongoPod2,AnalyticsMongoPod3 dbBox
-    class AdminMongoPV1,AdminMongoPV2,AdminMongoPV3,BotMongoPV1,BotMongoPV2,BotMongoPV3,AIMongoPV1,AIMongoPV2,AnalyticsMongoPV1,AnalyticsMongoPV2,AnalyticsMongoPV3,RabbitMQPV1,RabbitMQPV2,RabbitMQPV3,OllamaPV1,OllamaPV2 pvBox
-    class Internet externalBox
-
-```
-
-**Source file**: [deployment.mmd](./diagrams/deployment.mmd)
-
-## Related Documentation
-
-- [Setup Guide](./setup.md) - Development environment setup
-- [Deployment Guide](./deployment.md) - Docker and Kubernetes deployment
-- [API Documentation](./api.md) - API contracts and endpoints
-```
+- [architecture.mmd](./diagrams/architecture.mmd)
+- [data-flow.mmd](./diagrams/data-flow.mmd)
+- [deployment.mmd](./diagrams/deployment.mmd)
+
+## Related documentation
+
+- [API](./api.md)
+- [Setup](./setup.md)
+- [Deployment](./deployment.md)
+- [Databases](./databases.md)
+- [RAG](./rag.md)
+- Service READMEs under `services/*/README.md`
+
+## Future / not implemented
+
+Material that is **not** in the running stack. Do not treat this appendix as current architecture.
+
+- Archived extra runtime on branch `archive/web3-service` (REST/gRPC, dedicated Mongo). Reintroduce only when a step needs wallets or chain calls.
+- Additional messaging platforms (no second messenger service in this repo).
+- Multi-bot hosting (removed; singleton bot-settings is the product).
+- Admin REST for users/config, Viber REST send/config APIs, AI REST process/intent/batch endpoints (knowledge-base ingest REST is implemented).
+- Viber media handlers (picture/video/file/location/contact/sticker/url) are stubbed and will be implemented later — they are not deleted.
+- Kubernetes — manifests removed; Compose-on-VPS is the deploy target.

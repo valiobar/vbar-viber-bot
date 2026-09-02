@@ -31,7 +31,6 @@ export interface RateLimitConfig {
  * - SERVICE_TOKEN: General service token
  * - ADMIN_SERVICE_TOKEN: Admin service specific token
  * - AI_SERVICE_TOKEN: AI service specific token
- * - ANALYTICS_SERVICE_TOKEN: Analytics service specific token
  *
  * @returns Array of valid service tokens (non-empty strings only)
  */
@@ -54,12 +53,6 @@ export function getServiceTokens(): string[] {
   const aiServiceToken = process.env.AI_SERVICE_TOKEN;
   if (aiServiceToken && aiServiceToken.trim().length > 0) {
     tokens.push(aiServiceToken.trim());
-  }
-
-  // Get analytics service token
-  const analyticsServiceToken = process.env.ANALYTICS_SERVICE_TOKEN;
-  if (analyticsServiceToken && analyticsServiceToken.trim().length > 0) {
-    tokens.push(analyticsServiceToken.trim());
   }
 
   return tokens;

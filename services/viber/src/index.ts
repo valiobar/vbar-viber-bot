@@ -6,9 +6,8 @@
 
 import express, { Express } from "express";
 import dotenv from "dotenv";
-import { ConfigHelper, ServiceConfig, ConsoleLogger } from "@vbar/shared";
-import { getDatabase, closeConnection } from "./config/database";
-import { getConnection, closeMessageQueue } from "./config/messageQueue";
+import { ConfigHelper, ServiceConfig, ConsoleLogger, resolveRootEnvPath } from "@vbar/shared";
+import { createMongoConnection, closeMongoConnection, createQueueChannel, closeQueue } from "@vbar/shared/infra";
 import { getViberConfig } from "./config/viber";
 import routes from "./adapters/in/routes";
 import { generalRateLimiter } from "./adapters/in/middleware";
@@ -24,9 +23,13 @@ import { RefreshConsumer } from "./adapters/in/consumers/RefreshConsumer";
 import { IAiServiceClient } from "./ports/out/IAiServiceClient";
 import { AiServiceGrpcClient } from "./adapters/out/grpc/AiServiceGrpcClient";
 
-// Load environment variables
-dotenv.config();
-
+// Load monorepo-root .env (single system env file)
+const rootEnv = resolveRootEnvPath();
+if (rootEnv) {
+  dotenv.config({ path: rootEnv });
+} else {
+  dotenv.config();
+}
 const app: Express = express();
 const port = ConfigHelper.getEnvNumber("PORT", ServiceConfig.ports.viber);
 
@@ -139,7 +142,13 @@ async function initialize(): Promise<void> {
   try {
     // Initialize MongoDB connection
     console.log("Connecting to MongoDB...");
-    await getDatabase();
+    await createMongoConnection({
+      uri: ConfigHelper.getEnv(
+        "MONGODB_URI",
+        "mongodb://bot:bot123@localhost:27018/bot?authSource=admin"
+      ),
+      dbName: ConfigHelper.getEnv("MONGODB_DB_NAME", "bot"),
+    });
     console.log("MongoDB connected");
 
     // Initialize user repository
@@ -155,7 +164,12 @@ async function initialize(): Promise<void> {
 
     // Initialize RabbitMQ connection
     console.log("Connecting to RabbitMQ...");
-    await getConnection();
+    await createQueueChannel({
+      uri: ConfigHelper.getEnv(
+        "RABBITMQ_URI",
+        "amqp://admin:admin@localhost:5672"
+      ),
+    });
     console.log("RabbitMQ connected");
 
     // Initialize Viber Bot
@@ -267,14 +281,14 @@ async function shutdown(): Promise<void> {
   }
 
   try {
-    await closeMessageQueue();
+    await closeQueue();
     console.log("RabbitMQ connection closed");
   } catch (error) {
     console.error("Error closing RabbitMQ:", error);
   }
 
   try {
-    await closeConnection();
+    await closeMongoConnection();
     console.log("MongoDB connection closed");
   } catch (error) {
     console.error("Error closing MongoDB:", error);

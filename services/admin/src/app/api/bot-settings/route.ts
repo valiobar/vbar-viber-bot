@@ -12,14 +12,13 @@
 import { NextResponse } from "next/server";
 import type { ApiResponse } from "@vbar/shared";
 import { connectToDatabase } from "@/lib/mongodb";
-import { GetBotSettingsUseCaseImpl } from "@/domains/bot-settings/application/use-cases/GetBotSettingsUseCaseImpl";
-import { UpdateBotSettingsUseCaseImpl } from "@/domains/bot-settings/application/use-cases/UpdateBotSettingsUseCaseImpl";
-import { MongoBotSettingsRepository } from "@/domains/bot-settings/adapters/out/repositories/MongoBotSettingsRepository";
-import { BotSettingsModel } from "@/domains/bot-settings/adapters/out/models/BotSettingsModel";
-import { MongoStepRepository } from "@/domains/step/adapters/out/repositories/MongoStepRepository";
-import { StepModel } from "@/domains/step/adapters/out/models/StepModel";
-import type { UpdateBotSettingsInput } from "@/domains/bot-settings/ports/in/UpdateBotSettingsUseCase";
-import type { BotSettingsDTO } from "@/domains/bot-settings/application/dto/BotSettingsDTO";
+import { BotSettingsService } from "@/domains/bot-settings/BotSettingsService";
+import { BotSettingsRepository } from "@/domains/bot-settings/BotSettingsRepository";
+import { BotSettingsModel } from "@/domains/bot-settings/BotSettingsModel";
+import { StepRepository } from "@/domains/step/StepRepository";
+import { StepModel } from "@/domains/step/StepModel";
+import type { UpdateBotSettingsInput } from "@/domains/bot-settings/BotSettingsService";
+import type { BotSettingsDTO } from "@/domains/bot-settings/BotSettingsDTO";
 import { publishRefreshEvent } from "@/lib/message-queue-publisher";
 
 /**
@@ -35,18 +34,13 @@ export async function GET(
     // Ensure database connection is established
     await connectToDatabase();
 
-    // Instantiate repository
-    const botSettingsRepository = new MongoBotSettingsRepository(
-      BotSettingsModel
+    // Instantiate service
+    const botSettingsService = new BotSettingsService(
+      new BotSettingsRepository(BotSettingsModel),
+      new StepRepository(StepModel)
     );
 
-    // Instantiate use case
-    const getBotSettingsUseCase = new GetBotSettingsUseCaseImpl(
-      botSettingsRepository
-    );
-
-    // Execute use case
-    const botSettingsDTO = await getBotSettingsUseCase.execute();
+    const botSettingsDTO = await botSettingsService.get();
 
     // Return success response
     return NextResponse.json<ApiResponse<BotSettingsDTO>>(
@@ -138,20 +132,13 @@ export async function PUT(
       input.GAKey = body.GAKey === null ? null : body.GAKey.trim();
     }
 
-    // Instantiate repositories
-    const botSettingsRepository = new MongoBotSettingsRepository(
-      BotSettingsModel
-    );
-    const stepRepository = new MongoStepRepository(StepModel);
-
-    // Instantiate use case
-    const updateBotSettingsUseCase = new UpdateBotSettingsUseCaseImpl(
-      botSettingsRepository,
-      stepRepository
+    // Instantiate service
+    const botSettingsService = new BotSettingsService(
+      new BotSettingsRepository(BotSettingsModel),
+      new StepRepository(StepModel)
     );
 
-    // Execute use case
-    const botSettingsDTO = await updateBotSettingsUseCase.execute(input);
+    const botSettingsDTO = await botSettingsService.update(input);
 
     // Notify viber service to refresh cache (fire-and-forget)
     try {

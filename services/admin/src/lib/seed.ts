@@ -6,10 +6,10 @@
  */
 
 import { connectToDatabase } from "./mongodb";
-import { MongoUserRepository } from "@/domains/user/adapters/out/repositories/UserRepository";
-import { User } from "@/domains/user/entities/User";
-import { hashPassword } from "@/domains/user/lib/password";
-import { UserModel } from "@/domains/user/adapters/out/models/UserModel";
+import { UserRepository } from "@/domains/user/UserRepository";
+import { User } from "@/domains/user/User";
+import { hashPassword } from "@/lib/auth/password";
+import { UserModel } from "@/domains/user/UserModel";
 
 /**
  * Seed admin user if no users exist
@@ -34,7 +34,7 @@ export async function seedAdminUser(): Promise<void> {
     // UserModel is already imported at the top, which ensures the schema is registered with Mongoose
     console.log("UserModel registered");
 
-    const userRepository = new MongoUserRepository();
+    const userRepository = new UserRepository();
 
     // Check if any users exist
     const existingUser = await userRepository.findByUsername("admin");

@@ -15,28 +15,6 @@ export interface User extends BaseEntity {
   lastLoginAt?: string;
 }
 
-/**
- * Configuration interface
- */
-export interface Config {
-  bot: {
-    enabled: boolean;
-    welcomeMessage: string;
-    defaultLanguage: string;
-    autoReply: boolean;
-    aiEnabled: boolean;
-  };
-  ai: {
-    model: string;
-    temperature: number;
-    maxTokens: number;
-  };
-  analytics: {
-    retentionDays: number;
-    aggregationInterval: "hour" | "day" | "week" | "month";
-  };
-}
-
 // ============================================================================
 // Message Domain Types
 // ============================================================================
@@ -197,4 +175,5 @@ export interface KeyboardDTO extends BaseEntity {
   humanReadableName: string;
   title: string | null;
   isBroadcast: boolean;
+  isTemplate: boolean;
 }

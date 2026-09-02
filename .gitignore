@@ -18,7 +18,7 @@ coverage/
 build/
 dist/
 .next/
-out/
+/services/admin/out/
 *.tsbuildinfo
 
 # Environment variables
@@ -96,3 +96,4 @@ plans/
 # yarn.lock
 # pnpm-lock.yaml
 
+analyses/
