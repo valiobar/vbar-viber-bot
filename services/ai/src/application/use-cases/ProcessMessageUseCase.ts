@@ -78,31 +78,41 @@ export class ProcessMessageUseCaseImpl implements ProcessMessageUseCase {
         );
       }
 
-      // Determine task type from request or config
-      let taskType: AITaskType;
-      try {
-        // Use taskType from request if provided, otherwise fall back to config
-        const taskTypeStr =
-          request.taskType || ConfigHelper.getEnv("AI_TASK_TYPE", "simple");
-        taskType = parseAITaskType(taskTypeStr);
-      } catch (error) {
-        this.logger.warn("Invalid task type, defaulting to simple", {
-          error: error instanceof Error ? error.message : String(error),
-          providedTaskType: request.taskType,
-        });
-        taskType = AITaskType.SIMPLE;
+      // Explicit taskType (request or AI_TASK_TYPE) wins; otherwise RAG_ENABLED
+      // selects RAG. An unset AI_TASK_TYPE is not treated as "simple".
+      const aiConfig = getAIConfig();
+      const explicitTaskTypeStr = (
+        request.taskType ||
+        ConfigHelper.getEnv("AI_TASK_TYPE", "") ||
+        ""
+      ).trim();
+
+      let explicitTaskType: AITaskType | undefined;
+      if (explicitTaskTypeStr) {
+        try {
+          explicitTaskType = parseAITaskType(explicitTaskTypeStr);
+        } catch (error) {
+          this.logger.warn("Invalid task type, defaulting to simple", {
+            error: error instanceof Error ? error.message : String(error),
+            providedTaskType: request.taskType,
+            envTaskType: process.env.AI_TASK_TYPE,
+          });
+          explicitTaskType = AITaskType.SIMPLE;
+        }
       }
 
-      // Get AI config to determine RAG enabled status
-      const aiConfig = getAIConfig();
-      const ragEnabled = aiConfig.rag.enabled || taskType === AITaskType.RAG;
+      const ragEnabled =
+        aiConfig.rag.enabled || explicitTaskType === AITaskType.RAG;
+      const taskType =
+        explicitTaskType ??
+        (ragEnabled ? AITaskType.RAG : AITaskType.SIMPLE);
 
-      // Log AI provider used
       this.logger.info("AI provider configuration", {
         provider: aiConfig.provider,
         model: this.getModelName(aiConfig),
-        taskType: taskType,
-        ragEnabled: ragEnabled,
+        taskType,
+        taskTypeExplicit: !!explicitTaskTypeStr,
+        ragEnabled,
         temperature: aiConfig.temperature,
         maxTokens: aiConfig.maxTokens,
       });

@@ -45,8 +45,7 @@ export type MessageQueueEventType =
   | "message.received"
   | "message.processed"
   | "user.created"
-  | "config.updated"
-  | "analytics.event";
+  | "config.updated";
 
 /**
  * Message Queue Event
@@ -65,8 +64,8 @@ export interface MessageQueueEvent<T = any> {
 export type MessageQueueName =
   | "viber.messages"
   | "ai.processed"
-  | "analytics.events"
-  | "admin.config";
+  | "admin.config"
+  | "viber.refresh";
 
 /**
  * Health Check Response

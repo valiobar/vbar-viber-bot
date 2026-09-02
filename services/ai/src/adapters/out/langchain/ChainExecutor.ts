@@ -197,9 +197,8 @@ export class LangChainExecutor implements ChainExecutorPort {
       });
 
       // Retrieve relevant documents from vector store
-      // Using default k=4 and threshold=0.7 (can be configured via metadata)
-      const k = 4;
-      const threshold = 0.7;
+      const { retrieverK: k, similarityThreshold: threshold } =
+        getAIConfig().rag;
       const retrievedDocs = await this.vectorStore.similaritySearch(
         query,
         k,
@@ -319,10 +318,11 @@ Answer:`;
   }
 
   /**
-   * Execute a task based on task type
+   * Execute a task based on effective task type
    *
-   * Routes to the appropriate chain execution method based on the task type.
-   * Handles task metadata and configuration.
+   * Explicit `task.taskType` wins; otherwise RAG is selected when
+   * `task.isRAGTask()` is true (i.e. `ragEnabled`). If the RAG chain fails
+   * (e.g. vector store unavailable), fall back to the simple chain.
    *
    * @param task - The AI task to execute
    * @param input - The input string for the task
@@ -334,34 +334,47 @@ Answer:`;
     input: string,
     context?: ConversationContext
   ): Promise<string> {
+    const effectiveType = this.resolveEffectiveTaskType(task);
+
     try {
       this.logger.debug("Executing task", {
         taskType: task.taskType,
+        effectiveType,
         ragEnabled: task.ragEnabled,
         templateName: task.promptTemplateName,
         hasContext: !!context,
       });
 
-      // Determine which chain to execute based on task type
-      switch (task.taskType) {
+      switch (effectiveType) {
         case AITaskType.SIMPLE:
-          // Simple chain: direct prompt
+          this.logger.info("Selected chain type", { chain: "simple" });
           return await this.executeSimpleChain(input, context);
 
         case AITaskType.RAG:
-          // RAG chain: retrieval augmented generation
-          return await this.executeRAGChain(input, context);
+          this.logger.info("Selected chain type", { chain: "rag" });
+          try {
+            return await this.executeRAGChain(input, context);
+          } catch (ragError) {
+            this.logger.warn(
+              "RAG chain failed, falling back to simple chain",
+              {
+                error:
+                  ragError instanceof Error
+                    ? ragError.message
+                    : String(ragError),
+              }
+            );
+            return await this.executeSimpleChain(input, context);
+          }
 
-        case AITaskType.CUSTOM:
-          // Custom chain: template-based
+        case AITaskType.CUSTOM: {
+          this.logger.info("Selected chain type", { chain: "custom" });
           if (!task.promptTemplateName) {
             throw new Error(
               "Custom task requires a prompt template name to be specified"
             );
           }
 
-          // Extract variables from task metadata or use empty object
-          // Create a copy and convert all values to strings
           const variables: Record<string, string> = task.metadata
             ? Object.fromEntries(
                 Object.entries(task.metadata).map(([key, value]) => [
@@ -371,7 +384,6 @@ Answer:`;
               )
             : {};
 
-          // Add input as a variable if not already present
           if (!variables.input && !variables.query && !variables.message) {
             variables.input = input;
           }
@@ -381,17 +393,30 @@ Answer:`;
             variables,
             context
           );
+        }
 
         default:
-          throw new Error(`Unsupported task type: ${task.taskType}`);
+          throw new Error(`Unsupported task type: ${effectiveType}`);
       }
     } catch (error) {
       this.logger.error("Error executing task", {
         taskType: task.taskType,
+        effectiveType,
         error: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,
       });
       throw error;
     }
+  }
+
+  /**
+   * Explicit taskType wins; otherwise fall back to RAG when ragEnabled.
+   * Equivalent to `taskType || (ragEnabled ? "rag" : "simple")`.
+   */
+  private resolveEffectiveTaskType(task: AITask): AITaskType {
+    if (task.taskType) {
+      return task.taskType;
+    }
+    return task.isRAGTask() ? AITaskType.RAG : AITaskType.SIMPLE;
   }
 }

@@ -8,9 +8,8 @@
  */
 
 import { Request, Response } from "express";
-import { HealthCheckResponse } from "@vbar/shared";
-import { connectToDatabase } from "../../../config/database";
-import { getConnection } from "../../../config/messageQueue";
+import { ConfigHelper, HealthCheckResponse } from "@vbar/shared";
+import { createMongoConnection, createQueueChannel } from "@vbar/shared/infra";
 import mongoose from "mongoose";
 
 /**
@@ -37,7 +36,13 @@ export async function healthCheckHandler(
     // Check MongoDB connection
     let dbStatus: "connected" | "disconnected" = "disconnected";
     try {
-      await connectToDatabase();
+      await createMongoConnection({
+        uri: ConfigHelper.getEnv(
+          "MONGODB_URI",
+          "mongodb://bot:bot123@localhost:27018/bot?authSource=admin"
+        ),
+        dbName: ConfigHelper.getEnv("MONGODB_DB_NAME", "bot"),
+      });
       const db = mongoose.connection.db;
       if (db) {
         await db.admin().ping();
@@ -50,7 +55,12 @@ export async function healthCheckHandler(
     // Check RabbitMQ connection
     let mqStatus: "connected" | "disconnected" = "disconnected";
     try {
-      await getConnection();
+      await createQueueChannel({
+        uri: ConfigHelper.getEnv(
+          "RABBITMQ_URI",
+          "amqp://admin:admin@localhost:5672"
+        ),
+      });
       mqStatus = "connected";
     } catch (error) {
       console.error("RabbitMQ health check failed:", error);

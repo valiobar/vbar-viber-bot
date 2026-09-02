@@ -7,9 +7,9 @@
 
 import { VectorStorePort } from "../../../../ports/out/VectorStorePort";
 import { EmbeddingProvider } from "./EmbeddingProvider";
-import { MongoVectorStore } from "./MongoVectorStore";
+import { ChromaVectorStore } from "./ChromaVectorStore";
 import { MemoryVectorStoreAdapter } from "./MemoryVectorStore";
-import { AIConfig, getAIConfig } from "../../../../config/aiConfig";
+import { getAIConfig } from "../../../../config/aiConfig";
 import { Logger } from "@vbar/shared";
 
 /**
@@ -38,14 +38,14 @@ export function createVectorStore(
   const vectorStoreType = config.rag.vectorStoreType;
 
   switch (vectorStoreType) {
-    case "mongodb": {
+    case "chroma": {
       logger.info(
-        `Creating MongoDB vector store with collection: ${config.rag.vectorStoreCollection}`
+        `Creating Chroma vector store collection=${config.rag.vectorStoreCollection} url=${config.rag.chromaUrl}`
       );
-
-      return new MongoVectorStore(
+      return new ChromaVectorStore(
         embeddings,
         config.rag.vectorStoreCollection,
+        config.rag.chromaUrl,
         logger
       );
     }
@@ -58,7 +58,7 @@ export function createVectorStore(
 
     default:
       throw new Error(
-        `Unsupported vector store type: ${vectorStoreType}. Must be 'mongodb' or 'memory'.`
+        `Unsupported vector store type: ${vectorStoreType}. Must be 'chroma' or 'memory'.`
       );
   }
 }

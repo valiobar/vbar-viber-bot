@@ -31,6 +31,12 @@ export function getViberConfig(): ViberConfig {
       "ADMIN_SERVICE_URL",
       "http://localhost:3000"
     ),
-    adminServiceToken: process.env.ADMIN_SERVICE_TOKEN || null,
+    // Viber presents this as X-Service-Token. Admin allowlists
+    // ADMIN_SERVICE_TOKEN, VIBER_SERVICE_TOKEN, and SERVICE_TOKEN.
+    adminServiceToken:
+      process.env.ADMIN_SERVICE_TOKEN ||
+      process.env.VIBER_SERVICE_TOKEN ||
+      process.env.SERVICE_TOKEN ||
+      null,
   };
 }

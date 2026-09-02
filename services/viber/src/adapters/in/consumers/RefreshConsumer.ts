@@ -8,9 +8,9 @@
  * Location: Input Adapter (Hexagonal Architecture)
  */
 
-import { Channel } from "amqplib";
-import { ServiceConfig, RefreshEvent } from "@vbar/shared";
-import { getConnection, getChannel } from "../../../config/messageQueue";
+import { Channel, Message } from "amqplib";
+import { ConfigHelper, ServiceConfig, RefreshEvent } from "@vbar/shared";
+import { createQueueChannel } from "@vbar/shared/infra";
 import { ViberBotService } from "../../../application/services/ViberBotService";
 
 export class RefreshConsumer {
@@ -22,10 +22,7 @@ export class RefreshConsumer {
 
   constructor(viberBotService: ViberBotService) {
     this.viberBotService = viberBotService;
-    // Use queue name from ServiceConfig, fallback to string literal if type doesn't include it yet
-    this.queueName =
-      (ServiceConfig.messageQueue.queues as any).viberRefresh ||
-      "viber.refresh";
+    this.queueName = ServiceConfig.messageQueue.queues.viberRefresh;
     this.exchangeName = ServiceConfig.messageQueue.exchanges.default;
   }
 
@@ -40,8 +37,12 @@ export class RefreshConsumer {
 
     try {
       // Ensure connection and channel
-      await getConnection();
-      const channel = await getChannel();
+      const channel = await createQueueChannel({
+        uri: ConfigHelper.getEnv(
+          "RABBITMQ_URI",
+          "amqp://admin:admin@localhost:5672"
+        ),
+      });
       this.channel = channel;
 
       // Assert queue (durable, so it survives RabbitMQ restarts)
@@ -56,7 +57,7 @@ export class RefreshConsumer {
         "viber.refresh"
       );
 
-      // Start consuming messages
+      this.isConsuming = true;
       await channel.consume(
         this.queueName,
         async (message) => {
@@ -65,26 +66,16 @@ export class RefreshConsumer {
           }
 
           try {
-            // Parse message
             const event: RefreshEvent = JSON.parse(message.content.toString());
 
             console.log("Received refresh event:", event);
 
-            // Refresh all data
             await this.handleRefresh(event);
 
-            // Acknowledge message
-            if (this.channel) {
-              this.channel.ack(message);
-            }
+            this.safeAck(message);
           } catch (error) {
             console.error("Error processing refresh event:", error);
-            // Nack message (requeue for transient errors)
-            const requeue =
-              error instanceof Error && !error.message.includes("permanent");
-            if (this.channel) {
-              this.channel.nack(message, false, requeue);
-            }
+            this.safeNack(message, this.isTransientError(error));
           }
         },
         {
@@ -92,11 +83,12 @@ export class RefreshConsumer {
         }
       );
 
-      this.isConsuming = true;
       console.log(
         `Refresh consumer started, listening on queue: ${this.queueName}`
       );
     } catch (error) {
+      this.isConsuming = false;
+      this.channel = null;
       console.error("Failed to start refresh consumer:", error);
       throw error;
     }
@@ -112,7 +104,17 @@ export class RefreshConsumer {
       // Refresh all data in parallel
       await Promise.all([
         botDataService.refreshAllData(),
-        this.viberBotService.refreshSettings(),
+        this.viberBotService.refreshSettings().catch((error) => {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          if (/not found/i.test(message)) {
+            console.warn(
+              "Bot settings not configured yet; content cache refreshed without settings"
+            );
+            return;
+          }
+          throw error;
+        }),
       ]);
 
       console.log("Cache refreshed successfully");
@@ -125,13 +127,43 @@ export class RefreshConsumer {
   }
 
   /**
+   * Auth / config failures will not succeed on retry — do not requeue.
+   * Network blips can be requeued.
+   */
+  private isTransientError(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/authentication failed|invalid service token/i.test(message)) {
+      return false;
+    }
+    return /timeout|ECONNRESET|ECONNREFUSED|ENOTFOUND|ETIMEDOUT|network|fetch failed/i.test(
+      message
+    );
+  }
+
+  private safeAck(message: Message): void {
+    try {
+      this.channel?.ack(message);
+    } catch (error) {
+      console.error("Failed to ack refresh event:", error);
+    }
+  }
+
+  private safeNack(message: Message, requeue: boolean): void {
+    try {
+      this.channel?.nack(message, false, requeue);
+    } catch (error) {
+      console.error("Failed to nack refresh event:", error);
+    }
+  }
+
+  /**
    * Stop consuming messages
    */
   async stop(): Promise<void> {
     if (this.channel && this.isConsuming) {
+      this.isConsuming = false;
       try {
         await this.channel.cancel(this.queueName);
-        this.isConsuming = false;
         console.log("Refresh consumer stopped");
       } catch (error) {
         console.error("Error stopping refresh consumer:", error);

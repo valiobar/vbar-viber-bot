@@ -1,132 +1,51 @@
 /**
- * Keyboard by ID API Route
- *
- * GET /api/keyboards/[id] - Get keyboard by ID
- * PUT /api/keyboards/[id] - Update keyboard
- * DELETE /api/keyboards/[id] - Delete keyboard
- *
- * This is an input adapter following Hexagonal Architecture principles.
- * Authentication is handled by middleware.ts
+ * GET /api/keyboards/[id] — get keyboard
+ * PUT /api/keyboards/[id] — update keyboard
+ * DELETE /api/keyboards/[id] — delete keyboard
  */
 
-import { NextResponse } from "next/server";
-import type { ApiResponse } from "@vbar/shared";
-import { GetKeyboardUseCaseImpl } from "@/domains/keyboard/application/use-cases/GetKeyboardUseCase";
-import { UpdateKeyboardUseCaseImpl } from "@/domains/keyboard/application/use-cases/UpdateKeyboardUseCase";
-import { DeleteKeyboardUseCaseImpl } from "@/domains/keyboard/application/use-cases/DeleteKeyboardUseCase";
-import { MongoKeyboardRepository } from "@/domains/keyboard/adapters/out/repositories/MongoKeyboardRepository";
-import { KeyboardModel } from "@/domains/keyboard/adapters/out/models/KeyboardModel";
-import { ViberApiValidator } from "@/domains/keyboard/services/ViberApiValidator";
-import type { UpdateKeyboardInput } from "@/domains/keyboard/ports/in/UpdateKeyboardUseCase";
-import type { KeyboardDTO } from "@/domains/keyboard/application/dto/KeyboardDTO";
-import { publishRefreshEvent } from "@/lib/message-queue-publisher";
+import { KeyboardRepository } from "@/domains/keyboard/KeyboardRepository";
+import { KeyboardModel } from "@/domains/keyboard/KeyboardModel";
+import { ViberApiValidator } from "@/domains/keyboard/lib/ViberApiValidator";
+import {
+  KeyboardService,
+  type UpdateKeyboardInput,
+} from "@/domains/keyboard/KeyboardService";
+import {
+  withDb,
+  jsonOk,
+  requireId,
+  notifyRefresh,
+  noContent,
+} from "@/lib/api/routeHelpers";
 
-/**
- * GET handler for getting a keyboard by ID
- *
- * @param request - Next.js Request object
- * @param params - Route parameters containing the keyboard ID
- * @returns NextResponse with keyboard or error
- */
-export async function GET(
-  request: Request,
-  { params }: { params: { id: string } }
-): Promise<NextResponse<ApiResponse<KeyboardDTO>>> {
-  try {
-    const { id } = params;
+const createKeyboardService = (): KeyboardService =>
+  new KeyboardService(
+    new KeyboardRepository(KeyboardModel),
+    new ViberApiValidator()
+  );
 
-    // Validate ID
-    if (!id) {
-      return NextResponse.json<ApiResponse<KeyboardDTO>>(
-        {
-          error: {
-            code: "KEYBOARD_003",
-            message: "Keyboard ID is required",
-          },
-        },
-        { status: 400 }
-      );
+type IdParams = { params: { id: string } };
+
+export async function GET(_request: Request, { params }: IdParams) {
+  return withDb(async () => {
+    const idError = requireId(params.id, "Keyboard");
+    if (idError) {
+      return idError;
     }
-
-    // Instantiate repository
-    const keyboardRepository = new MongoKeyboardRepository(KeyboardModel);
-
-    // Instantiate use case
-    const getKeyboardUseCase = new GetKeyboardUseCaseImpl(keyboardRepository);
-
-    // Execute use case
-    const keyboardDTO = await getKeyboardUseCase.execute(id);
-
-    // Return success response
-    return NextResponse.json<ApiResponse<KeyboardDTO>>(
-      {
-        data: keyboardDTO,
-      },
-      { status: 200 }
-    );
-  } catch (error) {
-    // Handle not found errors
-    if (error instanceof Error && error.message.includes("not found")) {
-      return NextResponse.json<ApiResponse<KeyboardDTO>>(
-        {
-          error: {
-            code: "KEYBOARD_003",
-            message: error.message,
-          },
-        },
-        { status: 404 }
-      );
-    }
-
-    // Handle other errors
-    return NextResponse.json<ApiResponse<KeyboardDTO>>(
-      {
-        error: {
-          code: "KEYBOARD_003",
-          message:
-            error instanceof Error
-              ? error.message
-              : "An unexpected error occurred while retrieving keyboard",
-        },
-      },
-      { status: 500 }
-    );
-  }
+    const keyboardDTO = await createKeyboardService().get(params.id);
+    return jsonOk(keyboardDTO);
+  }, { fallback: "An unexpected error occurred while retrieving keyboard" });
 }
 
-/**
- * PUT handler for updating a keyboard
- *
- * Request body: UpdateKeyboardInput (all fields optional except those being updated)
- *
- * @param request - Next.js Request object
- * @param params - Route parameters containing the keyboard ID
- * @returns NextResponse with updated keyboard or error
- */
-export async function PUT(
-  request: Request,
-  { params }: { params: { id: string } }
-): Promise<NextResponse<ApiResponse<KeyboardDTO>>> {
-  try {
-    const { id } = params;
-
-    // Validate ID
-    if (!id) {
-      return NextResponse.json<ApiResponse<KeyboardDTO>>(
-        {
-          error: {
-            code: "KEYBOARD_004",
-            message: "Keyboard ID is required",
-          },
-        },
-        { status: 400 }
-      );
+export async function PUT(request: Request, { params }: IdParams) {
+  return withDb(async () => {
+    const idError = requireId(params.id, "Keyboard");
+    if (idError) {
+      return idError;
     }
 
-    // Parse request body
     const body = await request.json();
-
-    // Build input (all fields are optional for updates)
     const input: UpdateKeyboardInput = {};
     if (body.Buttons !== undefined) {
       input.Buttons = body.Buttons;
@@ -152,171 +71,24 @@ export async function PUT(
     if (body.hidden !== undefined) {
       input.hidden = body.hidden;
     }
-
-    // Instantiate repositories and services
-    const keyboardRepository = new MongoKeyboardRepository(KeyboardModel);
-    const viberApiValidator = new ViberApiValidator();
-
-    // Instantiate use case
-    const updateKeyboardUseCase = new UpdateKeyboardUseCaseImpl(
-      keyboardRepository,
-      viberApiValidator
-    );
-
-    // Execute use case
-    const keyboardDTO = await updateKeyboardUseCase.execute(id, input);
-
-    // Notify viber service to refresh cache (fire-and-forget)
-    try {
-      publishRefreshEvent("keyboards");
-    } catch (error) {
-      console.error("Failed to publish refresh event:", error);
+    if (body.isTemplate !== undefined) {
+      input.isTemplate = body.isTemplate;
     }
 
-    // Return success response
-    return NextResponse.json<ApiResponse<KeyboardDTO>>(
-      {
-        data: keyboardDTO,
-      },
-      { status: 200 }
-    );
-  } catch (error) {
-    // Handle not found errors
-    if (error instanceof Error && error.message.includes("not found")) {
-      return NextResponse.json<ApiResponse<KeyboardDTO>>(
-        {
-          error: {
-            code: "KEYBOARD_004",
-            message: error.message,
-          },
-        },
-        { status: 404 }
-      );
-    }
-
-    // Handle validation errors
-    if (
-      error instanceof Error &&
-      (error.message.includes("validation") ||
-        error.message.includes("invalid") ||
-        error.message.includes("required"))
-    ) {
-      return NextResponse.json<ApiResponse<KeyboardDTO>>(
-        {
-          error: {
-            code: "KEYBOARD_004",
-            message: error.message,
-          },
-        },
-        { status: 400 }
-      );
-    }
-
-    // Handle other errors
-    return NextResponse.json<ApiResponse<KeyboardDTO>>(
-      {
-        error: {
-          code: "KEYBOARD_004",
-          message:
-            error instanceof Error
-              ? error.message
-              : "An unexpected error occurred while updating keyboard",
-        },
-      },
-      { status: 500 }
-    );
-  }
+    const keyboardDTO = await createKeyboardService().update(params.id, input);
+    notifyRefresh("keyboards");
+    return jsonOk(keyboardDTO);
+  }, { fallback: "An unexpected error occurred while updating keyboard" });
 }
 
-/**
- * DELETE handler for deleting a keyboard
- *
- * @param request - Next.js Request object
- * @param params - Route parameters containing the keyboard ID
- * @returns NextResponse with success or error
- */
-export async function DELETE(
-  request: Request,
-  { params }: { params: { id: string } }
-): Promise<NextResponse<ApiResponse<void>>> {
-  try {
-    const { id } = params;
-
-    // Validate ID
-    if (!id) {
-      return NextResponse.json<ApiResponse<void>>(
-        {
-          error: {
-            code: "KEYBOARD_005",
-            message: "Keyboard ID is required",
-          },
-        },
-        { status: 400 }
-      );
+export async function DELETE(_request: Request, { params }: IdParams) {
+  return withDb(async () => {
+    const idError = requireId(params.id, "Keyboard");
+    if (idError) {
+      return idError;
     }
-
-    // Instantiate repository
-    const keyboardRepository = new MongoKeyboardRepository(KeyboardModel);
-
-    // Instantiate use case
-    const deleteKeyboardUseCase = new DeleteKeyboardUseCaseImpl(
-      keyboardRepository
-    );
-
-    // Execute use case
-    await deleteKeyboardUseCase.execute(id);
-
-    // Notify viber service to refresh cache (fire-and-forget)
-    try {
-      publishRefreshEvent("keyboards");
-    } catch (error) {
-      console.error("Failed to publish refresh event:", error);
-    }
-
-    // Return success response (204 No Content)
-    return new NextResponse(null, { status: 204 });
-  } catch (error) {
-    // Handle not found errors
-    if (error instanceof Error && error.message.includes("not found")) {
-      return NextResponse.json<ApiResponse<void>>(
-        {
-          error: {
-            code: "KEYBOARD_005",
-            message: error.message,
-          },
-        },
-        { status: 404 }
-      );
-    }
-
-    // Handle errors (e.g., keyboard in use)
-    if (
-      error instanceof Error &&
-      (error.message.includes("in use") || error.message.includes("referenced"))
-    ) {
-      return NextResponse.json<ApiResponse<void>>(
-        {
-          error: {
-            code: "KEYBOARD_005",
-            message: error.message,
-          },
-        },
-        { status: 409 }
-      );
-    }
-
-    // Handle other errors
-    return NextResponse.json<ApiResponse<void>>(
-      {
-        error: {
-          code: "KEYBOARD_005",
-          message:
-            error instanceof Error
-              ? error.message
-              : "An unexpected error occurred while deleting keyboard",
-        },
-      },
-      { status: 500 }
-    );
-  }
+    await createKeyboardService().delete(params.id);
+    notifyRefresh("keyboards");
+    return noContent();
+  }, { fallback: "An unexpected error occurred while deleting keyboard" });
 }

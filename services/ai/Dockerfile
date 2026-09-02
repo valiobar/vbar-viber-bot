@@ -11,14 +11,17 @@ COPY services/ai/package.json ./services/ai/
 
 # Install dependencies
 RUN npm ci
+# Ensure the path exists even if npm hoists everything to the root
+RUN mkdir -p services/ai/node_modules
 
 # Stage 2: Builder
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Copy dependencies from deps stage
+# Copy dependencies from deps stage (root hoist + workspace-local installs like langchain)
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
+COPY --from=deps /app/services/ai/node_modules ./services/ai/node_modules
+RUN cp -a /app/services/ai/node_modules/. /app/node_modules/
 
 # Copy source code
 COPY packages/shared ./packages/shared

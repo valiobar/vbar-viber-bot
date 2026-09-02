@@ -49,7 +49,7 @@ export class GoogleProvider extends LangChainAdapter {
 
     return new ChatGoogleGenerativeAI({
       apiKey,
-      modelName: model,
+      model,
       temperature: this.config.temperature,
       maxOutputTokens: this.config.maxTokens,
     });

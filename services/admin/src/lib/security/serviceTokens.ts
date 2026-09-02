@@ -19,46 +19,27 @@ declare const process: {
  * Multiple service tokens can be configured for different services.
  *
  * Supported environment variables:
- * - SERVICE_TOKEN: General service token
- * - VIBER_SERVICE_TOKEN: Viber service specific token
+ * - SERVICE_TOKEN: Shared token accepted from any caller
+ * - ADMIN_SERVICE_TOKEN: Token callers send when calling Admin (Viber uses this)
+ * - VIBER_SERVICE_TOKEN: Alternate Viber token (also accepted)
  * - AI_SERVICE_TOKEN: AI service specific token
- * - ANALYTICS_SERVICE_TOKEN: Analytics service specific token
- * - WEB3_SERVICE_TOKEN: Web3 service specific token
  *
  * @returns Array of valid service tokens (non-empty strings only)
  */
 export function getServiceTokens(): string[] {
   const tokens: string[] = [];
 
-  // Get general service token
-  const serviceToken = process.env.SERVICE_TOKEN;
-  if (serviceToken && serviceToken.trim().length > 0) {
-    tokens.push(serviceToken.trim());
-  }
+  const add = (value: string | undefined): void => {
+    const trimmed = value?.trim();
+    if (trimmed) {
+      tokens.push(trimmed);
+    }
+  };
 
-  // Get viber service token
-  const viberServiceToken = process.env.VIBER_SERVICE_TOKEN;
-  if (viberServiceToken && viberServiceToken.trim().length > 0) {
-    tokens.push(viberServiceToken.trim());
-  }
-
-  // Get AI service token
-  const aiServiceToken = process.env.AI_SERVICE_TOKEN;
-  if (aiServiceToken && aiServiceToken.trim().length > 0) {
-    tokens.push(aiServiceToken.trim());
-  }
-
-  // Get analytics service token
-  const analyticsServiceToken = process.env.ANALYTICS_SERVICE_TOKEN;
-  if (analyticsServiceToken && analyticsServiceToken.trim().length > 0) {
-    tokens.push(analyticsServiceToken.trim());
-  }
-
-  // Get Web3 service token
-  const web3ServiceToken = process.env.WEB3_SERVICE_TOKEN;
-  if (web3ServiceToken && web3ServiceToken.trim().length > 0) {
-    tokens.push(web3ServiceToken.trim());
-  }
+  add(process.env.SERVICE_TOKEN);
+  add(process.env.ADMIN_SERVICE_TOKEN);
+  add(process.env.VIBER_SERVICE_TOKEN);
+  add(process.env.AI_SERVICE_TOKEN);
 
   return tokens;
 }

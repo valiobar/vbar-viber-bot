@@ -4,6 +4,21 @@
   "description": "Shared utilities, types, and configurations for Viber bot microservices",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./infra": {
+      "types": "./dist/infra/index.d.ts",
+      "default": "./dist/infra/index.js"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "infra": ["./dist/infra/index.d.ts"]
+    }
+  },
   "scripts": {
     "build": "npx tsc",
     "dev": "npx tsc --watch",
@@ -20,10 +35,14 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@types/amqplib": "^0.10.4",
     "@types/node": "^20.0.0",
     "typescript": "^5.0.0"
   },
-  "dependencies": {}
+  "dependencies": {
+    "amqplib": "^0.10.3",
+    "mongoose": "^9.0.1"
+  }
 }
 
 

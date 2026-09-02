@@ -35,7 +35,7 @@ The user asks questions about the following coding languages:
 - Always use Zustand for state management in this project.
 - Create Zustand stores for global state that needs to be shared across components.
 - Use TypeScript interfaces/types for Zustand store state and actions.
-- Keep stores focused and modular - create separate stores for different domains (e.g., cart, user, products).
+- Keep stores focused and modular — place them in an FSD `model/` segment (`entities/<slice>/model/`, `widgets/<slice>/model/`, or `shared/`).
 - Use Zustand's built-in selectors to optimize re-renders when accessing store state.
 
 ### Code Implementation Guidelines
@@ -106,8 +106,8 @@ export default Home;
 - **ALWAYS use named exports** for components:
 
 ```typescript
-// components/ProductCard.tsx
-export const ProductCard = ({ product }: ProductCardProps) => {
+// entities/message/ui/MessagePreview.tsx
+export const MessagePreview = ({ message }: MessagePreviewProps) => {
   return <div>...</div>;
 };
 ```
@@ -117,14 +117,14 @@ export const ProductCard = ({ product }: ProductCardProps) => {
 - **ALWAYS use named exports**:
 
 ```typescript
-// utils/helpers.ts
+// shared/lib/formatPrice.ts
 export const formatPrice = (price: number) => { ... };
 
-// types/product.ts
-export type Product = { ... };
-export interface ProductProps { ... };
+// entities/message/model/types.ts
+export type MessageDTO = { ... };
+export interface MessagePreviewProps { ... };
 
-// constants/pagination.ts
+// shared/lib/pagination.ts
 export const ITEMS_PER_PAGE = 20;
 ```
 
@@ -135,9 +135,9 @@ export const ITEMS_PER_PAGE = 20;
 - Use `@/` alias for absolute imports (configured in tsconfig.json):
 
 ```typescript
-import { ProductCard } from "@/components/ProductCard";
-import { useCartStore } from "@/store/cartStore";
-import type { Product } from "@/types/product";
+import { MessagePreview } from "@/entities/message";
+import { useAuthStore } from "@/entities/session";
+import type { MessageDTO } from "@/entities/message";
 ```
 
 **Relative Imports:**
@@ -155,14 +155,14 @@ import "./CartIcon.css";
 - Use `type` keyword for type-only imports (better tree-shaking):
 
 ```typescript
-import type { Product } from "@/types/product";
+import type { MessageDTO } from "@/entities/message";
 import type { Metadata } from "next";
 ```
 
 **Import Order (Recommended):**
 
 1. External libraries (React, Next.js, etc.)
-2. Internal absolute imports (`@/components`, `@/store`, etc.)
+2. Internal absolute imports (`@/views`, `@/widgets`, `@/features`, `@/entities`, `@/shared`)
 3. Type imports
 4. Relative imports
 5. CSS/asset imports
@@ -174,12 +174,13 @@ Example:
 import { useState, useEffect } from "react";
 import Link from "next/link";
 
-// 2. Internal absolute imports
-import { ProductCard } from "@/components/ProductCard";
-import { useCartStore } from "@/store/cartStore";
+// 2. Internal absolute imports (public slice APIs only)
+import { MessagesList } from "@/widgets/message-list";
+import { MessageForm } from "@/features/message-manage";
+import { useAuthStore } from "@/entities/session";
 
 // 3. Types
-import type { Product } from "@/types/product";
+import type { MessageDTO } from "@/entities/message";
 
 // 4. Relative imports
 import { CartIcon } from "./icons/CartIcon";
@@ -190,13 +191,30 @@ import "./CartIcon.css";
 
 #### Project Structure Best Practices
 
-- **Components**: Place in `components/` folder with PascalCase naming
-- **Pages**: Place in `app/` folder with Next.js required names (`page.tsx`, `layout.tsx`)
-- **Types**: Place in `types/` folder with camelCase naming
-- **Stores**: Place in `store/` folder with camelCase naming
-- **Constants**: Place in `constants/` folder with camelCase naming
-- **Utilities**: Place in `utils/` folder with camelCase naming
-- **Styles**: Co-locate CSS files with components when component-specific, or use `app/globals.css` for global styles
+Admin client code follows **Feature-Sliced Design**. Layers, top-down (a layer imports only from layers below it):
+
+`app → views → widgets → features → entities → shared`
+
+- **`app/`**: Next.js App Router **and** the FSD app layer — `page.tsx` (thin default-export wrappers), `layout.tsx`, providers, `globals.css`. Server routes stay in `app/api/**` and are **not** FSD-sliced.
+- **`views/`**: FSD pages layer (named `views` because Next.js reserves `pages/` and `app/`). One slice per route (`login`, `messages`, `message-create`, …).
+- **`widgets/`**: Composite UI (layout, side menu, list screens).
+- **`features/`**: User actions (forms, filters, auth UI).
+- **`entities/`**: Business entities (DTO types, client `api/`, presentational `ui/`, Zustand `model/` stores).
+- **`shared/`**: UI kit, theme, `api/http`, generic hooks. Imports **no** other FSD layer and never `@/domains`.
+
+**Slice segments** (inside a slice, use only what you need):
+
+- `ui/` — React components (PascalCase files, named exports)
+- `model/` — stores, types
+- `api/` — client fetch functions
+- `lib/` — slice-local helpers
+
+**Import rules**:
+
+- Import a slice only through its public `index.ts` (`@/entities/message`, never `@/entities/message/api/messages`).
+- The only client files that may reference `@/domains` are `entities/*/model/types.ts`, and only via `import type`.
+- Do **not** create root `components/`, `store/`, or `types/` folders.
+- **Styles**: co-locate CSS with a component when it is component-specific, or use `app/globals.css` for global styles.
 
 ##Testing Approaches
 

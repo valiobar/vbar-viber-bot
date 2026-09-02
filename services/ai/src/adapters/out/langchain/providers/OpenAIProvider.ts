@@ -52,7 +52,7 @@ export class OpenAIProvider extends LangChainAdapter {
       modelName: model,
       temperature: this.config.temperature,
       maxTokens: this.config.maxTokens,
-    });
+    }) as BaseChatModel;
   }
 
   /**

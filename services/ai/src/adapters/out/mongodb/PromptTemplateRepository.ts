@@ -8,7 +8,7 @@
 import { PromptTemplateRepository } from "../../../ports/out/PromptTemplateRepository";
 import { PromptTemplate } from "../../../domains/ai/entities";
 import { AITaskType } from "../../../domains/ai/value-objects";
-import { getDatabase } from "../../../config/database";
+import { getMongoDatabase } from "@vbar/shared/infra";
 import { Logger, ConfigHelper } from "@vbar/shared";
 
 /**
@@ -38,7 +38,7 @@ export class MongoPromptTemplateRepository implements PromptTemplateRepository {
    */
   async getTemplate(name: string): Promise<PromptTemplate | null> {
     try {
-      const db = await getDatabase();
+      const db = await getMongoDatabase();
       if (!db) {
         throw new Error("Database connection failed");
       }
@@ -93,7 +93,7 @@ export class MongoPromptTemplateRepository implements PromptTemplateRepository {
    */
   async saveTemplate(template: PromptTemplate): Promise<void> {
     try {
-      const db = await getDatabase();
+      const db = await getMongoDatabase();
       if (!db) {
         throw new Error("Database connection failed");
       }
@@ -129,7 +129,7 @@ export class MongoPromptTemplateRepository implements PromptTemplateRepository {
    */
   async listTemplates(taskType?: AITaskType): Promise<PromptTemplate[]> {
     try {
-      const db = await getDatabase();
+      const db = await getMongoDatabase();
       if (!db) {
         throw new Error("Database connection failed");
       }
@@ -158,7 +158,7 @@ export class MongoPromptTemplateRepository implements PromptTemplateRepository {
    */
   async deleteTemplate(name: string): Promise<void> {
     try {
-      const db = await getDatabase();
+      const db = await getMongoDatabase();
       if (!db) {
         throw new Error("Database connection failed");
       }

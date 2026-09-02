@@ -2,12 +2,11 @@
  * LangChain Adapter Base Class
  *
  * Abstract base class for LangChain-based AI provider implementations.
- * Provides common functionality for memory management, prompt formatting, and response generation.
+ * Provides common functionality for prompt formatting and response generation.
  * LangSmith tracing is automatically enabled when environment variables are set.
  */
 
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
-import { BufferMemory, ConversationSummaryMemory } from "langchain/memory";
 import {
   ChatPromptTemplate,
   MessagesPlaceholder,
@@ -28,13 +27,12 @@ import { Logger } from "@vbar/shared";
  *
  * Features:
  * - Automatic LangSmith tracing (when enabled via environment variables)
- * - Conversation memory management (buffer or summary)
+ * - Per-request conversation history from Mongo (no process-scoped memory)
  * - Message formatting for LangChain chat models
  * - Error handling and logging
  */
 export abstract class LangChainAdapter implements AIProviderPort {
   protected chatModel: BaseChatModel;
-  protected memory: BufferMemory | ConversationSummaryMemory;
   protected logger: Logger;
   protected config: AIConfig;
 
@@ -51,12 +49,8 @@ export abstract class LangChainAdapter implements AIProviderPort {
     // Create chat model (implemented by subclasses)
     this.chatModel = this.createChatModel();
 
-    // Initialize memory based on configuration
-    this.memory = this.initializeMemory();
-
     this.logger.info("LangChain adapter initialized", {
       provider: this.getProviderType(),
-      memoryType: config.conversationMemoryType,
     });
   }
 
@@ -77,41 +71,6 @@ export abstract class LangChainAdapter implements AIProviderPort {
    * @returns AIProvider enum value
    */
   public abstract getProviderType(): AIProvider;
-
-  /**
-   * Initialize conversation memory based on configuration
-   *
-   * Creates either BufferMemory or ConversationSummaryMemory based on
-   * the conversationMemoryType setting in the configuration.
-   *
-   * @returns Memory instance (BufferMemory or ConversationSummaryMemory)
-   */
-  protected initializeMemory(): BufferMemory | ConversationSummaryMemory {
-    const memoryType = this.config.conversationMemoryType;
-    const maxHistory = this.config.conversationMaxHistory;
-
-    if (memoryType === "summary") {
-      this.logger.info("Initializing ConversationSummaryMemory", {
-        maxHistory,
-      });
-      return new ConversationSummaryMemory({
-        llm: this.chatModel,
-        memoryKey: "chat_history",
-        inputKey: "input",
-        outputKey: "output",
-      });
-    } else {
-      // Default to buffer memory
-      this.logger.info("Initializing BufferMemory", {
-        maxHistory,
-      });
-      return new BufferMemory({
-        memoryKey: "chat_history",
-        inputKey: "input",
-        returnMessages: true,
-      });
-    }
-  }
 
   /**
    * Generate a response from the AI model
@@ -146,6 +105,7 @@ export abstract class LangChainAdapter implements AIProviderPort {
           model: this.chatModel.constructor.name,
           hasContext: !!context,
           contextUserId: context?.userId,
+          historyMessageCount: context?.messages.length ?? 0,
           promptLength: prompt.length,
           attempt: attempt + 1,
           maxRetries: maxRetries + 1,
@@ -168,35 +128,19 @@ export abstract class LangChainAdapter implements AIProviderPort {
 
         const promptTemplate = ChatPromptTemplate.fromMessages(promptMessages);
 
-        // Create chain with memory
+        // No process-scoped memory: Mongo-loaded chat_history is the only context
         const chain = new LLMChain({
           llm: this.chatModel,
           prompt: promptTemplate,
-          memory: this.memory,
         });
 
-        // Format previous messages from context (excluding current prompt)
-        const previousMessages: BaseMessage[] = [];
-        if (context && context.messages.length > 0) {
-          for (const msg of context.messages) {
-            if (msg.role === "user") {
-              previousMessages.push(new HumanMessage(msg.content));
-            } else if (msg.role === "assistant") {
-              previousMessages.push(new AIMessage(msg.content));
-            }
-          }
-        }
+        const previousMessages = this.conversationToMessages(context);
 
-        // Invoke chain with input
-        // Only pass chat_history if we have previous messages from context
-        // Otherwise, let memory handle it automatically
-        // LangChain will automatically send traces to LangSmith if enabled
         const invokeStartTime = Date.now();
-        const invokeInput: Record<string, any> = { input: prompt };
-        if (previousMessages.length > 0) {
-          invokeInput.chat_history = previousMessages;
-        }
-        const result = await chain.invoke(invokeInput);
+        const result = await chain.invoke({
+          input: prompt,
+          chat_history: previousMessages,
+        });
         const invokeTimeMs = Date.now() - invokeStartTime;
         const totalGenerationTimeMs = Date.now() - generationStartTime;
 
@@ -275,6 +219,28 @@ export abstract class LangChainAdapter implements AIProviderPort {
   }
 
   /**
+   * Convert Mongo-loaded conversation context to LangChain messages.
+   * Per-request only — never stored on the adapter.
+   */
+  protected conversationToMessages(
+    context?: ConversationContext
+  ): BaseMessage[] {
+    const messages: BaseMessage[] = [];
+
+    if (context && context.messages.length > 0) {
+      for (const msg of context.messages) {
+        if (msg.role === "user") {
+          messages.push(new HumanMessage(msg.content));
+        } else if (msg.role === "assistant") {
+          messages.push(new AIMessage(msg.content));
+        }
+      }
+    }
+
+    return messages;
+  }
+
+  /**
    * Format messages for LangChain chat model
    *
    * Converts ConversationContext messages to LangChain BaseMessage format.
@@ -287,22 +253,8 @@ export abstract class LangChainAdapter implements AIProviderPort {
     prompt: string,
     context?: ConversationContext
   ): BaseMessage[] {
-    const messages: BaseMessage[] = [];
-
-    // Add conversation history from context if available
-    if (context && context.messages.length > 0) {
-      for (const msg of context.messages) {
-        if (msg.role === "user") {
-          messages.push(new HumanMessage(msg.content));
-        } else if (msg.role === "assistant") {
-          messages.push(new AIMessage(msg.content));
-        }
-      }
-    }
-
-    // Add current prompt as human message
+    const messages = this.conversationToMessages(context);
     messages.push(new HumanMessage(prompt));
-
     return messages;
   }
 }

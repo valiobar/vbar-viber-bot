@@ -3,18 +3,30 @@ version: '3.8'
 services:
   # Admin Service (Next.js)
   admin:
+    image: ghcr.io/valiobar/vbar-admin:${IMAGE_TAG:-latest}
     build:
       context: ..
-      dockerfile: infrastructure/docker/Dockerfile.admin
+      dockerfile: services/admin/Dockerfile
     container_name: vbar-admin
+    env_file:
+      - ../.env
     ports:
       - "3000:3000"
     environment:
       - NODE_ENV=production
-      - MONGODB_URI=${MONGODB_ADMIN_URI:-mongodb://mongodb-admin:27017/admin}
-      - RABBITMQ_URL=${RABBITMQ_URL:-amqp://admin:admin@rabbitmq:5672}
+      - MONGODB_URI=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/admin_service?authSource=admin
+      - MONGODB_DB_NAME=admin_service
+      - RABBITMQ_URI=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672
+      - VIBER_SERVICE_TOKEN=${VIBER_SERVICE_TOKEN}
+      - ADMIN_SERVICE_TOKEN=${ADMIN_SERVICE_TOKEN}
+      - SERVICE_TOKEN=${SERVICE_TOKEN}
+      - AI_SERVICE_URL=http://ai:3002
+      - AI_SERVICE_TOKEN=${AI_SERVICE_TOKEN}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-7d}
+      - BOT_TOKEN_ENCRYPTION_KEY=${BOT_TOKEN_ENCRYPTION_KEY}
     depends_on:
-      mongodb-admin:
+      mongodb:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -22,7 +34,7 @@ services:
     networks:
       - vbar-network
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -30,21 +42,30 @@ services:
 
   # Viber Service (Node.js Express)
   viber:
+    image: ghcr.io/valiobar/vbar-viber:${IMAGE_TAG:-latest}
     build:
       context: ..
-      dockerfile: infrastructure/docker/Dockerfile.viber
+      dockerfile: services/viber/Dockerfile
     container_name: vbar-viber
+    env_file:
+      - ../.env
     ports:
       - "3001:3001"
     environment:
       - NODE_ENV=production
       - PORT=3001
-      - MONGODB_URI=${MONGODB_BOT_URI:-mongodb://mongodb-bot:27017/bot}
-      - RABBITMQ_URL=${RABBITMQ_URL:-amqp://admin:admin@rabbitmq:5672}
+      - MONGODB_URI=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/bot?authSource=admin
+      - MONGODB_DB_NAME=bot
+      - RABBITMQ_URI=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672
       - VIBER_BOT_TOKEN=${VIBER_BOT_TOKEN:-}
-      - VIBER_WEBHOOK_URL=${VIBER_WEBHOOK_URL:-}
+      - VIBER_BOT_WEBHOOK_URL=${VIBER_BOT_WEBHOOK_URL:-}
+      - ADMIN_SERVICE_URL=http://admin:3000
+      - ADMIN_SERVICE_TOKEN=${ADMIN_SERVICE_TOKEN}
+      - AI_SERVICE_GRPC_HOST=ai
+      - AI_SERVICE_GRPC_PORT=50051
+      - SERVICE_TOKEN=${SERVICE_TOKEN}
     depends_on:
-      mongodb-bot:
+      mongodb:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -52,7 +73,7 @@ services:
     networks:
       - vbar-network
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -60,199 +81,78 @@ services:
 
   # AI Service (Node.js Express)
   ai:
+    image: ghcr.io/valiobar/vbar-ai:${IMAGE_TAG:-latest}
     build:
       context: ..
-      dockerfile: infrastructure/docker/Dockerfile.ai
+      dockerfile: services/ai/Dockerfile
     container_name: vbar-ai
+    env_file:
+      - ../.env
     ports:
       - "127.0.0.1:3002:3002"  # Localhost only
     environment:
       - NODE_ENV=production
       - PORT=3002
-      - MONGODB_URI=${MONGODB_AI_URI:-mongodb://mongodb-ai:27017/ai}
-      - RABBITMQ_URL=${RABBITMQ_URL:-amqp://admin:admin@rabbitmq:5672}
-      - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434}
+      - GRPC_PORT=50051
+      - MONGODB_URI=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/ai?authSource=admin
+      - MONGODB_DB_NAME=ai
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
       - AI_MODEL_PROVIDER=${AI_MODEL_PROVIDER:-ollama}
-      - AI_MODEL_NAME=${AI_MODEL_NAME:-llama2}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama2}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - RAG_VECTOR_STORE_TYPE=${RAG_VECTOR_STORE_TYPE:-chroma}
+      - CHROMA_URL=${CHROMA_URL:-http://chromadb:8000}
+      - RAG_VECTOR_STORE_COLLECTION=${RAG_VECTOR_STORE_COLLECTION:-embeddings}
+      - AI_SERVICE_TOKEN=${AI_SERVICE_TOKEN}
+      - RAG_CHUNK_SIZE=${RAG_CHUNK_SIZE:-1000}
+      - RAG_CHUNK_OVERLAP=${RAG_CHUNK_OVERLAP:-200}
+      - INGEST_MAX_URLS=${INGEST_MAX_URLS:-20}
+      - INGEST_MAX_FILE_SIZE_MB=${INGEST_MAX_FILE_SIZE_MB:-10}
     depends_on:
-      mongodb-ai:
+      mongodb:
         condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-      ollama:
-        condition: service_started
     restart: unless-stopped
     networks:
       - vbar-network
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3002/health"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3002/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
 
-  # Analytics Service (Node.js Express)
-  analytics:
-    build:
-      context: ..
-      dockerfile: infrastructure/docker/Dockerfile.analytics
-    container_name: vbar-analytics
+  # Shared MongoDB — one instance, multiple databases (admin_service, bot, ai)
+  mongodb:
+    image: mongo:7
+    container_name: vbar-mongodb
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USER}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
     ports:
-      - "127.0.0.1:3003:3003"  # Localhost only
-    environment:
-      - NODE_ENV=production
-      - PORT=3003
-      - MONGODB_URI=${MONGODB_ANALYTICS_URI:-mongodb://mongodb-analytics:27017/analytics}
-      - RABBITMQ_URL=${RABBITMQ_URL:-amqp://admin:admin@rabbitmq:5672}
-    depends_on:
-      mongodb-analytics:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - vbar-network
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3003/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
-  # Web3 Service (Node.js Express)
-  web3:
-    build:
-      context: ..
-      dockerfile: services/web3/Dockerfile
-    container_name: vbar-web3
-    ports:
-      - "3004:3004" # REST API
-      - "50052:50052" # gRPC
-    environment:
-      - NODE_ENV=production
-      - PORT=3004
-      - WEB3_GRPC_PORT=50052
-      - MONGODB_URI=${MONGODB_WEB3_URI:-mongodb://mongodb-web3:27017/web3}
-      - MONGODB_DB_NAME=web3
-      - RABBITMQ_URL=${RABBITMQ_URL:-amqp://admin:admin@rabbitmq:5672}
-      - WEB3_RPC_ETHEREUM=${WEB3_RPC_ETHEREUM:-}
-      - WEB3_RPC_POLYGON=${WEB3_RPC_POLYGON:-}
-      - WEB3_RPC_BSC=${WEB3_RPC_BSC:-}
-      - WEB3_RPC_ARBITRUM=${WEB3_RPC_ARBITRUM:-}
-      - WEB3_ENCRYPTION_KEY=${WEB3_ENCRYPTION_KEY:-}
-    depends_on:
-      mongodb-web3:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - vbar-network
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3004/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
-  # MongoDB Instances
-  mongodb-admin:
-    image: mongo:7
-    container_name: vbar-mongodb-admin
-    environment:
-      - MONGO_INITDB_DATABASE=admin
+      - "127.0.0.1:27017:27017"
     volumes:
-      - mongodb-admin-data:/data/db
+      - mongodb-data:/data/db
     restart: unless-stopped
     networks:
       - vbar-network
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD", "mongosh", "-u", "${MONGO_ROOT_USER}", "-p", "${MONGO_ROOT_PASSWORD}", "--authenticationDatabase", "admin", "--eval", "db.adminCommand('ping')"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
 
-  mongodb-bot:
-    image: mongo:7
-    container_name: vbar-mongodb-bot
-    environment:
-      - MONGO_INITDB_DATABASE=bot
-    volumes:
-      - mongodb-bot-data:/data/db
-    restart: unless-stopped
-    networks:
-      - vbar-network
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
-  mongodb-ai:
-    image: mongo:7
-    container_name: vbar-mongodb-ai
-    environment:
-      - MONGO_INITDB_DATABASE=ai
-    volumes:
-      - mongodb-ai-data:/data/db
-    restart: unless-stopped
-    networks:
-      - vbar-network
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
-  mongodb-analytics:
-    image: mongo:7
-    container_name: vbar-mongodb-analytics
-    environment:
-      - MONGO_INITDB_DATABASE=analytics
-    volumes:
-      - mongodb-analytics-data:/data/db
-    restart: unless-stopped
-    networks:
-      - vbar-network
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
-  mongodb-web3:
-    image: mongo:7
-    container_name: vbar-mongodb-web3
-    environment:
-      - MONGO_INITDB_DATABASE=web3
-    volumes:
-      - web3-mongo-data:/data/db
-    restart: unless-stopped
-    networks:
-      - vbar-network
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
-  # RabbitMQ Message Queue
+  # RabbitMQ Message Queue — localhost only (SSH tunnel for management UI)
   rabbitmq:
     image: rabbitmq:3-management-alpine
     container_name: vbar-rabbitmq
     environment:
-      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:-admin}
-      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASS:-admin}
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASS}
     ports:
-      - "5672:5672"   # AMQP port
-      - "15672:15672" # Management UI port
+      - "127.0.0.1:5672:5672"   # AMQP — localhost only
+      - "127.0.0.1:15672:15672" # Management UI — localhost only / SSH tunnel
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
     restart: unless-stopped
@@ -265,12 +165,14 @@ services:
       retries: 5
       start_period: 60s
 
-  # Ollama (Self-hosted AI Models)
+  # Ollama (Self-hosted AI Models) — opt-in only
+  # Enable with: docker compose --profile local-llm up -d
   ollama:
+    profiles: ["local-llm"]
     image: ollama/ollama:latest
     container_name: vbar-ollama
     ports:
-      - "11434:11434"
+      - "127.0.0.1:11434:11434"
     volumes:
       - ollama-data:/root/.ollama
     environment:
@@ -287,6 +189,30 @@ services:
     #           count: 1
     #           capabilities: [gpu]
 
+  # ChromaDB (RAG vector store) — opt-in only
+  # Enable with: docker compose --profile rag up -d
+  chromadb:
+    profiles: ["rag"]
+    image: chromadb/chroma:0.6.3
+    container_name: vbar-chromadb
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - chromadb-data:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma/chroma
+      - ANONYMIZED_TELEMETRY=FALSE
+    restart: unless-stopped
+    networks:
+      - vbar-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
 # Networks
 networks:
   vbar-network:
@@ -295,18 +221,11 @@ networks:
 
 # Volumes
 volumes:
-  mongodb-admin-data:
-    name: vbar-mongodb-admin-data
-  mongodb-bot-data:
-    name: vbar-mongodb-bot-data
-  mongodb-ai-data:
-    name: vbar-mongodb-ai-data
-  mongodb-analytics-data:
-    name: vbar-mongodb-analytics-data
-  web3-mongo-data:
-    name: vbar-mongodb-web3-data
+  mongodb-data:
+    name: vbar-mongodb-data
   rabbitmq-data:
     name: vbar-rabbitmq-data
   ollama-data:
     name: vbar-ollama-data
-
+  chromadb-data:
+    name: vbar-chromadb-data

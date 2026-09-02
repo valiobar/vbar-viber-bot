@@ -39,10 +39,22 @@ export interface RAGConfig {
   embeddingProvider: "openai" | "ollama" | "local";
   openaiEmbeddingModel: string;
   ollamaEmbeddingModel: string;
-  vectorStoreType: "mongodb" | "memory";
+  vectorStoreType: "chroma" | "memory";
+  chromaUrl: string;
   vectorStoreCollection: string;
   retrieverK: number;
   similarityThreshold: number;
+}
+
+/**
+ * Knowledge base ingest configuration
+ */
+export interface IngestConfig {
+  chunkSize: number;         // RAG_CHUNK_SIZE, default 1000
+  chunkOverlap: number;      // RAG_CHUNK_OVERLAP, default 200
+  maxUrlsPerRequest: number; // INGEST_MAX_URLS, default 20
+  maxFileSizeMb: number;     // INGEST_MAX_FILE_SIZE_MB, default 10
+  urlFetchTimeoutMs: number; // INGEST_URL_TIMEOUT_MS, default 15000
 }
 
 /**
@@ -68,6 +80,8 @@ export interface AIConfig {
   anthropic?: AnthropicConfig;
   google?: GoogleConfig;
   rag: RAGConfig;
+  ingest: IngestConfig;
+  serviceToken?: string; // AI_SERVICE_TOKEN — required for ingest routes at runtime
   promptTemplates: PromptTemplateConfig;
   bulgarianCulturePromptTemplate?: string; // Optional Bulgarian culture prompt template name
 }
@@ -88,7 +102,7 @@ export function getAIConfig(): AIConfig {
 
   // Get general AI settings
   const temperature = ConfigHelper.getEnvNumber("AI_TEMPERATURE", 0.7);
-  const maxTokens = ConfigHelper.getEnv("AI_MAX_TOKENS")
+  const maxTokens = ConfigHelper.getEnv("AI_MAX_TOKENS", "")
     ? ConfigHelper.getEnvNumber("AI_MAX_TOKENS")
     : undefined;
   const conversationMemoryType = (ConfigHelper.getEnv(
@@ -186,8 +200,9 @@ export function getAIConfig(): AIConfig {
       "RAG_OLLAMA_EMBEDDING_MODEL",
       "nomic-embed-text"
     ),
-    vectorStoreType: (ConfigHelper.getEnv("RAG_VECTOR_STORE_TYPE", "mongodb") ||
-      "mongodb") as "mongodb" | "memory",
+    vectorStoreType: (ConfigHelper.getEnv("RAG_VECTOR_STORE_TYPE", "chroma") ||
+      "chroma") as "chroma" | "memory",
+    chromaUrl: ConfigHelper.getEnv("CHROMA_URL", "http://localhost:8000"),
     vectorStoreCollection: ConfigHelper.getEnv(
       "RAG_VECTOR_STORE_COLLECTION",
       "embeddings"
@@ -212,13 +227,24 @@ export function getAIConfig(): AIConfig {
 
   // Validate RAG vector store type
   if (
-    ragConfig.vectorStoreType !== "mongodb" &&
+    ragConfig.vectorStoreType !== "chroma" &&
     ragConfig.vectorStoreType !== "memory"
   ) {
     throw new Error(
-      `Invalid RAG_VECTOR_STORE_TYPE: ${ragConfig.vectorStoreType}. Must be "mongodb" or "memory"`
+      `Invalid RAG_VECTOR_STORE_TYPE: ${ragConfig.vectorStoreType}. Must be "chroma" or "memory"`
     );
   }
+
+  const ingestConfig: IngestConfig = {
+    chunkSize: ConfigHelper.getEnvNumber("RAG_CHUNK_SIZE", 1000),
+    chunkOverlap: ConfigHelper.getEnvNumber("RAG_CHUNK_OVERLAP", 200),
+    maxUrlsPerRequest: ConfigHelper.getEnvNumber("INGEST_MAX_URLS", 20),
+    maxFileSizeMb: ConfigHelper.getEnvNumber("INGEST_MAX_FILE_SIZE_MB", 10),
+    urlFetchTimeoutMs: ConfigHelper.getEnvNumber("INGEST_URL_TIMEOUT_MS", 15000),
+  };
+  // Empty default: ConfigHelper.getEnv throws when unset and has no default.
+  // Token is required only for ingest routes (503 later), not at config load.
+  const serviceToken = ConfigHelper.getEnv("AI_SERVICE_TOKEN", "") || undefined;
 
   // Prompt template configuration
   const promptTemplatesEnabled = ConfigHelper.getEnvBoolean(
@@ -260,6 +286,8 @@ export function getAIConfig(): AIConfig {
     anthropic,
     google,
     rag: ragConfig,
+    ingest: ingestConfig,
+    serviceToken,
     promptTemplates: promptTemplateConfig,
     bulgarianCulturePromptTemplate,
   };

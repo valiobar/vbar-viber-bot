@@ -9,13 +9,10 @@
 
 import { NextResponse } from "next/server";
 import type { ApiResponse } from "@vbar/shared";
-import { LoginUseCase } from "@/domains/user/application/use-cases/LoginUseCase";
-import { MongoUserRepository } from "@/domains/user/adapters/out/repositories/UserRepository";
-import { MongoSessionRepository } from "@/domains/user/adapters/out/repositories/SessionRepository";
-import type {
-  LoginRequest,
-  LoginResponse,
-} from "@/domains/user/ports/in/AuthPort";
+import { AuthService } from "@/domains/user/AuthService";
+import { UserRepository } from "@/domains/user/UserRepository";
+import { SessionRepository } from "@/domains/user/SessionRepository";
+import type { LoginRequest, LoginResponse } from "@/domains/user/types";
 
 /**
  * POST handler for login endpoint
@@ -118,15 +115,12 @@ export async function POST(
       password: body.password,
     };
 
-    // Instantiate repositories
-    const userRepository = new MongoUserRepository();
-    const sessionRepository = new MongoSessionRepository();
+    const authService = new AuthService(
+      new UserRepository(),
+      new SessionRepository()
+    );
 
-    // Instantiate use case
-    const loginUseCase = new LoginUseCase(userRepository, sessionRepository);
-
-    // Execute login use case
-    const loginResponse = await loginUseCase.execute(loginRequest);
+    const loginResponse = await authService.login(loginRequest);
 
     // Create response with tokens and user data
     const response = NextResponse.json<ApiResponse<LoginResponse>>(

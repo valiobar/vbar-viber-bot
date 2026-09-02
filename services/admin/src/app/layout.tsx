@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import AuthProvider from "@/components/AuthProvider";
-import ThemeProvider from "@/components/ThemeProvider";
-import DashboardLayoutWrapper from "@/components/DashboardLayoutWrapper";
+import { AuthProvider } from "@/features/auth";
+import { ThemeProvider } from "@/shared";
+import { DashboardLayoutWrapper } from "@/widgets/dashboard-layout";
 
 export const metadata: Metadata = {
   title: "Viber Bot Admin",

@@ -5,16 +5,12 @@
  */
 
 export * from "./types";
-export * from "./entities/BotSettings";
-export * from "./services/Validators";
-export * from "./application/dto/BotSettingsDTO";
-export * from "./ports/in/GetBotSettingsUseCase";
-export * from "./ports/in/UpdateBotSettingsUseCase";
-export * from "./ports/out/BotSettingsRepository";
-export * from "./application/use-cases/GetBotSettingsUseCaseImpl";
-export * from "./application/use-cases/UpdateBotSettingsUseCaseImpl";
-
-
-
-
-
+export * from "./BotSettings";
+export * from "./lib/Validators";
+export * from "./BotSettingsDTO";
+export { BotSettingsRepository } from "./BotSettingsRepository";
+export { BotSettingsModel, type IBotSettingsDocument } from "./BotSettingsModel";
+export {
+  BotSettingsService,
+  type UpdateBotSettingsInput,
+} from "./BotSettingsService";

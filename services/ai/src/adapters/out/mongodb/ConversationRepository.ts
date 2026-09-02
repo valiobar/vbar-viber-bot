@@ -7,8 +7,22 @@
 
 import { ConversationRepository } from "../../../ports/out/ConversationRepository";
 import { ConversationContext } from "../../../domains/ai/entities";
-import { getDatabase } from "../../../config/database";
+import { getMongoDatabase } from "@vbar/shared/infra";
 import { Logger } from "@vbar/shared";
+
+interface ConversationMessageDoc {
+  role: "user" | "assistant";
+  content: string;
+  timestamp: Date;
+}
+
+interface ConversationDocument {
+  userId: string;
+  messages: ConversationMessageDoc[];
+  createdAt: Date;
+  updatedAt: Date;
+  metadata: Record<string, unknown>;
+}
 
 /**
  * MongoDB Conversation Repository implementation
@@ -39,12 +53,14 @@ export class MongoConversationRepository implements ConversationRepository {
     userId: string
   ): Promise<ConversationContext | null> {
     try {
-      const db = await getDatabase();
+      const db = await getMongoDatabase();
       if (!db) {
         throw new Error("Database connection failed");
       }
 
-      const collection = db.collection(this.collectionName);
+      const collection = db.collection<ConversationDocument>(
+        this.collectionName
+      );
       const doc = await collection.findOne({ userId });
 
       if (!doc) {
@@ -79,12 +95,14 @@ export class MongoConversationRepository implements ConversationRepository {
     content: string
   ): Promise<void> {
     try {
-      const db = await getDatabase();
+      const db = await getMongoDatabase();
       if (!db) {
         throw new Error("Database connection failed");
       }
 
-      const collection = db.collection(this.collectionName);
+      const collection = db.collection<ConversationDocument>(
+        this.collectionName
+      );
       const timestamp = new Date();
 
       // Create message object
@@ -140,12 +158,14 @@ export class MongoConversationRepository implements ConversationRepository {
    */
   async clearConversationHistory(userId: string): Promise<void> {
     try {
-      const db = await getDatabase();
+      const db = await getMongoDatabase();
       if (!db) {
         throw new Error("Database connection failed");
       }
 
-      const collection = db.collection(this.collectionName);
+      const collection = db.collection<ConversationDocument>(
+        this.collectionName
+      );
       const result = await collection.deleteOne({ userId });
 
       if (result.deletedCount === 0) {

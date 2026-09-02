@@ -13,8 +13,8 @@ import { Logger, PathUtils, ConsoleLogger } from "@vbar/shared";
 import { ProcessMessageUseCaseImpl } from "../../../application/use-cases/ProcessMessageUseCase";
 import { MessageRequest, MessageResponse } from "../../../domains/ai/entities";
 import { createAIProvider } from "../../../adapters/out/langchain/factory/AIProviderFactory";
-import { createVectorStore } from "../../../adapters/out/langchain/rag/VectorStoreFactory";
 import { LangChainExecutor } from "../../../adapters/out/langchain/ChainExecutor";
+import { VectorStorePort } from "../../../ports/out/VectorStorePort";
 import { MongoConversationRepository } from "../../../adapters/out/mongodb/ConversationRepository";
 import { MongoPromptTemplateRepository } from "../../../adapters/out/mongodb/PromptTemplateRepository";
 
@@ -49,9 +49,13 @@ const aiProto = grpc.loadPackageDefinition(packageDefinition) as any;
  * Creates and configures the gRPC server
  *
  * @param logger - Logger instance for logging
+ * @param vectorStore - Shared vector store (null when RAG is disabled)
  * @returns Configured gRPC server instance
  */
-export function createGrpcServer(logger: Logger): grpc.Server {
+export function createGrpcServer(
+  logger: Logger,
+  vectorStore: VectorStorePort | null
+): grpc.Server {
   const server = new grpc.Server();
 
   // Create logger instance
@@ -60,8 +64,7 @@ export function createGrpcServer(logger: Logger): grpc.Server {
   // Create AI provider
   const aiProvider = createAIProvider(serviceLogger);
 
-  // Create vector store
-  const vectorStore = createVectorStore(serviceLogger);
+  // vectorStore now injected — single shared instance with the HTTP routes
 
   // Create prompt template repository
   const promptTemplateRepository = new MongoPromptTemplateRepository(

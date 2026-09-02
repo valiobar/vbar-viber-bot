@@ -174,7 +174,8 @@ export class AdminServiceClient implements IAdminServiceClient {
     while (hasMorePages) {
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
-          const url = `${this.baseUrl}${endpoint}?hidden=false&page=${currentPage}&limit=${pageLimit}`;
+          const extra = dataKey === "keyboards" ? "&isTemplate=false" : "";
+          const url = `${this.baseUrl}${endpoint}?hidden=false${extra}&page=${currentPage}&limit=${pageLimit}`;
           const response = await this.fetchWithTimeout(url, {
             method: "GET",
             headers: this.buildHeaders(),

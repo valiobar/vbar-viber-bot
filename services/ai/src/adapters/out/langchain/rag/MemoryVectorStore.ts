@@ -174,26 +174,31 @@ export class MemoryVectorStoreAdapter implements VectorStorePort {
   }
 
   /**
-   * Delete documents matching the filter criteria
+   * Delete documents matching a simple equality filter on metadata.
    *
-   * Note: In-memory vector store doesn't support filtering by metadata,
-   * so this operation clears all documents.
-   *
-   * @param filter - Filter object (not used for in-memory store)
+   * @param filter - Metadata equality filter (all keys must match)
    */
   async deleteDocuments(filter: Record<string, any>): Promise<void> {
     await this.ensureInitialized();
 
-    try {
-      // In-memory vector store doesn't support selective deletion
-      // We need to clear and rebuild without the documents to delete
-      // For simplicity, we'll clear all documents
-      // In production, consider using MongoDB vector store for better control
-      this.logger.warn(
-        "In-memory vector store doesn't support selective deletion. Clearing all documents."
-      );
+    if (!this.vectorStore) {
+      throw new Error("Vector store not initialized");
+    }
 
-      await this.clear();
+    try {
+      const entries = Object.entries(filter);
+      if (entries.length === 0) {
+        throw new Error(
+          "deleteDocuments requires a non-empty filter; use clear() to remove all documents."
+        );
+      }
+      const before = this.vectorStore.memoryVectors.length;
+      this.vectorStore.memoryVectors = this.vectorStore.memoryVectors.filter(
+        (vec) => !entries.every(([key, value]) => vec.metadata?.[key] === value)
+      );
+      this.logger.info(
+        `Deleted ${before - this.vectorStore.memoryVectors.length} documents from in-memory vector store`
+      );
     } catch (error) {
       this.logger.error(
         "Failed to delete documents from vector store:",
@@ -229,5 +234,52 @@ export class MemoryVectorStoreAdapter implements VectorStorePort {
         }`
       );
     }
+  }
+
+  /**
+   * Aggregated view of ingested sources (grouped by sourceId metadata)
+   */
+  async listSources(): Promise<
+    Array<{
+      sourceId: string;
+      source: string;
+      sourceType: string;
+      chunkCount: number;
+      ingestedAt: string;
+    }>
+  > {
+    await this.ensureInitialized();
+
+    if (!this.vectorStore) {
+      throw new Error("Vector store not initialized");
+    }
+
+    const bySource = new Map<
+      string,
+      {
+        sourceId: string;
+        source: string;
+        sourceType: string;
+        chunkCount: number;
+        ingestedAt: string;
+      }
+    >();
+    for (const vec of this.vectorStore.memoryVectors) {
+      const meta = vec.metadata as Record<string, any> | undefined;
+      if (!meta?.sourceId) continue; // pre-ingest chunks without sourceId are skipped
+      const existing = bySource.get(meta.sourceId);
+      if (existing) existing.chunkCount += 1;
+      else
+        bySource.set(meta.sourceId, {
+          sourceId: String(meta.sourceId),
+          source: String(meta.source ?? "unknown"),
+          sourceType: String(meta.sourceType ?? "file"),
+          chunkCount: 1,
+          ingestedAt: String(meta.ingestedAt ?? ""),
+        });
+    }
+    return [...bySource.values()].sort((a, b) =>
+      b.ingestedAt.localeCompare(a.ingestedAt)
+    );
   }
 }

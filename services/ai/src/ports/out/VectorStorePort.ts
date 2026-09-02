@@ -43,4 +43,17 @@ export interface VectorStorePort {
    * @returns Promise that resolves when all documents are cleared
    */
   clear(): Promise<void>;
+
+  /**
+   * Aggregated view of ingested sources (grouped by sourceId metadata)
+   */
+  listSources(): Promise<
+    Array<{
+      sourceId: string;
+      source: string;
+      sourceType: string;
+      chunkCount: number;
+      ingestedAt: string;
+    }>
+  >;
 }

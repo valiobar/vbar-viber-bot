@@ -11,7 +11,7 @@ Implementation plans typically follow this structure:
 
 - **Overview**: High-level description of what needs to be implemented
 - **Current State Analysis**: What exists (✅) and what's missing (❌)
-- **Implementation Steps**: Numbered, sequential steps with specific file locations and code changes
+- **Implementation Steps**: Numbered, sequential steps with specific file locations, code changes, and **mandatory pseudo-code** for each step; the **last step must always be documentation** (update existing docs and/or add new ones)
 - **UI/UX Considerations**: Design and user experience guidelines
 - **Files to Modify**: List of files that will be changed
 - **Implementation Order**: Recommended sequence for executing steps
@@ -21,7 +21,7 @@ Implementation plans typically follow this structure:
 ### Plan File Location
 
 - **Default Location**: All implementation plans should be stored in the `plans/` folder at the root of the project
-- **File Naming**: Use descriptive names in UPPERCASE with hyphens and the `.plan.md` extension (e.g., `BACK_BUTTON_IMPLEMENTATION_PLAN.plan.md`)
+- **File Naming**: Use descriptive names in UPPERCASE with hyphens and the `.md` extension (e.g., `BACK_BUTTON_IMPLEMENTATION_PLAN.md`)
 - **Create Folder if Missing**: If the `plans/` folder doesn't exist, create it before creating plan files
 
 ### Creating New Plans
@@ -32,15 +32,19 @@ When creating a new implementation plan:
 2. **Check Shared Package**: Review `packages/shared/src/types/`, `packages/shared/src/utils/`, and `packages/shared/src/config/` to identify existing types, utilities, and configurations that should be referenced in the plan
 3. **Check for Plans Folder**: Verify `plans/` folder exists at project root
 4. **Create Folder if Needed**: If it doesn't exist, create the `plans/` directory
-5. **Create Plan File**: Create a new `.plan.md` file in the `plans/` folder with a descriptive name (e.g., `FEATURE_NAME_IMPLEMENTATION_PLAN.plan.md`)
-6. **Follow Plan Structure**: Use the standard plan structure (Overview, Current State, Steps, etc.)
-7. **Reference Shared Resources**: In the plan, explicitly reference which types from `@shared` should be used, which utilities are available, and which configuration patterns to follow
+5. **Create Plan File**: Create a new `.md` file in the `plans/` folder with a descriptive name (e.g., `FEATURE_NAME_IMPLEMENTATION_PLAN.md`)
+6. **Follow Plan Structure**: Use the standard plan structure (Overview, Current State, Steps, etc.). **Every step must include a Pseudo-code block** — no exceptions
+7. **Base Pseudo-code on Real Code**: Read the actual target files before writing the plan, so pseudo-code reflects the real current code (existing imports, class/function names, `@vbar/shared` usage) rather than an imagined version of it
+8. **Reference Shared Resources**: In the plan, explicitly reference which types from `@vbar/shared` should be used, which utilities are available, and which configuration patterns to follow
+9. **Always Add a Documentation Step as the Last Step**: Every plan **MUST** end with an explicit final step for updating existing documentation and/or adding new documentation under `documentation/` (e.g. `architecture.md`, `api.md`, `deployment.md`, `setup.md`, or a new doc when needed). Do not finalize a plan without this last step.
 
 ### Updating Existing Plans
 
 When updating implementation plans:
 
-1. **Mark Completed Steps**: Add checkmarks (✅) to steps that are fully implemented
+1. **Mark Completed Steps**: When a step is fully executed:
+   - Add a checkmark icon **before the step name** in the heading: `### ✅ Step N: [Title]` (was `### Step N: [Title]`)
+   - Mark the step checklist item: `- [x] Step completed ✅`
 2. **Mark Modified Files**: Add checkmarks (✅) to files in the "Files to Modify" section that have been changed
 3. **Mark Completed Missing Components**: When a missing component from the "❌ Missing Components" section is implemented, mark it with ✅ and add a note indicating which step completed it (e.g., "✅ Logic to determine element state - **COMPLETED in Step 1**")
 4. **Update Progress**: Keep the plan file synchronized with actual implementation status
@@ -64,6 +68,7 @@ When updating implementation plans:
 
    - File path(s) to modify
    - Specific changes required
+   - The step's **Pseudo-code** block (if missing, add it before implementing)
    - Code location hints (line numbers, function names, etc.)
    - Dependencies on other steps
 
@@ -78,14 +83,14 @@ When updating implementation plans:
    - Read the target file(s) to understand current implementation
    - Check if prerequisites from previous steps are in place
    - Identify exact locations for changes
-   - Check if the file already imports from `@shared` package
+   - Check if the file already imports from `@vbar/shared`
 
 4. **Implement Changes**:
 
-   - Make changes exactly as specified in the plan
-   - **Use Shared Types**: Import types from `@shared` instead of creating new ones (e.g., `ApiResponse`, `BaseEntity`, service-specific types)
-   - **Use Shared Utilities**: Import utilities from `@shared` when available (e.g., `ConsoleLogger`, validation helpers)
-   - **Use Shared Config**: Use `ConfigHelper` and configuration patterns from `@shared`
+   - Make changes exactly as specified in the plan, using the step's pseudo-code as the starting point (adapt it to the real file state if the code has drifted since the plan was written)
+   - **Use Shared Types**: Import types from `@vbar/shared` instead of creating new ones (e.g., `ApiResponse`, `BaseEntity`, `RefreshEvent`, admin content DTOs)
+   - **Use Shared Utilities**: Import utilities from `@vbar/shared` when available (e.g., `ConsoleLogger`, `PathUtils`)
+   - **Use Shared Config**: Use `ConfigHelper` and configuration patterns from `@vbar/shared`
    - Follow code style guidelines from other rules
    - Preserve existing functionality not mentioned in the step
    - Add necessary imports and dependencies
@@ -95,15 +100,13 @@ When updating implementation plans:
    - Check for linting errors
    - Ensure code compiles/runs
    - Verify the change matches the step description
-   - Verify imports from `@shared` are correct
+   - Verify imports from `@vbar/shared` are correct
 
-6. **Update Documentation if Needed**:
-   - **Check if documentation needs updates**: After implementing changes, determine if the implementation affects any documentation in `documentation/`
-   - **Update Architecture Docs** (`documentation/architecture.md`): If service structure, communication patterns, or architectural patterns changed
-   - **Update API Docs** (`documentation/api.md`): If API endpoints, request/response formats, or API contracts changed
-   - **Update Deployment Docs** (`documentation/deployment.md`): If deployment configurations, environment variables, or infrastructure requirements changed
-   - **Update Setup Docs** (`documentation/setup.md`): If development setup, local development requirements, or setup procedures changed
-   - **Keep Documentation Synchronized**: Ensure documentation accurately reflects the current implementation state
+6. **Update Documentation (Final Step)**:
+   - The documentation step is always the **last** plan step
+   - Update existing docs in `documentation/` and/or add a new doc when no existing file fits
+   - Typical targets: `documentation/architecture.md`, `documentation/api.md`, `documentation/deployment.md`, `documentation/setup.md`
+   - Keep documentation synchronized with the implementation
 
 #### Multiple Steps Execution
 
@@ -112,25 +115,178 @@ When executing multiple steps:
 - **Execute in Order**: Follow the implementation order specified in the plan
 - **Complete Each Step Fully**: Don't partially implement steps
 - **Verify After Each Step**: Check for errors before moving to the next step
-- **Update Documentation After Each Step**: After each step, check if documentation in `documentation/` needs updates and update it immediately to keep documentation synchronized
+- **Documentation Last**: Always run the documentation update/create step as the final step
 - **Update Progress**: Mark completed steps if the plan has a checklist
 
 ### Plan Step Format
 
-Steps typically include:
+**Every step MUST include a `**Pseudo-code**` block.** This is not optional — even simple steps (creating a file, adding a config entry, adding an env var) must have pseudo-code showing the expected structure or logic. This makes plans self-contained and executable without guessing.
+
+When the step modifies an existing file, the pseudo-code must be grounded in the **real current code**: read the target file first and show the actual code that will change (or a faithful excerpt), then the changed version — not an invented approximation.
+
+Steps follow this template:
 
 ```
 ### Step N: [Title]
 
-**File**: `path/to/file.ts`
+**File(s)**: `path/to/file.ts`
 
 **Changes**:
 - Specific change 1
 - Specific change 2
 - Code location hints
 
-**Code Location**: Around line X or in function Y
+**Pseudo-code**:
+
+A code block showing the expected implementation structure, key logic,
+function signatures, class outlines, or config shape. Use the actual
+language of the target file (TypeScript, YAML, shell, etc.).
+Should be concrete enough to copy-paste and adapt, not vague descriptions.
+
+**Code Location** (if modifying existing file): Around line X or in function Y
+
+- [ ] Step completed
 ```
+
+After the step is fully executed, update the heading and checklist:
+
+```
+### ✅ Step N: [Title]
+...
+- [x] Step completed ✅
+```
+
+**Example step with pseudo-code (server: repository + service):**
+
+```
+### Step 3: Implement message repository
+
+**File(s)**: `services/admin/src/domains/message/MessageRepository.ts`
+
+**Changes**:
+- Create concrete MessageRepository class (no port interface)
+- Add list, getById, create methods using the mongoose MessageModel
+
+**Pseudo-code**:
+```
+
+```typescript
+import { MessageDTO } from "@vbar/shared";
+import { MessageModel, MessageDocument } from "./MessageModel";
+
+export class MessageRepository {
+  async list(params: { page: number; limit: number }): Promise<MessageDocument[]> {
+    return MessageModel.find()
+      .skip((params.page - 1) * params.limit)
+      .limit(params.limit)
+      .lean();
+  }
+
+  async getById(id: string): Promise<MessageDocument | null> {
+    return MessageModel.findById(id).lean();
+  }
+
+  async create(dto: MessageDTO): Promise<MessageDocument> {
+    return MessageModel.create(dto);
+  }
+}
+```
+
+**Example step with pseudo-code (Docker / config):**
+
+```
+### Step 1: Add ai service to Docker Compose
+
+**File(s)**: `infrastructure/docker-compose.yml`
+
+**Changes**:
+- Add ai service definition with build context, ports, env vars, depends_on
+
+**Pseudo-code**:
+```
+
+```yaml
+ai:
+  build:
+    context: ..
+    dockerfile: services/ai/Dockerfile
+  ports:
+    - "50051:50051"
+  environment:
+    - MONGODB_URI=mongodb://mongodb:27017/ai
+    - RABBITMQ_URL=amqp://rabbitmq:5672
+  depends_on:
+    - mongodb
+    - rabbitmq
+```
+
+**Example step with pseudo-code (admin client, FSD):**
+
+```
+### Step 5: Create message list widget
+
+**File(s)**: `services/admin/src/widgets/message-list/ui/MessageList.tsx`
+
+**Changes**:
+- Create widget that renders messages via entities/message API
+- Handle loading and empty states
+
+**Pseudo-code**:
+```
+
+```tsx
+"use client";
+
+import { useMessages } from "@/entities/message";
+import { DeleteMessageButton } from "@/features/message-manage";
+
+export function MessageList() {
+  const { messages, isLoading } = useMessages();
+
+  if (isLoading) return <Spinner />;
+  if (messages.length === 0) return <EmptyState text="No messages yet" />;
+
+  return (
+    <ul>
+      {messages.map((message) => (
+        <li key={message.id}>
+          {message.name}
+          <DeleteMessageButton id={message.id} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+```
+
+### Pseudo-code Requirements
+
+**Every step in a plan MUST include pseudo-code.** No exceptions.
+
+**What counts as valid pseudo-code:**
+
+- Actual code in the target language (TypeScript, YAML, SQL, Dockerfile, shell, etc.)
+- Function/class signatures with key logic filled in
+- Config file structures with realistic values
+- API route definitions with request/response shapes
+- Mongoose schemas, queries, or aggregation pipelines
+- For **modified files**: the real existing code (excerpted from the actual file) alongside the changed version
+
+**What does NOT count:**
+
+- Plain English descriptions like "create a function that does X"
+- Empty function bodies with only comments
+- Vague outlines like "similar to the keyboard domain"
+- Invented "current code" that was never checked against the real file
+
+**Guidelines:**
+
+- Use the real language of the target file, not generic pseudo-code
+- Include imports when they clarify dependencies (especially `@vbar/shared` / `@vbar/shared/infra` imports)
+- Show error handling and edge cases where relevant
+- Keep each block focused on that step's scope — don't dump the entire file
+- For test steps, show concrete test cases with assertions
+- Match project conventions: `route → service → repository` with concrete Mongo repositories on the server, FSD layers on the admin client, types from `@vbar/shared`
 
 ### Common Step Types
 
@@ -181,7 +337,7 @@ When planning or executing implementation steps, **ALWAYS** refer to the followi
    - Service descriptions and responsibilities
    - Database schemas
    - Communication patterns (REST, gRPC, RabbitMQ)
-   - Hexagonal Architecture details
+   - Service layering (`route → service → repository` on the admin server with flat per-domain folders and concrete Mongo repositories; FSD on the admin client)
    - Service-specific structure guidelines
    - **Use this to understand**: How services are structured, what each service does, how they communicate, and architectural patterns to follow
 
@@ -218,59 +374,56 @@ When planning or executing implementation steps, **ALWAYS** check the shared pac
 
 **Location**: `packages/shared/src/`
 
+Import from `@vbar/shared` (root barrel) or `@vbar/shared/infra` (Mongo/RabbitMQ helpers). Infra is **not** on the root barrel so Next.js Edge middleware can import `ConfigHelper` without loading mongoose or amqplib.
+
 **Available Resources**:
 
 1. **Types** (`packages/shared/src/types/`):
 
-   - **`common.ts`**: Base types (BaseEntity, ApiResponse, PaginationParams, MessageQueueEvent, HealthCheckResponse, etc.)
-   - **`admin.ts`**: Admin service types (User, Config)
-   - **`viber.ts`**: Viber service types (Message, SendMessageRequest, SendMessageResponse)
-   - **`ai.ts`**: AI service types (ProcessMessageRequest, ProcessMessageResponse, DetectIntentRequest, etc.)
-   - **`index.ts`**: Re-exports all types
-   - **Use this to**: Import existing types instead of creating new ones, ensure type consistency across services
+   - **`common.ts`**: `BaseEntity`, `ApiResponse`, `PaginationParams`, `HealthCheckResponse`, `RefreshEvent`, queue/event names (`MessageQueueName`, `MessageQueueEvent`)
+   - **`admin.ts`**: admin↔viber content DTOs (`StepDTO`, `MessageDTO`, `KeyboardDTO`, `ButtonDTO`, keyboard enums) and `User`
+   - **`index.ts`**: re-exports `common` + `admin`
+   - Content DTOs and `User` live in `admin.ts`; do not add per-service sketch type files for other runtimes
 
 2. **Utilities** (`packages/shared/src/utils/`):
 
-   - Logger interface and ConsoleLogger implementation
-   - Validation helpers
-   - Date/time utilities
-   - Error handling utilities
-   - **Use this to**: Leverage existing utility functions instead of reimplementing them
+   - `Logger` / `ConsoleLogger`
+   - `PathUtils` (project-root / proto path resolution)
+   - Nothing else — do not invent validation, date, or error-code helpers here
 
 3. **Configuration** (`packages/shared/src/config/`):
-   - EnvironmentConfig interface
-   - ConfigHelper class for environment variable management
-   - Configuration validation utilities
-   - **Use this to**: Use existing configuration patterns and helpers
+
+   - `ConfigHelper`, `EnvironmentConfig`, `resolveRootEnvPath`
+   - **Use this to**: read env via `ConfigHelper`; it is the single env reader
+
+4. **Infra** (`packages/shared/src/infra/`, import as `@vbar/shared/infra`):
+
+   - `createMongoConnection`, `closeMongoConnection`, `getMongoDatabase`
+   - `createQueueChannel`, `closeQueue`
+   - Mandated for new Mongo/RabbitMQ connections in viber and ai. Admin's `lib/mongodb.ts` stays Next.js-specific (build guard, seed, indexes).
 
 **When to Reference Shared Package**:
 
 - **Before creating types**: Check if types already exist in `packages/shared/src/types/`
-- **Before implementing utilities**: Check if utility functions already exist in `packages/shared/src/utils/`
-- **Before configuring services**: Check if configuration helpers exist in `packages/shared/src/config/`
-- **During implementation**: Import from `@shared` package instead of creating duplicate code
+- **Before implementing utilities**: Check if they already exist in `packages/shared/src/utils/`
+- **Before connecting to Mongo/RabbitMQ**: use `@vbar/shared/infra`, do not copy-paste a per-service connection file
+- **During implementation**: Import from `@vbar/shared` instead of creating duplicate code
 - **When adding new shared code**: Add to `packages/shared/` if it will be used by multiple services
 
 **Import Pattern**:
 
 ```typescript
-// Import types
-import { User, Message, ApiResponse } from "@shared";
-
-// Import utilities
-import { ConsoleLogger, validateEmail } from "@shared";
-
-// Import configuration
-import { ConfigHelper, EnvironmentConfig } from "@shared";
+import { User, ApiResponse, RefreshEvent, ConsoleLogger, ConfigHelper } from "@vbar/shared";
+import { createMongoConnection, createQueueChannel } from "@vbar/shared/infra";
 ```
 
 **Best Practices for Shared Package**:
 
-- **DO**: Use existing types and utilities from `@shared`
+- **DO**: Use existing types and utilities from `@vbar/shared`
 - **DO**: Add new shared types/utilities to `packages/shared/` if used by multiple services
-- **DON'T**: Duplicate types or utilities that already exist in `@shared`
-- **DON'T**: Create service-specific types in `@shared` (use service-specific type files)
-- **DO**: Organize new shared types by service (e.g., `types/admin.ts`, `types/viber.ts`, `types/ai.ts`)
+- **DON'T**: Duplicate types or utilities that already exist in `@vbar/shared`
+- **DON'T**: Add sketch types for runtimes that are not in the three-service stack
+- **DO**: Keep the admin↔viber contract in `types/admin.ts` / `types/common.ts`
 
 ### Best Practices
 
@@ -296,27 +449,23 @@ import { ConfigHelper, EnvironmentConfig } from "@shared";
 - Run linters to check for errors
 - Verify the implementation matches the step description
 - Check if the change integrates with existing code
-- **Update Documentation**: **CRITICAL** - After each step execution, check if the implementation requires updates to documentation in `documentation/`:
-  - **`documentation/architecture.md`**: Update if service structure, database schemas, communication patterns, or architectural patterns changed
-  - **`documentation/api.md`**: Update if API endpoints, request/response formats, authentication, or error handling changed
-  - **`documentation/deployment.md`**: Update if deployment configurations, environment variables, Docker/Kubernetes configs, or infrastructure requirements changed
-  - **`documentation/setup.md`**: Update if development setup, installation steps, local development requirements, or setup procedures changed
-- **Documentation Sync**: Ensure all documentation files accurately reflect the current implementation state - documentation should always be up-to-date with the codebase
+- **Execute the Final Documentation Step**: Always end with the plan's documentation step — update existing docs and/or add new docs under `documentation/`
+- Typical targets: `documentation/architecture.md`, `documentation/api.md`, `documentation/deployment.md`, `documentation/setup.md`, or a new `documentation/*.md` file when needed
 
 ### Documentation Maintenance
 
-**CRITICAL**: Documentation in `documentation/` must be kept synchronized with the codebase at all times.
+**REQUIRED**: Every implementation plan must include a documentation update step as its **last step**. Documentation in `documentation/` must stay synchronized with the codebase.
 
 #### When to Update Documentation
 
-After executing any step, **ALWAYS** check if the implementation requires documentation updates:
+During the final documentation step, update affected docs (and add a new doc if none fits):
 
 1. **Architecture Changes** (`documentation/architecture.md`):
 
    - Service structure modifications
    - Database schema changes
    - Communication pattern changes (REST, gRPC, RabbitMQ)
-   - Hexagonal Architecture layer changes
+   - Service layering changes (`route → service → repository`, FSD frontend)
    - New services or service removal
 
 2. **API Changes** (`documentation/api.md`):
@@ -331,7 +480,7 @@ After executing any step, **ALWAYS** check if the implementation requires docume
 
    - Environment variable additions/modifications
    - Docker configuration changes
-   - Kubernetes manifest updates
+   - Docker Compose topology changes
    - Infrastructure requirements changes
    - Deployment procedure modifications
 
@@ -342,21 +491,26 @@ After executing any step, **ALWAYS** check if the implementation requires docume
    - Dependency changes
    - Configuration file changes
 
+5. **New Documentation**:
+   - No existing file covers the topic
+   - A new guide, runbook, or feature doc under `documentation/` would help
+
 #### Documentation Update Process
 
-1. **After Each Step**: Immediately after implementing a step, assess if documentation needs updates
-2. **Identify Affected Docs**: Determine which documentation file(s) are affected by the changes
-3. **Update Documentation**: Make necessary updates to keep documentation accurate
+1. **Always Include as Last Plan Step**: When creating a plan, always add a documentation update/create step as the final step
+2. **Identify Affected Docs**: Determine which documentation file(s) are affected, or whether a new doc is needed
+3. **Update or Create Documentation**: Make the necessary updates as the last executed step
 4. **Verify Accuracy**: Ensure documentation reflects the current implementation state
 5. **Maintain Consistency**: Keep all documentation files consistent with each other
 
 #### Documentation Update Checklist
 
-When updating documentation:
+When executing the final documentation step:
 
-- [ ] Identify which documentation file(s) need updates
-- [ ] Review the current documentation content
-- [ ] Update affected sections with new/changed information
+- [ ] Documentation step is the last step in the plan
+- [ ] Identify which documentation file(s) need updates, or the path for a new doc
+- [ ] Review the current documentation content (if updating)
+- [ ] Update affected sections or create the new documentation file
 - [ ] Remove outdated information
 - [ ] Verify documentation accuracy against implementation
 - [ ] Ensure cross-references between documentation files are still valid
@@ -380,18 +534,15 @@ When executing steps from a plan:
 - [ ] Identify which step(s) to execute
 - [ ] Verify prerequisites are met
 - [ ] Read target file(s) to understand current state
-- [ ] **Verify Shared Resources**: Check if types/utilities from `@shared` should be used instead of creating new ones
+- [ ] **Verify step has pseudo-code**: if missing, add it (grounded in the real target files) before implementing
+- [ ] **Verify Shared Resources**: Check if types/utilities from `@vbar/shared` should be used instead of creating new ones
 - [ ] Implement changes as specified
-- [ ] **Use Shared Imports**: Import from `@shared` package where applicable
+- [ ] **Use Shared Imports**: Import from `@vbar/shared` where applicable
 - [ ] Check for linting/compilation errors
 - [ ] Verify implementation matches step description
-- [ ] **Update Documentation**: Check if implementation requires updates to `documentation/` files and update accordingly:
-  - [ ] `documentation/architecture.md` (if architecture/structure changed)
-  - [ ] `documentation/api.md` (if APIs changed)
-  - [ ] `documentation/deployment.md` (if deployment config changed)
-  - [ ] `documentation/setup.md` (if setup procedures changed)
 - [ ] Test the changes if possible
-- [ ] Mark step as complete in plan with ✅ checkmark
+- [ ] **Execute Final Documentation Step**: Update existing `documentation/` files and/or add a new doc as the last plan step
+- [ ] Mark step as complete in plan: prefix the step heading with ✅ (`### ✅ Step N: ...`) and set `- [x] Step completed ✅`
 - [ ] Mark modified files in "Files to Modify" section with ✅ checkmark
 - [ ] Mark completed missing components in "❌ Missing Components" section with ✅ checkmark and note which step completed it
 
@@ -427,89 +578,58 @@ If a step cannot be executed as written:
 4. **Propose Alternative**: Suggest an alternative approach if needed
 5. **Document Deviation**: Note any changes from the original plan
 
-### Hexagonal Architecture Principles
+### Service Architecture Principles
 
-**ALL implementation plans MUST follow Hexagonal Architecture (Ports and Adapters) principles** when creating or modifying service code. This ensures separation of concerns, testability, and independence from external frameworks.
+The stack is **three services** (admin, viber, ai) and **one Viber bot per deployment**. Do not plan multi-bot hosting, extra messaging platforms, or extra app services unless the user explicitly asks.
 
-#### Architecture Layers
+Admin content CRUD uses **`route → service → repository`** with **concrete Mongo repository classes** (no port interface). Full Ports & Adapters is reserved for boundaries with **multiple real implementations or dense domain rules**.
 
-When implementing service code, structure must follow these layers:
+#### When to use full Ports & Adapters
 
-1. **Domain Layer** (`src/domains/`):
+Reserve ports and adapter implementations for:
 
-   - Core business logic, entities, and domain rules (innermost layer)
-   - Organized by domain with subfolders for each domain (e.g., `user/`, `auth/`, `config/`)
-   - Each domain folder contains: `entities/`, `value-objects/`, `services/`, `events/`
-   - Domain entities and value objects
-   - Domain services
-   - Business rules and validations
-   - **MUST NOT** depend on external frameworks or infrastructure
-   - Each domain should be self-contained with minimal coupling to other domains
+- LLM provider adapters (`AIProviderPort`)
+- Other boundaries that already have (or will immediately have) a second real implementation
 
-2. **Application Layer** (`src/application/`):
+Do **not** create repository interfaces, `ports/in/` input-port interfaces, or `*UseCaseImpl` classes for admin CRUD. Admin keyboard validation stays as domain helpers (`ViberApiValidator` / `ButtonAction` under `domains/keyboard/lib/`). Auth is `AuthService` + concrete `UserRepository` / `SessionRepository`. One service class per domain (`MessageService`-style with `list` / `get` / `create` / `update` / `delete`) is enough.
 
-   - Use cases and application services
-   - Orchestration logic
-   - DTOs (Data Transfer Objects)
-   - Application-specific interfaces
-   - **MUST NOT** depend on infrastructure adapters
+#### Server layering (`route → service → repository`)
 
-3. **Ports (Interfaces)**:
+1. **Route** (`src/app/api/**` in admin; Express/gRPC adapters in viber/ai): parse the request, wire the service + repository, map errors to status codes. Routes never contain business logic or inline DB queries.
+2. **Service**: orchestration and domain rules. Constructor takes the concrete repository (or repositories).
+3. **Repository**: admin uses a concrete Mongo class in the domain root (`MessageRepository`, not a port + `Mongo*` adapter). Dependencies point inward (`route → service → repository`).
 
-   - **Input Ports** (`src/ports/in/`): Interfaces for incoming operations (use cases)
-   - **Output Ports** (`src/ports/out/`): Interfaces for outgoing operations (repositories, message publishers, external services)
-   - Define contracts, not implementations
+#### For New Features (server)
 
-4. **Adapters (Infrastructure)**:
-   - **Input Adapters** (`src/adapters/in/`): HTTP controllers, message queue consumers, WebSocket handlers
-   - **Output Adapters** (`src/adapters/out/`): Database repositories, message queue publishers, external API clients
-   - Implement ports/interfaces defined in the ports layer
+1. Entity / model
+2. Concrete repository class
+3. Service (`list` / `get` / `create` / `update` / `delete`)
+4. Route (parse + wire + error mapping)
 
-#### Key Principles
+Add extra interfaces only when a second implementation is real.
 
-When creating or executing implementation plans:
+#### For Next.js Services (admin)
 
-- **Dependency Rule**: Dependencies point inward - Domain has no dependencies, Application depends only on Domain, Adapters depend on Ports and Application
-- **Interface Segregation**: Define ports (interfaces) before implementing adapters
-- **Dependency Inversion**: Depend on abstractions (ports/interfaces), not concrete implementations
-- **Separation of Concerns**: Business logic stays in Domain/Application layers, infrastructure details in Adapters
-- **Testability**: Domain and Application layers should be testable without external dependencies (mocks/stubs for ports)
+**Server** (`src/app/api/**`, `src/domains/**`, `src/lib/**`, `src/middleware.ts`): `route → service → repository` as above, with flat per-domain folders (`Model` / `Repository` / `Service` / `DTO` / `types` / `index`). Do not re-slice the server into FSD segments.
 
-#### Implementation Guidelines
+**Client** (Feature-Sliced Design): `app → views → widgets → features → entities → shared`
 
-When implementing plan steps:
-
-1. **For New Features**:
-
-   - Start with Domain entities and business rules
-   - Define use cases in Application layer
-   - Create port interfaces (input/output)
-   - Implement adapters last
-
-2. **For Service Structure**:
-
-   - Follow the directory structure: `domain/`, `application/`, `ports/in/`, `ports/out/`, `adapters/in/`, `adapters/out/`
-   - Keep layers physically separated in different directories
-
-3. **For Dependencies**:
-
-   - Domain layer: No external dependencies
-   - Application layer: Only domain dependencies
-   - Adapters: Can depend on frameworks (Express, MongoDB drivers, etc.)
-
-4. **For Next.js Services**:
-   - Adapt Hexagonal Architecture to Next.js structure
-   - Use Next.js App Router as input adapter
-   - Keep business logic in domain/application layers
+- App Router doubles as the FSD **app** layer (`page.tsx`, `layout.tsx`, providers, `globals.css`). `page.tsx` files are thin default-export wrappers that render a view.
+- The FSD pages layer is named **`views`** (`src/views/`) because Next.js reserves `pages/` and `app/`.
+- A layer imports only from layers strictly below it; slices within a layer never import each other.
+- Import slices only through their public `index.ts` (`@/entities/message`, never deep paths).
+- The only client files that may reference `@/domains` are `entities/*/model/types.ts`, and only via `import type`.
+- A new content domain on the client is `entities/<x>` + `features/<x>-manage` + `widgets/<x>-list` + `views/<xs>` (create/edit views as needed).
 
 #### Plan Step Requirements
 
 When creating implementation plans that involve service code:
 
-- Specify which layer each file belongs to (domain, application, ports, adapters)
-- Ensure dependency direction is correct (inward dependencies only)
-- Include port interfaces before adapter implementations
-- Document any deviations from hexagonal architecture with justification
+- Specify whether each file is server (`route` / `service` / `repository`) or a client FSD layer
+- Include a **Pseudo-code** block in every step showing the actual code shape for that layer (concrete repository class, service method, route handler, or FSD component)
+- Ensure dependency direction is correct (inward on the server; strictly downward on the client)
+- Do not add repository interfaces, `ports/in/`, or `*UseCaseImpl` for admin CRUD
+- Document any deviation from this layering with justification
 
 ### Integration with Other Rules
 
@@ -520,4 +640,4 @@ When executing plan steps:
 - **Follow React Patterns**: Use hooks, functional components, etc. (for frontend/Next.js)
 - **Apply Testing Standards**: Add test IDs and consider testability
 - **Maintain Accessibility**: Include ARIA labels and keyboard support (for UI components)
-- **Follow Hexagonal Architecture**: Structure all service code according to Hexagonal Architecture principles (see above)
+- **Follow Service Architecture**: Structure server code as `route → service → repository` and admin client code as FSD (see above)

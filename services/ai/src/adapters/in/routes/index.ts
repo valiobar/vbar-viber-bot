@@ -5,18 +5,17 @@
  */
 
 import { Router } from "express";
+import { Logger } from "@vbar/shared";
 import healthRoutes from "./health";
+import { createKnowledgeBaseRouter } from "./knowledgeBase";
+import { VectorStorePort } from "../../../ports/out/VectorStorePort";
 
-const router = Router();
-
-// Health check routes
-router.use("/api/health", healthRoutes);
-
-export default router;
-
-
-
-
-
-
-
+export function createRoutes(
+  vectorStore: VectorStorePort | null,
+  logger: Logger
+): Router {
+  const router = Router();
+  router.use("/api/health", healthRoutes);
+  router.use("/api/knowledge-base", createKnowledgeBaseRouter(vectorStore, logger));
+  return router;
+}

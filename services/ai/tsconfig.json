@@ -21,7 +21,8 @@
     "paths": {
       "@/*": ["./src/*"],
       "@shared/*": ["../../packages/shared/src/*"],
-      "@vbar/shared": ["../../packages/shared/dist/index"]
+      "@vbar/shared": ["../../packages/shared/dist/index"],
+      "@vbar/shared/infra": ["../../packages/shared/dist/infra/index"]
     }
   },
   "include": ["src/**/*"],

@@ -7,17 +7,21 @@
 import express, { Express } from "express";
 import dotenv from "dotenv";
 import * as grpc from "@grpc/grpc-js";
-import { ConfigHelper, ServiceConfig, ConsoleLogger } from "@vbar/shared";
-import { getDatabase, closeConnection } from "./config/database";
-import { getConnection, closeMessageQueue } from "./config/messageQueue";
+import { ConfigHelper, ServiceConfig, ConsoleLogger, resolveRootEnvPath } from "@vbar/shared";
+import { createMongoConnection, closeMongoConnection } from "@vbar/shared/infra";
 import { initializeLangSmith } from "./config/langsmith";
-import routes from "./adapters/in/routes";
+import { createRoutes } from "./adapters/in/routes";
 import { createGrpcServer } from "./adapters/in/grpc/server";
+import { createVectorStore } from "./adapters/out/langchain/rag/VectorStoreFactory";
 import { initBulgarianCulturePrompt } from "./scripts/initBulgarianCulturePrompt";
 
-// Load environment variables
-dotenv.config();
-
+// Load monorepo-root .env (single system env file)
+const rootEnv = resolveRootEnvPath();
+if (rootEnv) {
+  dotenv.config({ path: rootEnv });
+} else {
+  dotenv.config();
+}
 const app: Express = express();
 const port = ConfigHelper.getEnvNumber("PORT", ServiceConfig.ports.ai);
 
@@ -34,8 +38,11 @@ app.use((req, res, next) => {
   next();
 });
 
-// Routes
-app.use("/", routes);
+// Shared vector store + HTTP routes (module scope — must stay BEFORE the error/404 handlers)
+const logger = new ConsoleLogger("AIService");
+const vectorStore = createVectorStore(logger); // sync; null when RAG_ENABLED=false
+
+app.use("/", createRoutes(vectorStore, logger));
 
 // Root endpoint
 app.get("/", (req, res) => {
@@ -90,7 +97,13 @@ async function initialize(): Promise<void> {
 
     // Initialize MongoDB connection
     console.log("Connecting to MongoDB...");
-    await getDatabase();
+    await createMongoConnection({
+      uri: ConfigHelper.getEnv(
+        "MONGODB_URI",
+        "mongodb://ai:ai123@localhost:27019/ai?authSource=admin"
+      ),
+      dbName: ConfigHelper.getEnv("MONGODB_DB_NAME", "ai"),
+    });
     console.log("MongoDB connected");
 
     // Initialize Bulgarian culture prompt template
@@ -103,14 +116,8 @@ async function initialize(): Promise<void> {
       );
     }
 
-    // Initialize RabbitMQ connection
-    console.log("Connecting to RabbitMQ...");
-    await getConnection();
-    console.log("RabbitMQ connected");
-
-    // Initialize gRPC server
-    const logger = new ConsoleLogger("AIService");
-    grpcServer = createGrpcServer(logger);
+    // Initialize gRPC server (reuse module-scope logger + shared vector store)
+    grpcServer = createGrpcServer(logger, vectorStore);
     const grpcPort = ConfigHelper.getEnvNumber("GRPC_PORT", 50051);
 
     grpcServer.bindAsync(
@@ -164,14 +171,7 @@ async function shutdown(): Promise<void> {
   }
 
   try {
-    await closeMessageQueue();
-    console.log("RabbitMQ connection closed");
-  } catch (error) {
-    console.error("Error closing RabbitMQ:", error);
-  }
-
-  try {
-    await closeConnection();
+    await closeMongoConnection();
     console.log("MongoDB connection closed");
   } catch (error) {
     console.error("Error closing MongoDB:", error);

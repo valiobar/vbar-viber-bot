@@ -1,12 +1,5 @@
-/**
- * Home Page Component
- *
- * Redirects to the settings page by default.
- * Authentication is handled by AuthProvider in the layout.
- */
+import { DashboardView } from "@/views/dashboard";
 
-import { redirect } from "next/navigation";
+const Home = () => <DashboardView />;
 
-export default function Home() {
-  redirect("/settings");
-}
+export default Home;

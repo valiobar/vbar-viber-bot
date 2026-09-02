@@ -18,7 +18,6 @@ WORKDIR /app
 
 # Copy dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
 
 # Copy source code
 COPY packages/shared ./packages/shared
@@ -42,9 +41,12 @@ ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Copy necessary files
-COPY --from=builder /app/services/admin/public ./public
+# Copy necessary files. Standalone emits server.js at /app; Next does not
+# always trace node_modules in this monorepo, so copy them from the builder.
 COPY --from=builder --chown=nextjs:nodejs /app/services/admin/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nextjs:nodejs /app/packages/shared ./packages/shared
+COPY --from=builder /app/services/admin/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/services/admin/.next/static ./.next/static
 
 USER nextjs

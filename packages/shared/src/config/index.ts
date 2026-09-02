@@ -2,6 +2,8 @@
  * Shared configuration helpers and constants
  */
 
+export { resolveRootEnvPath } from "./envPath";
+
 /**
  * Environment configuration interface
  */
@@ -94,7 +96,6 @@ export const ServiceConfig = {
     admin: 3000,
     viber: 3001,
     ai: 3002,
-    analytics: 3003,
   },
 
   /**
@@ -104,7 +105,6 @@ export const ServiceConfig = {
     queues: {
       viberMessages: "viber.messages",
       aiProcessed: "ai.processed",
-      analyticsEvents: "analytics.events",
       adminConfig: "admin.config",
       viberRefresh: "viber.refresh",
     },

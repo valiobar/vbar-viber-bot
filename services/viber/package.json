@@ -20,7 +20,6 @@
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "express-rate-limit": "^7.1.5",
-    "mongodb": "^6.0.0",
     "mongoose": "^9.0.1",
     "viber-bot": "^1.0.18"
   },
