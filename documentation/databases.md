@@ -87,7 +87,7 @@ Viber keyboards. Buttons are **embedded** in `Buttons` — there is no `buttons`
 | Field | Type | Notes |
 |-------|------|--------|
 | `Type` | string | Default `"keyboard"` |
-| `Buttons` | Button[] | At least one. Columns/Rows, Text, colors, media, `ActionType` / `ActionBody`, alignment, `Silent`, `isJson`, optional `OpenURLType` + `InternalBrowser` |
+| `Buttons` | Button[] | At least one. Array index is Viber layout order (left-to-right, 6-column wrap). Admin reorders this array in the keyboard form. Columns/Rows, Text, colors, media, `ActionType` / `ActionBody`, alignment, `Silent`, `isJson`, optional `OpenURLType` + `InternalBrowser` |
 | `DefaultHeight` | boolean | |
 | `InputFieldState` | `"regular"` \| `"minimized"` \| `"hidden"` | |
 | `BgColor` | hex \| null | |

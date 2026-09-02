@@ -142,6 +142,8 @@ Current content / feature slices:
 | bot-settings | `bot-settings` | `bot-settings-manage` | — | `settings` |
 | knowledge-base | `knowledge-base` | `knowledge-base-ingest` | `knowledge-base-sources` | `knowledge-base` |
 
+Keyboard create/edit (`keyboard-manage` / `KeyboardForm`) can reorder embedded `Buttons` with drag-and-drop from the buttons list and the phone preview. Order is the array sent on POST/PUT; there is no separate order field.
+
 Knowledge-base types are mirrored from the AI inbound port (not `@vbar/shared`). The entity API talks only to admin `/api/knowledge-base/*`.
 
 ## Databases

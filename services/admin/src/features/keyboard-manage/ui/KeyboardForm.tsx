@@ -17,7 +17,9 @@ import {
   type KeyboardDTO,
   type UpdateKeyboardInput,
 } from "@/entities/keyboard";
+import { reorderButtons } from "../lib/reorderButtons";
 import { ButtonForm } from "./ButtonForm";
+import { ButtonsList } from "./ButtonsList";
 
 interface KeyboardFormProps {
   /**
@@ -413,6 +415,17 @@ export const KeyboardForm = ({
     setButtons(buttons.filter((_, i) => i !== index));
   };
 
+  const handleReorderButtons = (fromIndex: number, toIndex: number) => {
+    setButtons((prev) => reorderButtons(prev, fromIndex, toIndex));
+    setEditingButtonIndex((current) => {
+      if (current === null) return current;
+      if (current === fromIndex) return toIndex;
+      if (fromIndex < current && current <= toIndex) return current - 1;
+      if (toIndex <= current && current < fromIndex) return current + 1;
+      return current;
+    });
+  };
+
   /**
    * Columns used on the last (current) row after wrapping at 6.
    */
@@ -763,47 +776,12 @@ export const KeyboardForm = ({
               </p>
             )}
 
-            {/* Buttons List - Simple display */}
-            {buttons.length === 0 ? (
-              <p className="text-center text-sm text-gray-500 dark:text-gray-400">
-                No buttons added yet. Click &quot;Add New Keyboard Button&quot; to
-                get started.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {buttons.map((button, index) => (
-                  <div
-                    key={button.tempId}
-                    className="flex items-center justify-between rounded-lg border border-gray-200 p-3 dark:border-gray-700"
-                  >
-                    <div className="flex-1">
-                      <span className="font-medium text-gray-900 dark:text-white">
-                        Button {index + 1}: {button.Text || "Untitled"}
-                      </span>
-                      <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">
-                        ({button.Columns}×{button.Rows})
-                      </span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <button
-                        type="button"
-                        onClick={() => handleEditButton(index)}
-                        className="rounded px-3 py-1 text-sm text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveButton(index)}
-                        className="rounded px-3 py-1 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            <ButtonsList
+              buttons={buttons}
+              onEdit={handleEditButton}
+              onRemove={handleRemoveButton}
+              onReorder={handleReorderButtons}
+            />
           </div>
         </div>
 
@@ -819,6 +797,7 @@ export const KeyboardForm = ({
               title={title}
               inputFieldState={inputFieldState}
               onButtonClick={handlePreviewButtonClick}
+              onReorder={handleReorderButtons}
             />
           </div>
         </div>

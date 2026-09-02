@@ -6,16 +6,36 @@
  * Displays a visual preview of a keyboard with buttons in a phone-like frame
  */
 
+import { useState } from "react";
 import type { CSSProperties } from "react";
+import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
+import {
+  SortableContext,
+  rectSortingStrategy,
+  sortableKeyboardCoordinates,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { ButtonDTO, InputFieldState } from "../model/types";
+
+type PreviewButton = Omit<ButtonDTO, "id" | "createdAt" | "updatedAt"> & {
+  tempId?: string;
+};
 
 interface KeyboardPreviewProps {
   /**
    * Array of buttons to display
    */
-  buttons: (Omit<ButtonDTO, "id" | "createdAt" | "updatedAt"> & {
-    tempId?: string;
-  })[];
+  buttons: PreviewButton[];
 
   /**
    * Keyboard background color (optional)
@@ -36,7 +56,61 @@ interface KeyboardPreviewProps {
    * Callback when a button in the preview is clicked
    */
   onButtonClick?: (index: number) => void;
+
+  /**
+   * Callback when a button is reordered by drag-and-drop
+   */
+  onReorder?: (fromIndex: number, toIndex: number) => void;
 }
+
+interface SortablePreviewButtonProps {
+  id: string;
+  button: PreviewButton;
+  index: number;
+  style: CSSProperties;
+  onButtonClick?: (index: number) => void;
+}
+
+const getButtonId = (button: PreviewButton, index: number): string =>
+  button.tempId || `btn-${index}`;
+
+const SortablePreviewButton = ({
+  id,
+  button,
+  index,
+  style,
+  onButtonClick,
+}: SortablePreviewButtonProps) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        ...style,
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.4 : undefined,
+      }}
+      className="cursor-pointer transition-colors hover:opacity-80"
+      onClick={() => {
+        if (!isDragging) onButtonClick?.(index);
+      }}
+      {...attributes}
+      {...listeners}
+      aria-label={`Reorder or edit button ${index + 1}`}
+    >
+      {button.Text || "Button"}
+    </div>
+  );
+};
 
 export const KeyboardPreview = ({
   buttons,
@@ -44,7 +118,18 @@ export const KeyboardPreview = ({
   title,
   inputFieldState = "hidden",
   onButtonClick,
+  onReorder,
 }: KeyboardPreviewProps) => {
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const canReorder = Boolean(onReorder) && buttons.length >= 2;
+  const buttonIds = buttons.map((button, index) => getButtonId(button, index));
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
   // Screen width is 320px
   const SCREEN_WIDTH = 320;
   // Viber keyboards use a 6-column grid
@@ -52,8 +137,7 @@ export const KeyboardPreview = ({
   const COLUMN_WIDTH = SCREEN_WIDTH / COLUMNS;
   const ROW_HEIGHT = COLUMN_WIDTH * 1.1; // 10% more than column width
 
-  // Calculate button styles
-  const getButtonStyle = (button: KeyboardPreviewProps["buttons"][0]) => {
+  const getButtonStyle = (button: PreviewButton) => {
     const baseStyle: CSSProperties = {
       gridColumn: `span ${button.Columns}`,
       gridRow: `span ${button.Rows}`,
@@ -122,6 +206,68 @@ export const KeyboardPreview = ({
     return baseStyle;
   };
 
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(String(event.active.id));
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveId(null);
+    if (!over || active.id === over.id) return;
+    onReorder?.(
+      buttonIds.indexOf(String(active.id)),
+      buttonIds.indexOf(String(over.id))
+    );
+  };
+
+  const handleDragCancel = () => {
+    setActiveId(null);
+  };
+
+  const activeButton = activeId
+    ? buttons.find((button, index) => getButtonId(button, index) === activeId)
+    : undefined;
+
+  const buttonsGrid = (
+    <div
+      className="grid overflow-y-auto"
+      style={{
+        gridTemplateColumns: "repeat(6, 1fr)",
+        gridAutoRows: `${ROW_HEIGHT}px`,
+        alignContent: "end",
+        gap: "1px",
+        backgroundColor: bgColor || "#f5f5f5",
+      }}
+    >
+      {buttons.map((button, index) => {
+        const id = buttonIds[index];
+        if (canReorder) {
+          return (
+            <SortablePreviewButton
+              key={id}
+              id={id}
+              button={button}
+              index={index}
+              style={getButtonStyle(button)}
+              onButtonClick={onButtonClick}
+            />
+          );
+        }
+
+        return (
+          <div
+            key={id}
+            style={getButtonStyle(button)}
+            className="cursor-pointer transition-colors hover:opacity-80"
+            onClick={() => onButtonClick?.(index)}
+          >
+            {button.Text || "Button"}
+          </div>
+        );
+      })}
+    </div>
+  );
+
   return (
     <div className="flex items-center justify-center p-2">
       {/* Phone Frame */}
@@ -185,34 +331,39 @@ export const KeyboardPreview = ({
                 )}
 
                 {/* Keyboard Buttons Grid - stacked from bottom */}
-                {buttons.length > 0 ? (
-                  <div
-                    className="grid overflow-y-auto"
-                    style={{
-                      gridTemplateColumns: "repeat(6, 1fr)",
-                      gridAutoRows: `${ROW_HEIGHT}px`,
-                      alignContent: "end",
-                      gap: "1px",
-                      backgroundColor: bgColor || "#f5f5f5",
-                    }}
-                  >
-                    {buttons.map((button, index) => (
-                      <div
-                        key={button.tempId || `btn-${index}`}
-                        style={getButtonStyle(button)}
-                        className="transition-colors cursor-pointer hover:opacity-80"
-                        onClick={() => onButtonClick?.(index)}
-                      >
-                        {button.Text || "Button"}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
+                {buttons.length === 0 && (
                   <div className="flex h-full items-center justify-center">
                     <p className="text-sm text-gray-400 dark:text-gray-500">
                       No buttons to display
                     </p>
                   </div>
+                )}
+                {buttons.length > 0 && !canReorder && buttonsGrid}
+                {buttons.length > 0 && canReorder && (
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragStart={handleDragStart}
+                    onDragEnd={handleDragEnd}
+                    onDragCancel={handleDragCancel}
+                  >
+                    <SortableContext
+                      items={buttonIds}
+                      strategy={rectSortingStrategy}
+                    >
+                      {buttonsGrid}
+                    </SortableContext>
+                    <DragOverlay>
+                      {activeButton ? (
+                        <div
+                          style={getButtonStyle(activeButton)}
+                          className="cursor-grabbing opacity-90 shadow-lg"
+                        >
+                          {activeButton.Text || "Button"}
+                        </div>
+                      ) : null}
+                    </DragOverlay>
+                  </DndContext>
                 )}
               </div>
             </div>
@@ -228,4 +379,3 @@ export const KeyboardPreview = ({
     </div>
   );
 };
-
