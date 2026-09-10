@@ -77,18 +77,22 @@ export async function POST(request: Request) {
       if (triggerError) {
         return triggerError;
       }
-      const contentError = requireNonEmptyArray(body.content, "content");
-      if (contentError) {
-        return contentError;
+      // Steps with a custom handler don't need messages (handler replaces sending)
+      if (!body.customHandler) {
+        const contentError = requireNonEmptyArray(body.content, "content");
+        if (contentError) {
+          return contentError;
+        }
       }
 
       const input: CreateStepInput = {
         humanReadableName: body.humanReadableName.trim(),
         trigger: body.trigger,
-        content: body.content,
+        content: body.content ?? [],
         keyboard: body.keyboard ?? null,
         hidden: body.hidden ?? false,
         isAi: body.isAi ?? false,
+        customHandler: body.customHandler ?? null,
       };
 
       const stepDTO = await createStepService().create(input);

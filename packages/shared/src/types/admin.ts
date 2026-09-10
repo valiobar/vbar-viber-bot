@@ -102,6 +102,18 @@ export interface InternalBrowserConfig {
 // ============================================================================
 
 /**
+ * Custom step handler names
+ *
+ * Source of truth for custom step handlers implemented in the viber service
+ * (services/viber/src/application/custom-steps). The admin StepForm select and
+ * the viber registry are both typed against this list, so they stay in sync
+ * at compile time.
+ */
+export const CUSTOM_STEP_HANDLER_NAMES = ["example"] as const;
+
+export type CustomStepHandlerName = (typeof CUSTOM_STEP_HANDLER_NAMES)[number];
+
+/**
  * Step DTO interface
  *
  * Data structure for transferring Step data between services.
@@ -114,6 +126,7 @@ export interface StepDTO extends BaseEntity {
   keyboard: string | null; // Optional Keyboard ID
   hidden: boolean;
   isAi: boolean;
+  customHandler: string | null; // Optional custom step handler name (replaces normal sending)
 }
 
 /**
@@ -176,4 +189,58 @@ export interface KeyboardDTO extends BaseEntity {
   title: string | null;
   isBroadcast: boolean;
   isTemplate: boolean;
+}
+
+// ============================================================================
+// Carousel Domain Types (rich_media)
+// ============================================================================
+
+/** Action types allowed for structured-card CTA buttons */
+export type CarouselCtaActionType = "reply" | "open-url" | "none";
+
+/** CTA button inside a structured carousel card (1 row, full card width) */
+export interface CarouselCtaDTO {
+  text: string;
+  textColor: string;
+  bgColor: string | null;
+  actionType: CarouselCtaActionType;
+  actionBody: string;
+  openURLType: OpenURLType;
+  silent: boolean;
+}
+
+export type CarouselCardMode = "structured" | "custom";
+
+/**
+ * One carousel card. `structured` cards use image/title/description/ctaButtons
+ * and are flattened server-side; `custom` cards carry raw Buttons (Rows 1-7).
+ */
+export interface CarouselCardDTO {
+  mode: CarouselCardMode;
+  // structured mode fields
+  image: string | null;
+  title: string;
+  titleColor: string; // default "#323232"
+  description: string;
+  descriptionColor: string; // default "#777777"
+  textRows: number; // 1-3, rows reserved for the title/description block
+  ctaButtons: CarouselCtaDTO[];
+  // custom mode field (ButtonDTO reused; Rows validated 1..ButtonsGroupRows)
+  Buttons: ButtonDTO[];
+}
+
+/**
+ * Carousel DTO (rich_media message payload source).
+ * `Cards` is the editor's source of truth; `Buttons` is the flattened,
+ * Viber-shaped layout computed by the admin service on save.
+ */
+export interface CarouselDTO extends BaseEntity {
+  type: "rich_media";
+  humanReadableName: string;
+  hidden: boolean;
+  BgColor: string | null;
+  ButtonsGroupColumns: number; // 1-6, default 6
+  ButtonsGroupRows: number; // 1-7, default 7
+  Cards: CarouselCardDTO[];
+  Buttons: ButtonDTO[]; // computed on save
 }

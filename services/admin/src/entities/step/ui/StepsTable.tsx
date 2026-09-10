@@ -37,6 +37,34 @@ const formatDate = (dateString: string) => {
   });
 };
 
+/**
+ * Render the step type badge (custom function, AI, or standard)
+ */
+const renderTypeBadge = (step: StepDTO) => {
+  if (step.customHandler) {
+    return (
+      <span
+        className="inline-flex rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-900 dark:text-amber-200"
+        title={`Custom function: ${step.customHandler}`}
+      >
+        {step.customHandler}
+      </span>
+    );
+  }
+  if (step.isAi) {
+    return (
+      <span className="inline-flex rounded-full bg-purple-100 px-2 py-1 text-xs font-semibold text-purple-800 dark:bg-purple-900 dark:text-purple-200">
+        AI
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-800 dark:bg-gray-700 dark:text-gray-200">
+      Standard
+    </span>
+  );
+};
+
 export const StepsTable = ({
   steps,
   isLoading,
@@ -111,7 +139,7 @@ export const StepsTable = ({
                   scope="col"
                   className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400"
                 >
-                  AI
+                  Type
                 </th>
                 <th
                   scope="col"
@@ -190,15 +218,7 @@ export const StepsTable = ({
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    {step.isAi ? (
-                      <span className="inline-flex rounded-full bg-purple-100 px-2 py-1 text-xs font-semibold text-purple-800 dark:bg-purple-900 dark:text-purple-200">
-                        AI
-                      </span>
-                    ) : (
-                      <span className="inline-flex rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-800 dark:bg-gray-700 dark:text-gray-200">
-                        Standard
-                      </span>
-                    )}
+                    {renderTypeBadge(step)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                     {formatDate(step.createdAt)}

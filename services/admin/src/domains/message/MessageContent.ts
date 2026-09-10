@@ -154,9 +154,14 @@ export class MessageContent {
         break;
 
       case "url":
+        // Content may be empty; url messages use the url field
+        break;
+
       case "rich-media":
-        // Content may be empty for url and rich-media types
-        // url uses the url field, rich-media is for carousels
+        // Rich media messages reference a carousel by ID
+        if (!("carousel" in data) || typeof (data as any).carousel !== "object") {
+          throw new Error("rich-media message must have a 'carousel' field");
+        }
         break;
 
       default:

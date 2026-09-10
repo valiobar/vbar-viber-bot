@@ -99,9 +99,9 @@ export class KeyboardConverter {
       Silent: buttonDTO.Silent,
     };
 
-    // Add optional background color (only if BgMediaType is not 'picture')
-    // Viber API requirement: BgColor should be removed if BgMediaType is 'picture'
-    if (buttonDTO.BgColor !== null && buttonDTO.BgMediaType !== "picture") {
+    // Viber: BgColor is an independent HEX field. Do not drop it because
+    // BgMediaType defaults to "picture" on stored buttons with no media.
+    if (buttonDTO.BgColor !== null) {
       viberButton.BgColor = buttonDTO.BgColor;
     }
 

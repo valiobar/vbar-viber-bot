@@ -2,7 +2,7 @@
  * Message Converter Service
  *
  * Converts MessageDTO to Viber Message instances for sending via Viber Bot API.
- * Supports all message types: text, picture, video, file, location, contact, sticker, url.
+ * Supports all message types: text, picture, video, file, location, contact, sticker, url, rich-media.
  *
  * Location: Application layer (Hexagonal Architecture)
  */
@@ -45,7 +45,8 @@ export class MessageConverter {
     | Message.Location
     | Message.Contact
     | Message.Sticker
-    | Message.Url {
+    | Message.Url
+    | Message.RichMedia {
     const content = messageDTO.content as any;
     // InputFieldState requires API version 7.2.0 or higher
     // If keyboard has InputFieldState, ensure minApiVersion is at least 7.2
@@ -63,7 +64,8 @@ export class MessageConverter {
         | Message.Location
         | Message.Contact
         | Message.Sticker
-        | Message.Url;
+        | Message.Url
+        | Message.RichMedia;
 
       // Pass minApiVersion as the last constructor parameter
       // Constructor signature: (content, keyboard, trackingData, timestamp, token, minApiVersion)
@@ -207,6 +209,27 @@ export class MessageConverter {
           break;
         }
 
+        case "rich-media": {
+          const richMedia = content?.richMedia;
+          if (!richMedia) {
+            throw new Error(
+              "rich-media message requires a resolved 'richMedia' object in content (carousel missing?)"
+            );
+          }
+          // Rich media requires min_api_version >= 7
+          const richMediaApiVersion = Math.max(requiredApiVersion, 7);
+          // Message.RichMedia(richMedia, keyboard, trackingData, timestamp, token, minApiVersion)
+          message = new (Message.RichMedia as any)(
+            richMedia,
+            keyboard,
+            null,
+            null,
+            null,
+            richMediaApiVersion
+          );
+          break;
+        }
+
         default:
           throw new Error(`Unsupported message type: ${messageDTO.type}`);
       }
@@ -245,6 +268,7 @@ export class MessageConverter {
     | Message.Contact
     | Message.Sticker
     | Message.Url
+    | Message.RichMedia
   > {
     const messages: Array<
       | Message.Text
@@ -255,6 +279,7 @@ export class MessageConverter {
       | Message.Contact
       | Message.Sticker
       | Message.Url
+      | Message.RichMedia
     > = [];
 
     for (let i = 0; i < messageDTOs.length; i++) {

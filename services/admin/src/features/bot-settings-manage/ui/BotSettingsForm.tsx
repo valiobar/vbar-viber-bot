@@ -296,7 +296,7 @@ export const BotSettingsForm = ({
                     : "border-gray-300 dark:border-gray-600"
                 }`}
                 placeholder="#FFFFFF"
-                pattern="^#[0-9A-F]{6}$"
+                pattern="#[0-9A-Fa-f]{6}"
               />
             </div>
             {errors.buttonsBackground && (
@@ -332,7 +332,7 @@ export const BotSettingsForm = ({
                     : "border-gray-300 dark:border-gray-600"
                 }`}
                 placeholder="#000000"
-                pattern="^#[0-9A-F]{6}$"
+                pattern="#[0-9A-Fa-f]{6}"
               />
             </div>
             {errors.buttonsTextColor && (

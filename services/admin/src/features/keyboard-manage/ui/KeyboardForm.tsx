@@ -688,7 +688,7 @@ export const KeyboardForm = ({
                     onChange={(e) => setBgColor(e.target.value || null)}
                     placeholder="#FFFFFF"
                     className="flex-1 rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                    pattern="^#[0-9A-F]{6}$"
+                    pattern="#[0-9A-Fa-f]{6}"
                   />
                   {bgColor && (
                     <button

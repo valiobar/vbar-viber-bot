@@ -25,6 +25,7 @@ export class StepDTO implements SharedStepDTO {
   public readonly keyboard: string | null; // Optional Keyboard ID
   public readonly hidden: boolean;
   public readonly isAi: boolean;
+  public readonly customHandler: string | null; // Optional custom handler name
   public readonly createdAt: string;
   public readonly updatedAt: string;
 
@@ -36,6 +37,7 @@ export class StepDTO implements SharedStepDTO {
     keyboard: string | null;
     hidden: boolean;
     isAi: boolean;
+    customHandler: string | null;
     createdAt: string;
     updatedAt: string;
   }) {
@@ -46,6 +48,7 @@ export class StepDTO implements SharedStepDTO {
     this.keyboard = data.keyboard;
     this.hidden = data.hidden;
     this.isAi = data.isAi;
+    this.customHandler = data.customHandler;
     this.createdAt = data.createdAt;
     this.updatedAt = data.updatedAt;
   }
@@ -65,6 +68,7 @@ export class StepDTO implements SharedStepDTO {
       keyboard: step.keyboard,
       hidden: step.hidden,
       isAi: step.isAi,
+      customHandler: step.customHandler,
       createdAt: step.createdAt,
       updatedAt: step.updatedAt,
     });
@@ -88,6 +92,7 @@ export class StepDTO implements SharedStepDTO {
       keyboard: dto.keyboard,
       hidden: dto.hidden,
       isAi: dto.isAi,
+      customHandler: dto.customHandler,
       createdAt: dto.createdAt,
       updatedAt: dto.updatedAt,
     });

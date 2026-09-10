@@ -15,6 +15,7 @@ import type {
   UpdateMessageInput,
 } from "@/entities/message";
 import { getKeyboard, listKeyboards, type KeyboardDTO } from "@/entities/keyboard";
+import { getCarousel, listCarousels, type CarouselDTO } from "@/entities/carousel";
 import { TextMessageFields } from "./fields/TextMessageFields";
 import { UrlMessageFields } from "./fields/UrlMessageFields";
 import { PictureMessageFields } from "./fields/PictureMessageFields";
@@ -93,6 +94,9 @@ export const MessageForm = ({
   const [contactPhone, setContactPhone] = useState("");
   const [stickerId, setStickerId] = useState<number | null>(null);
   const [keyboardId, setKeyboardId] = useState<string | null>(null);
+  const [carouselId, setCarouselId] = useState<string | null>(null);
+  const [carousels, setCarousels] = useState<CarouselDTO[]>([]);
+  const [isLoadingCarousels, setIsLoadingCarousels] = useState(false);
 
   // UI state
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -133,6 +137,39 @@ export const MessageForm = ({
     };
 
     void loadKeyboards();
+  }, [type, initialData]);
+
+  /**
+   * Fetch carousels for rich-media message type
+   */
+  useEffect(() => {
+    if (type !== "rich-media") {
+      return;
+    }
+
+    const loadCarousels = async () => {
+      setIsLoadingCarousels(true);
+      try {
+        const data = await listCarousels({ hidden: false }, { limit: 100 });
+        let options = data.carousels;
+        const currentId =
+          initialData?.type === "rich-media"
+            ? ((initialData.content as { carousel?: { id?: string } }).carousel
+                ?.id ?? carouselId)
+            : carouselId;
+        if (currentId && !options.some((c) => c.id === currentId)) {
+          const current = await getCarousel(currentId);
+          options = [current, ...options];
+        }
+        setCarousels(options);
+      } catch (err) {
+        console.error("Error fetching carousels:", err);
+      } finally {
+        setIsLoadingCarousels(false);
+      }
+    };
+
+    void loadCarousels();
   }, [type, initialData]);
 
   /**
@@ -179,6 +216,10 @@ export const MessageForm = ({
             setKeyboardId(content.keyboard.id as string);
           }
         }
+      } else if (initialData.type === "rich-media") {
+        if (content.carousel && typeof content.carousel === "object" && "id" in content.carousel) {
+          setCarouselId(content.carousel.id as string);
+        }
       }
     }
   }, [initialData]);
@@ -219,8 +260,12 @@ export const MessageForm = ({
         }
         return { keyboard: {} };
       case "url":
-      case "rich-media":
         return {};
+      case "rich-media":
+        if (carouselId) {
+          return { carousel: { id: carouselId } };
+        }
+        return { carousel: {} };
       default:
         return {};
     }
@@ -282,6 +327,10 @@ export const MessageForm = ({
 
     if (type === "keyboard" && !keyboardId) {
       newErrors.keyboardId = "Keyboard selection is required";
+    }
+
+    if (type === "rich-media" && !carouselId) {
+      newErrors.carouselId = "Carousel selection is required";
     }
 
     setErrors(newErrors);
@@ -513,7 +562,15 @@ export const MessageForm = ({
           )}
 
           {/* Rich Media Message */}
-          {type === "rich-media" && <RichMediaMessageFields />}
+          {type === "rich-media" && (
+            <RichMediaMessageFields
+              carouselId={carouselId}
+              carousels={carousels}
+              isLoading={isLoadingCarousels}
+              onChange={setCarouselId}
+              error={errors.carouselId}
+            />
+          )}
         </div>
       </div>
 

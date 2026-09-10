@@ -8,6 +8,7 @@
  */
 
 import { useState, useEffect } from "react";
+import { CUSTOM_STEP_HANDLER_NAMES } from "@vbar/shared";
 import type {
   CreateStepInput,
   StepDTO,
@@ -52,6 +53,7 @@ export const StepForm = ({
   const [keyboard, setKeyboard] = useState<string | null>(null);
   const [hidden, setHidden] = useState(false);
   const [isAi, setIsAi] = useState(false);
+  const [customHandler, setCustomHandler] = useState<string | null>(null);
   const [selectedMessageId, setSelectedMessageId] = useState<string>("");
 
   // UI state
@@ -119,6 +121,7 @@ export const StepForm = ({
       setKeyboard(initialData.keyboard);
       setHidden(initialData.hidden);
       setIsAi(initialData.isAi);
+      setCustomHandler(initialData.customHandler);
     }
   }, [initialData]);
 
@@ -201,8 +204,8 @@ export const StepForm = ({
       newErrors.triggers = "Trigger strings must be unique";
     }
 
-    // Validate content (at least one message)
-    if (content.length === 0) {
+    // Validate content (at least one message, unless a custom function replaces sending)
+    if (content.length === 0 && !customHandler) {
       newErrors.content = "At least one message is required";
     }
 
@@ -234,6 +237,7 @@ export const StepForm = ({
         keyboard: keyboard || null,
         hidden,
         isAi,
+        customHandler: customHandler || null,
       };
       await onSubmit(updateData);
     } else {
@@ -245,6 +249,7 @@ export const StepForm = ({
         keyboard: keyboard || null,
         hidden,
         isAi,
+        customHandler: customHandler || null,
       };
       await onSubmit(createData);
     }
@@ -320,6 +325,35 @@ export const StepForm = ({
               Is AI
             </label>
           </div>
+
+          {/* Custom Function Select */}
+          <div>
+            <label
+              htmlFor="customHandler"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >
+              Custom Function (Optional)
+            </label>
+            <select
+              id="customHandler"
+              value={customHandler || ""}
+              onChange={(e) => setCustomHandler(e.target.value || null)}
+              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+            >
+              <option value="">None</option>
+              {CUSTOM_STEP_HANDLER_NAMES.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+            {customHandler && (
+              <p className="mt-1 text-sm text-amber-600 dark:text-amber-400">
+                The custom function replaces normal sending — messages and
+                keyboard below will be ignored when this step runs.
+              </p>
+            )}
+          </div>
         </div>
       </div>
 
@@ -372,7 +406,14 @@ export const StepForm = ({
       {/* Content (Messages) */}
       <div className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
         <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">
-          Messages <span className="text-red-500">*</span>
+          Messages{" "}
+          {customHandler ? (
+            <span className="text-sm font-normal text-gray-500 dark:text-gray-400">
+              (optional — ignored by the custom function)
+            </span>
+          ) : (
+            <span className="text-red-500">*</span>
+          )}
         </h2>
 
         {isLoadingMessages ? (

@@ -161,7 +161,14 @@ declare module "viber-bot" {
     }
 
     export class RichMedia {
-      constructor(richMedia: any, keyboard?: any);
+      constructor(
+        richMedia: any,
+        keyboard?: any,
+        trackingData?: any,
+        timestamp?: any,
+        token?: any,
+        minApiVersion?: number
+      );
       richMedia: any;
     }
   }

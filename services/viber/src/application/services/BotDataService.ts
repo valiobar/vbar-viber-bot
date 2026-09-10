@@ -1,7 +1,7 @@
 /**
  * Bot Data Service
  *
- * Application service for fetching and managing bot data (steps, messages, keyboards)
+ * Application service for fetching and managing bot data (steps, messages, keyboards, carousels)
  * from the admin service. This service handles:
  * - Fetching data from admin service
  * - Building efficient indexes for fast lookup
@@ -12,13 +12,13 @@
  */
 
 import { IAdminServiceClient } from "../../ports/out/IAdminServiceClient";
-import { StepsData, MessagesData, KeyboardsData } from "../types/BotData";
-import type { StepDTO, MessageDTO, KeyboardDTO } from "../types/DTOs";
+import { StepsData, MessagesData, KeyboardsData, CarouselsData } from "../types/BotData";
+import type { StepDTO, MessageDTO, KeyboardDTO, CarouselDTO } from "../types/DTOs";
 
 /**
  * Bot Data Service
  *
- * Manages fetching and storage of steps, messages, and keyboards:
+ * Manages fetching and storage of steps, messages, keyboards, and carousels:
  * - Fetches data from admin service
  * - Builds indexes for fast lookup (by ID, by trigger)
  * - Stores data in memory
@@ -29,6 +29,7 @@ export class BotDataService {
   private stepsData: StepsData | null = null;
   private messagesData: MessagesData | null = null;
   private keyboardsData: KeyboardsData | null = null;
+  private carouselsData: CarouselsData | null = null;
 
   constructor(adminServiceClient: IAdminServiceClient) {
     this.adminServiceClient = adminServiceClient;
@@ -245,12 +246,66 @@ export class BotDataService {
   }
 
   /**
-   * Fetch all bot data (steps, messages, keyboards) from admin service
+   * Fetch carousels from admin service and store in memory
+   *
+   * This method:
+   * 1. Fetches all non-hidden carousels from admin service
+   * 2. Filters to only carousels referenced by cached rich-media messages
+   * 3. Stores data in memory
+   *
+   * Depends on messages being loaded first (referenced IDs live in message content).
+   * Errors are logged but don't fail initialization
+   */
+  async fetchAndStoreCarousels(): Promise<void> {
+    try {
+      console.log("Fetching carousels from admin service...");
+      const carouselsArray = await this.adminServiceClient.getCarousels();
+
+      // Referenced carousel IDs come from rich-media message content
+      const referencedCarouselIds = new Set<string>();
+      if (this.messagesData) {
+        for (const message of this.messagesData.messages.values()) {
+          if (message.type === "rich-media") {
+            const carouselId = (message.content as any)?.carousel?.id;
+            if (carouselId) referencedCarouselIds.add(carouselId);
+          }
+        }
+      }
+
+      const carouselsMap = new Map<string, CarouselDTO>();
+      for (const carousel of carouselsArray) {
+        if (
+          !this.messagesData ||
+          referencedCarouselIds.size === 0 ||
+          referencedCarouselIds.has(carousel.id)
+        ) {
+          carouselsMap.set(carousel.id, carousel);
+        }
+      }
+
+      for (const carouselId of referencedCarouselIds) {
+        if (!carouselsMap.has(carouselId)) {
+          console.warn(`Carousel ID ${carouselId} referenced by messages but not found in admin service`);
+        }
+      }
+
+      this.carouselsData = { carousels: carouselsMap };
+      console.log(`Carousels fetched and stored successfully: ${carouselsMap.size} carousels stored`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.warn(`Failed to fetch carousels from admin service (non-critical): ${errorMessage}`);
+      this.carouselsData = { carousels: new Map() };
+    }
+  }
+
+  /**
+   * Fetch all bot data (steps, messages, keyboards, carousels) from admin service
    *
    * This method orchestrates fetching all data in the correct order:
    * 1. Steps (must be fetched first)
    * 2. Messages (depends on steps to filter referenced messages)
    * 3. Keyboards (depends on steps to filter referenced keyboards)
+   * 4. Carousels (depends on messages — referenced IDs live in rich-media content)
    *
    * Errors in individual fetches are logged but don't fail the entire operation
    */
@@ -263,6 +318,8 @@ export class BotDataService {
       this.fetchAndStoreMessages(),
       this.fetchAndStoreKeyboards(),
     ]);
+    // Carousels depend on messages (referenced IDs live in rich-media message content)
+    await this.fetchAndStoreCarousels();
   }
 
   /**
@@ -290,6 +347,15 @@ export class BotDataService {
    */
   getKeyboardsData(): KeyboardsData | null {
     return this.keyboardsData;
+  }
+
+  /**
+   * Get carousels data
+   *
+   * @returns CarouselsData or null if not fetched yet
+   */
+  getCarouselsData(): CarouselsData | null {
+    return this.carouselsData;
   }
 
   /**
@@ -333,6 +399,16 @@ export class BotDataService {
   }
 
   /**
+   * Get a carousel by ID
+   *
+   * @param carouselId Carousel ID to lookup
+   * @returns CarouselDTO or undefined if not found
+   */
+  getCarouselById(carouselId: string): CarouselDTO | undefined {
+    return this.carouselsData?.carousels.get(carouselId);
+  }
+
+  /**
    * Refresh steps from admin service and update in-memory storage
    *
    * This method re-fetches steps from admin service and rebuilds indexes.
@@ -363,12 +439,23 @@ export class BotDataService {
   }
 
   /**
-   * Refresh all bot data (steps, messages, keyboards) from admin service
+   * Refresh carousels from admin service and update in-memory storage
+   *
+   * This method re-fetches carousels from admin service.
+   * Errors are logged but don't throw.
+   */
+  async refreshCarousels(): Promise<void> {
+    await this.fetchAndStoreCarousels();
+  }
+
+  /**
+   * Refresh all bot data (steps, messages, keyboards, carousels) from admin service
    *
    * This method orchestrates refreshing all data in the correct order:
    * 1. Steps (must be refreshed first, rebuilds indexes)
    * 2. Messages (depends on steps to filter referenced messages)
    * 3. Keyboards (depends on steps to filter referenced keyboards)
+   * 4. Carousels (depends on messages — referenced IDs live in rich-media content)
    *
    * Errors in individual refreshes are logged but don't fail the entire operation.
    * Can be called via `viberBotService.getBotDataService().refreshAllData()`
@@ -379,5 +466,6 @@ export class BotDataService {
 
     // Refresh messages and keyboards in parallel (they both depend on steps)
     await Promise.all([this.refreshMessages(), this.refreshKeyboards()]);
+    await this.refreshCarousels();
   }
 }

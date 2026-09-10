@@ -230,6 +230,8 @@ npm run docker:pull
 
 ### Admin (`services/admin`)
 
+Full service guide: [admin.md](./admin.md).
+
 - Next.js App Router on port 3000
 - Health: `GET /api/health`
 - Knowledge Base page: `/knowledge-base` (proxies to AI with `AI_SERVICE_URL` + `AI_SERVICE_TOKEN`)

@@ -90,5 +90,11 @@ export interface RefreshEvent {
   type: "bot_data_refresh";
   timestamp: string;
   source: "admin_service";
-  dataType?: "all" | "steps" | "messages" | "keyboards" | "bot_settings";
+  dataType?:
+    | "all"
+    | "steps"
+    | "messages"
+    | "keyboards"
+    | "carousels"
+    | "bot_settings";
 }

@@ -518,10 +518,9 @@ export class Validators {
    * @throws Error if layout is invalid
    */
   static validateButtonLayout(buttons: Button[]): void {
-    // Viber API constraints:
-    // - Total columns per row should not exceed 6
-    // - Buttons can span multiple rows (up to 2 rows per button)
-    // - Buttons should not overlap
+    // Viber keyboard is a 6-column grid. Buttons wrap left-to-right onto
+    // further rows, so the sum of all button Columns may exceed 6.
+    // Only a single row is capped at 6; each button may be 1–2 rows tall.
 
     // Track occupied positions in a grid
     const maxColumns = 6;

@@ -21,6 +21,7 @@ export interface CreateStepInput {
   keyboard?: string | null;
   hidden?: boolean;
   isAi?: boolean;
+  customHandler?: string | null;
 }
 
 export interface UpdateStepInput {
@@ -30,6 +31,7 @@ export interface UpdateStepInput {
   keyboard?: string | null;
   hidden?: boolean;
   isAi?: boolean;
+  customHandler?: string | null;
 }
 
 export interface ListStepsFilters {
@@ -96,6 +98,7 @@ export class StepService {
       keyboard: input.keyboard ?? null,
       hidden: input.hidden ?? false,
       isAi: input.isAi ?? false,
+      customHandler: input.customHandler ?? null,
     });
 
     const saved = await this.stepRepository.create(step);
@@ -127,6 +130,10 @@ export class StepService {
       keyboard: updatedKeyboard,
       hidden: input.hidden ?? existing.hidden,
       isAi: input.isAi ?? existing.isAi,
+      customHandler:
+        input.customHandler !== undefined
+          ? input.customHandler
+          : existing.customHandler,
       createdAt: existing.createdAt,
       updatedAt: new Date().toISOString(),
     });

@@ -16,6 +16,7 @@ import type {
   StepDTO,
   MessageDTO,
   KeyboardDTO,
+  CarouselDTO,
 } from "../../application/types/DTOs";
 
 /**
@@ -150,6 +151,20 @@ export class AdminServiceClient implements IAdminServiceClient {
   }
 
   /**
+   * Fetch all non-hidden carousels from admin service
+   *
+   * @returns Array of CarouselDTO objects
+   * @throws Error if request fails or carousels cannot be retrieved
+   */
+  async getCarousels(): Promise<CarouselDTO[]> {
+    return this.fetchPaginatedData<CarouselDTO>(
+      "/api/carousels",
+      "carousels",
+      "Failed to fetch carousels"
+    );
+  }
+
+  /**
    * Helper method to fetch paginated data from admin service
    * Handles pagination automatically to fetch all items
    *
@@ -161,7 +176,7 @@ export class AdminServiceClient implements IAdminServiceClient {
    */
   private async fetchPaginatedData<T>(
     endpoint: string,
-    dataKey: "steps" | "messages" | "keyboards",
+    dataKey: "steps" | "messages" | "keyboards" | "carousels",
     errorMessage: string
   ): Promise<T[]> {
     const maxRetries = 3;
@@ -218,6 +233,13 @@ export class AdminServiceClient implements IAdminServiceClient {
                 limit: number;
                 totalPages: number;
               }
+            | {
+                carousels: T[];
+                total: number;
+                page: number;
+                limit: number;
+                totalPages: number;
+              }
           >;
 
           // Validate response structure
@@ -244,6 +266,9 @@ export class AdminServiceClient implements IAdminServiceClient {
             totalPages = data.data.totalPages;
           } else if (dataKey === "keyboards" && "keyboards" in data.data) {
             items = data.data.keyboards as T[];
+            totalPages = data.data.totalPages;
+          } else if (dataKey === "carousels" && "carousels" in data.data) {
+            items = data.data.carousels as T[];
             totalPages = data.data.totalPages;
           } else {
             throw new Error(

@@ -210,6 +210,7 @@ export class StepRepository {
       keyboard: doc.keyboard,
       hidden: doc.hidden,
       isAi: doc.isAi,
+      customHandler: doc.customHandler ?? null,
       createdAt: doc.createdAt,
       updatedAt: doc.updatedAt,
     });
@@ -238,6 +239,7 @@ export class StepRepository {
       keyboard,
       hidden: step.hidden,
       isAi: step.isAi,
+      customHandler: step.customHandler,
       createdAt: new Date(step.createdAt),
       updatedAt: new Date(step.updatedAt),
     };

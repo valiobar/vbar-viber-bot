@@ -7,7 +7,7 @@ Next.js application for the Viber bot administrative dashboard.
 The Admin Service provides a web-based CMS for the Viber bot:
 
 - Login / session (JWT)
-- Messages, keyboards, and steps CRUD
+- Messages, keyboards, carousels, and steps CRUD
 - Singleton bot settings
 - Knowledge Base page (`/knowledge-base`): upload files, ingest URLs, list / delete / clear sources (thin proxy to AI)
 - Health check
@@ -165,7 +165,7 @@ The admin service automatically notifies all viber service instances when bot da
 
 ### How It Works
 
-When steps, messages, keyboards, or bot-settings are created, updated, or deleted:
+When steps, messages, keyboards, carousels, or bot-settings are created, updated, or deleted:
 
 1. The admin service publishes a refresh event to RabbitMQ
 2. All viber service instances consume the event
@@ -189,7 +189,7 @@ When steps, messages, keyboards, or bot-settings are created, updated, or delete
 
 ## Database
 
-The Admin Service uses MongoDB (`admin_service`) with users, sessions, messages, keyboards, steps, and singleton bot settings.
+The Admin Service uses MongoDB (`admin_service`) with users, sessions, messages, keyboards, carousels, steps, and singleton bot settings.
 
 ## Shared Package
 
@@ -211,6 +211,7 @@ docker build -t vbar-admin -f services/admin/Dockerfile .
 
 ## Related Documentation
 
+- [Admin service guide](../../documentation/admin.md)
 - [Architecture Documentation](../../documentation/architecture.md)
 - [API Documentation](../../documentation/api.md)
 - [Deployment Guide](../../documentation/deployment.md)

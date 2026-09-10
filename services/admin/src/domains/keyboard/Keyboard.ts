@@ -70,9 +70,6 @@ export class Keyboard {
     this.isTemplate = params.isTemplate ?? false;
     this.createdAt = params.createdAt;
     this.updatedAt = params.updatedAt;
-
-    // Validate button layout after all properties are set
-    Validators.validateButtonLayout(this.Buttons);
   }
 
   /**

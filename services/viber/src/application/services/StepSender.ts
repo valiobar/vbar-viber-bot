@@ -11,8 +11,10 @@ import { Bot } from "viber-bot";
 import { BotDataService } from "./BotDataService";
 import { MessageConverter } from "./MessageConverter";
 import { KeyboardConverter } from "./KeyboardConverter";
+import { CarouselConverter } from "./CarouselConverter";
 import { Logger, ConsoleLogger } from "@vbar/shared";
 import { IUserRepository } from "../../ports/out/IUserRepository";
+import { getCustomStepHandler } from "../custom-steps";
 
 /**
  * Step Sender Service
@@ -27,6 +29,7 @@ import { IUserRepository } from "../../ports/out/IUserRepository";
 export class StepSender {
   private messageConverter: MessageConverter;
   private keyboardConverter: KeyboardConverter;
+  private carouselConverter: CarouselConverter;
   private userRepository: IUserRepository;
   private logger: Logger;
 
@@ -35,6 +38,7 @@ export class StepSender {
     this.userRepository = userRepository;
     this.messageConverter = new MessageConverter(this.logger);
     this.keyboardConverter = new KeyboardConverter(this.logger);
+    this.carouselConverter = new CarouselConverter(this.logger);
   }
 
   /**
@@ -65,6 +69,51 @@ export class StepSender {
         return;
       }
 
+      // Custom handler steps: run the registered function INSTEAD of the
+      // normal message/keyboard sending (full replacement)
+      if (step.customHandler) {
+        const handler = getCustomStepHandler(step.customHandler);
+        if (!handler) {
+          this.logger.warn("Custom step handler not registered, skipping step", {
+            stepId,
+            customHandler: step.customHandler,
+            userId: userProfile.id,
+          });
+          return;
+        }
+
+        await handler({
+          step,
+          bot,
+          userProfile,
+          botDataService,
+          userRepository: this.userRepository,
+          buttonPrefix,
+          logger: this.logger,
+        });
+
+        this.logger.info("Custom step handler executed successfully", {
+          stepId,
+          customHandler: step.customHandler,
+          userId: userProfile.id,
+        });
+
+        // Update user's current step in database after successful execution
+        try {
+          await this.userRepository.updateCurrentStep(userProfile.id, stepId);
+        } catch (error) {
+          // Log error but don't throw - handler executed successfully
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+          this.logger.error("Failed to update user current step in database", {
+            stepId,
+            userId: userProfile.id,
+            error: errorMessage,
+          });
+        }
+        return;
+      }
+
       // Retrieve messages referenced in step.content
       const messageDTOs: any[] = [];
       for (const messageId of step.content) {
@@ -87,6 +136,31 @@ export class StepSender {
         });
         return;
       }
+
+      // Resolve rich-media messages: inject the converted carousel payload
+      const resolvedMessageDTOs = messageDTOs
+        .map((dto) => {
+          if (dto.type !== "rich-media") return dto;
+          const carouselId = (dto.content as any)?.carousel?.id;
+          const carouselDTO = carouselId
+            ? botDataService.getCarouselById(carouselId)
+            : undefined;
+          if (!carouselDTO) {
+            this.logger.warn("Carousel not found for rich-media message, skipping", {
+              messageId: dto.id,
+              carouselId,
+              stepId,
+              userId: userProfile.id,
+            });
+            return null;
+          }
+          const richMedia = this.carouselConverter.convertToViberRichMedia(
+            carouselDTO,
+            buttonPrefix
+          );
+          return { ...dto, content: { ...(dto.content as object), richMedia } };
+        })
+        .filter((dto): dto is NonNullable<typeof dto> => dto !== null);
 
       // Retrieve keyboard if step has one
       let keyboard: any = undefined;
@@ -128,7 +202,7 @@ export class StepSender {
       const minApiVersion = userApiVersion >= 7.2 ? userApiVersion : 7.2;
 
       const viberMessages = this.messageConverter.convertToViberMessages(
-        messageDTOs,
+        resolvedMessageDTOs,
         keyboard,
         minApiVersion
       );

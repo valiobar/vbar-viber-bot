@@ -1,6 +1,6 @@
 # System Architecture
 
-Accurate as of Phases 2–4. Three app services (admin, viber, ai), one Viber bot per deployment, one shared MongoDB, one RabbitMQ used for cache refresh.
+Accurate as of Phases 2–4. Three app services (admin, viber, ai), one Viber bot per deployment, one shared MongoDB, one RabbitMQ used for cache refresh. Admin service details: [admin.md](./admin.md).
 
 ## Table of Contents
 
@@ -43,7 +43,7 @@ Principles:
 
 Next.js 14 App Router, MongoDB (`admin_service`), RabbitMQ publisher.
 
-- CMS for messages, keyboards, steps, and singleton bot settings
+- CMS for messages, keyboards, carousels, steps, and singleton bot settings
 - Knowledge Base page (`/knowledge-base`): upload files, ingest URLs, list / delete / clear sources
 - JWT login / refresh / logout
 - Service-token access so viber can pull content
@@ -61,8 +61,10 @@ Express, MongoDB (`bot`), RabbitMQ consumer, Viber webhook.
 - `GET/POST /webhook/viber` — Viber events
 - `GET /health` — Mongo + RabbitMQ
 - In-memory content cache loaded from admin REST (`ADMIN_SERVICE_URL` + service token)
+- Cache fetch/refresh order: steps → messages + keyboards (in parallel) → carousels (after messages, because rich-media content holds carousel IDs)
+- `StepSender` resolves `rich-media` messages via `BotDataService.getCarouselById`, converts with `CarouselConverter`, injects `content.richMedia`, then `MessageConverter` builds `Message.RichMedia` (`min_api_version` ≥ 7)
 - Step routing; AI steps call gRPC `ProcessMessage`
-- Reloads cache when a `RefreshEvent` arrives
+- Reloads the full in-memory cache (`refreshAllData`, including carousels) when a `RefreshEvent` arrives
 
 Connects to Mongo and RabbitMQ via `@vbar/shared/infra` (`createMongoConnection`, `createQueueChannel`).
 
@@ -89,7 +91,7 @@ app/api/messages/route.ts
         → MessageRepository (concrete Mongo class)
 ```
 
-Same shape for keyboards, steps, bot-settings, and auth. Routes use `withDb`, shared error codes, `parsePagination`, and `notifyRefresh` from `src/lib/api/`. Do not add `ports/in/`, `adapters/`, or `*UseCaseImpl`.
+Same shape for keyboards, carousels, steps, bot-settings, and auth. Routes use `withDb`, shared error codes, `parsePagination`, and `notifyRefresh` from `src/lib/api/`. Do not add `ports/in/`, `adapters/`, or `*UseCaseImpl`.
 
 **Deviation — knowledge-base proxy:** `app/api/knowledge-base/*` forwards to the AI service (`lib/aiService.ts` + `X-Service-Token`) and does not use `route → service → repository`. Admin owns no knowledge-base data (vectors live in Chroma behind AI), so there is no admin repository or domain service. Justified as a transport adapter, not a second CMS domain.
 
@@ -101,7 +103,7 @@ Per-domain folder (under `src/domains/<x>/`):
 <X>Repository.ts   # concrete Mongo repository class
 <X>Service.ts      # business logic + input/filter/result types
 <X>DTO.ts
-lib/               # domain helpers (keyboard, bot-settings)
+lib/               # domain helpers (keyboard, carousel, bot-settings)
 types.ts
 index.ts           # public barrel
 ```
@@ -138,11 +140,14 @@ Current content / feature slices:
 |-------|----------|----------|---------|-------|
 | messages | `message` | `message-manage` | `message-list` | `messages` |
 | keyboards | `keyboard` | `keyboard-manage` | `keyboard-list` | `keyboards` |
+| carousels | `carousel` | `carousel-manage` | `carousel-list` | `carousels` (+ create/edit) |
 | steps | `step` | `step-manage` | `step-list` | `steps` |
 | bot-settings | `bot-settings` | `bot-settings-manage` | — | `settings` |
 | knowledge-base | `knowledge-base` | `knowledge-base-ingest` | `knowledge-base-sources` | `knowledge-base` |
 
 Keyboard create/edit (`keyboard-manage` / `KeyboardForm`) can reorder embedded `Buttons` with drag-and-drop from the buttons list and the phone preview. Order is the array sent on POST/PUT; there is no separate order field.
+
+Carousel create/edit (`carousel-manage` / `CarouselForm`) edits a list of cards (`structured` or `custom`). The client sends `Cards`; `CarouselService` flattens and validates them into stored `Buttons`. A `rich-media` message references a carousel by `{ carousel: { id } }` (same attachment pattern as keyboard-type messages).
 
 Knowledge-base types are mirrored from the AI inbound port (not `@vbar/shared`). The entity API talks only to admin `/api/knowledge-base/*`.
 
@@ -152,7 +157,7 @@ One MongoDB container. Databases appear on first write:
 
 | Service | `MONGODB_DB_NAME` | What is stored |
 |---------|-------------------|----------------|
-| admin | `admin_service` | Users, sessions, messages, keyboards, steps, singleton bot settings |
+| admin | `admin_service` | Users, sessions, messages, keyboards, carousels, steps, singleton bot settings |
 | viber | `bot` | Viber users and bot runtime state |
 | ai | `ai` | Per-user conversation history and prompt templates. RAG vectors live in Chroma, not Mongo. |
 
@@ -178,7 +183,7 @@ interface RefreshEvent {
   type: "bot_data_refresh";
   timestamp: string;
   source: "admin_service";
-  dataType?: "all" | "steps" | "messages" | "keyboards" | "bot_settings";
+  dataType?: "all" | "steps" | "messages" | "keyboards" | "carousels" | "bot_settings";
 }
 ```
 
@@ -215,6 +220,7 @@ Profile `rag` adds Chroma on `127.0.0.1:8000`. Compose sets `CHROMA_URL=http://c
 
 ## Related documentation
 
+- [Admin service](./admin.md) — admin architecture, storage, FSD, auth
 - [API](./api.md)
 - [Setup](./setup.md)
 - [Deployment](./deployment.md)

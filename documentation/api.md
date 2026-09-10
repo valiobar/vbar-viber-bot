@@ -120,7 +120,7 @@ Update publishes a `viber.refresh` event (`dataType: bot_settings` when applicab
 
 **DTO fields:** `id`, `avatarURL`, `botName`, `botViberName`, `status`, `buttonsBackground`, `buttonsTextColor`, `buttonsPrefix`, `welcomeStepId`, `GAKey`, `createdAt`, `updatedAt`.
 
-### Steps / messages / keyboards
+### Steps / messages / keyboards / carousels
 
 Standard CRUD; mutations publish `viber.refresh` so viber reloads its cache. There is no `botId` query or body field.
 
@@ -129,10 +129,29 @@ Standard CRUD; mutations publish `viber.refresh` so viber reloads its cache. The
 | Steps | `GET/POST /api/steps` | `GET/PUT/DELETE /api/steps/:id` |
 | Messages | `GET/POST /api/messages` | `GET/PUT/DELETE /api/messages/:id` |
 | Keyboards | `GET/POST /api/keyboards` | `GET/PUT/DELETE /api/keyboards/:id` |
+| Carousels | `GET/POST /api/carousels` | `GET/PUT/DELETE /api/carousels/:id` |
 
-List endpoints support pagination and resource-specific filters (see route handlers). Content routes use `route → service → repository` (`MessageService` / `KeyboardService` / `StepService`).
+List endpoints support pagination and resource-specific filters (see route handlers). Content routes use `route → service → repository` (`MessageService` / `KeyboardService` / `StepService` / `CarouselService`).
 
 Keyboard list filters: `hidden`, `isBroadcast`, `isTemplate`, `search`. Create/update bodies accept `isTemplate` (boolean, default `false`). A keyboard with `isTemplate: true` is a starter for new keyboards only (admin copies `Buttons` in the create form; no live link). Viber fetches `GET /api/keyboards?hidden=false&isTemplate=false`. Step and keyboard-message pickers use the same `isTemplate=false` filter.
+
+### Carousels
+
+Reusable Viber rich-media carousels. Cards are the editor source of truth; the service flattens them into a Viber-shaped `Buttons` array on create/update.
+
+| Method | Endpoint | Description | Query / Body |
+|--------|----------|-------------|--------------|
+| GET | `/api/carousels` | List carousels (filters: `hidden`, `search`) | `page`, `limit` |
+| POST | `/api/carousels` | Create carousel | `humanReadableName`, `Cards[]`, `BgColor?`, `ButtonsGroupColumns?`, `ButtonsGroupRows?`, `hidden?` |
+| GET | `/api/carousels/:id` | Get carousel | |
+| PUT | `/api/carousels/:id` | Update carousel (partial) | same fields as create |
+| DELETE | `/api/carousels/:id` | Delete carousel | |
+
+Notes:
+- `humanReadableName` and a non-empty `Cards` array are required on create.
+- On create/update the service validates cards and computes the flattened, Viber-shaped `Buttons` array stored alongside `Cards`. Clients send `Cards`; they do not send `Buttons`.
+- Mutations publish a refresh event with `dataType: "carousels"`.
+- Messages of type `rich-media` use content `{ "carousel": { "id": "<carouselId>" } }`. Viber resolves that ID from its carousel cache, converts the stored `Buttons` via `CarouselConverter`, and sends `Message.RichMedia` (`min_api_version` ≥ 7).
 
 ### Knowledge Base (thin proxy to AI)
 
@@ -275,7 +294,7 @@ interface RefreshEvent {
   type: "bot_data_refresh";
   timestamp: string;
   source: "admin_service";
-  dataType?: "all" | "steps" | "messages" | "keyboards" | "bot_settings";
+  dataType?: "all" | "steps" | "messages" | "keyboards" | "carousels" | "bot_settings";
 }
 ```
 
@@ -322,7 +341,7 @@ Import from `@vbar/shared`:
 
 - `ApiResponse<T>`, `PaginationParams`, `HealthCheckResponse`
 - `RefreshEvent`, `MessageQueueName`, `MessageQueueEvent`
-- Admin content DTOs: `StepDTO`, `MessageDTO`, `KeyboardDTO`, `ButtonDTO`, `User`
+- Admin content DTOs: `StepDTO`, `MessageDTO`, `KeyboardDTO`, `ButtonDTO`, `CarouselDTO`, `CarouselCardDTO`, `CarouselCtaDTO`, `User`
 
 Admin application input types (`CreateMessageInput`, etc.) live on the domain services and are re-exported to the client through `entities/*/model/types.ts`.
 
@@ -333,4 +352,5 @@ Admin application input types (`CreateMessageInput`, etc.) live on the domain se
 - [Setup](./setup.md)
 - [Deployment](./deployment.md)
 - [Architecture](./architecture.md)
+- [Admin service](./admin.md)
 - [Databases](./databases.md)

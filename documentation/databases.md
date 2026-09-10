@@ -18,7 +18,7 @@ RabbitMQ is the refresh event bus, not a database. Mongo’s built-in `admin` da
 
 | Database | Service | Owner | What is stored |
 |----------|---------|-------|----------------|
-| `admin_service` | admin | CMS | Dashboard users, JWT sessions, messages, keyboards, steps, singleton bot settings |
+| `admin_service` | admin | CMS | Dashboard users, JWT sessions, messages, keyboards, carousels, steps, singleton bot settings |
 | `bot` | viber | Runtime | Viber subscribers and per-user conversation position |
 | `ai` | ai | LLM | Per-user chat history and prompt templates only |
 
@@ -99,6 +99,26 @@ Viber keyboards. Buttons are **embedded** in `Buttons` — there is no `buttons`
 | `createdAt` / `updatedAt` | Date | |
 
 Indexes: `hidden`, `isBroadcast`, `isTemplate`, `humanReadableName`, compound `{ hidden, isBroadcast }`, compound `{ hidden, isTemplate }`.
+
+### `carousels`
+
+Viber rich-media carousels. `Cards` is the editor source of truth; `Buttons` is the flattened, Viber-shaped layout computed by `CarouselService` on save. There is no separate cards/buttons collection.
+
+| Field | Type | Notes |
+|-------|------|--------|
+| `Type` | string | Always `"rich_media"` |
+| `humanReadableName` | string | Required, max 100 |
+| `hidden` | boolean | Indexed |
+| `BgColor` | string? | Hex `#RRGGBB` / `#RRGGBBAA` or null |
+| `ButtonsGroupColumns` | number | 1–6, default 6 |
+| `ButtonsGroupRows` | number | 1–7, default 7 |
+| `Cards` | Card[] | At least one. Structured (`image` / `title` / `description` / `ctaButtons`) or custom (`Buttons` with Rows 1–7) |
+| `Buttons` | Button[] | Computed flattened Viber layout (Rows 1–7). Same embedded button shape as keyboards, with a higher row cap |
+| `createdAt` / `updatedAt` | Date | |
+
+Indexes: `hidden`, `humanReadableName`.
+
+A `messages` document with `type: "rich-media"` stores `content.carousel.id` pointing at a document in this collection.
 
 ### `steps`
 
@@ -237,7 +257,7 @@ See [setup.md](./setup.md) and [deployment.md](./deployment.md) for env names an
 
 - **No second Mongo per service.** One container, three databases.
 - **No RAG embeddings in Mongo.** Vectors live in Chroma (profile `rag`) or in-memory. See [rag.md](./rag.md).
-- **No admin content in `bot` or `ai`.** Viber caches steps/messages/keyboards/settings in memory and refreshes on RabbitMQ `viber.refresh`.
+- **No admin content in `bot` or `ai`.** Viber caches steps/messages/keyboards/carousels/settings in memory and refreshes on RabbitMQ `viber.refresh`.
 - **No multi-bot / `botId` tenancy.** One bot per deployment.
 - **No message-queue persistence of CMS data.** RabbitMQ only carries `RefreshEvent`.
 - **Archived web3 Mongo** lived on `archive/web3-service` and is not in this stack.
@@ -245,6 +265,7 @@ See [setup.md](./setup.md) and [deployment.md](./deployment.md) for env names an
 ## Related documentation
 
 - [Architecture](./architecture.md)
+- [Admin service](./admin.md)
 - [API](./api.md)
 - [Setup](./setup.md)
 - [Deployment](./deployment.md)

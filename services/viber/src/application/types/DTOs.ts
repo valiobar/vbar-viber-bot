@@ -5,4 +5,4 @@
  * These types are used for data transfer between services.
  */
 
-export type { StepDTO, MessageDTO, KeyboardDTO, ButtonDTO } from "@vbar/shared";
+export type { StepDTO, MessageDTO, KeyboardDTO, ButtonDTO, CarouselDTO } from "@vbar/shared";

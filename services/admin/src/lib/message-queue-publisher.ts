@@ -38,7 +38,7 @@ const getPublisherChannel = async () => {
  * Fire-and-forget pattern - doesn't await, just logs errors
  */
 export async function publishRefreshEvent(
-  dataType?: "all" | "steps" | "messages" | "keyboards" | "bot_settings"
+  dataType?: RefreshEvent["dataType"]
 ): Promise<void> {
   (async () => {
     try {

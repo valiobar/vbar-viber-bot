@@ -159,7 +159,7 @@ export const ButtonForm = ({ button, index, errors, onUpdate }: ButtonFormProps)
                   ? "border-red-500"
                   : "border-gray-300 dark:border-gray-600"
               }`}
-              pattern="^#[0-9A-F]{6}$"
+              pattern="#[0-9A-Fa-f]{6}"
             />
           </div>
           {errors[`button-${index}-textColor`] && (
@@ -195,7 +195,7 @@ export const ButtonForm = ({ button, index, errors, onUpdate }: ButtonFormProps)
                   ? "border-red-500"
                   : "border-gray-300 dark:border-gray-600"
               }`}
-              pattern="^#[0-9A-F]{6}$"
+              pattern="#[0-9A-Fa-f]{6}"
             />
             {button.BgColor && (
               <button

@@ -58,121 +58,124 @@ const internalBrowserSchema = new Schema(
 );
 
 /**
- * Button embedded schema definition
- * Matches Button entity structure with all validation rules
+ * Creates the embedded Button schema. Keyboards cap Rows at 2,
+ * rich-media carousels allow up to 7 (Viber API).
  *
  * Note: Pre-save hooks don't work on embedded subdocuments in Mongoose.
  * Button text formatting is handled in KeyboardModel's pre-save hook.
  *
  * Note: Schema is not typed with generic to avoid TypeScript issues when used in arrays.
  */
-export const buttonSchema = new Schema(
-  {
-    Columns: {
-      type: Number,
-      required: true,
-      min: 1,
-      max: 6,
-      default: 1,
-    },
-    Rows: {
-      type: Number,
-      required: true,
-      min: 1,
-      max: 2,
-      default: 1,
-    },
-    Text: {
-      type: String,
-      required: true,
-      default: "",
-    },
-    TextColor: {
-      type: String,
-      required: true,
-      match: /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})$/,
-    },
-    BgColor: {
-      type: String,
-      required: false,
-      default: null,
-      validate: {
-        validator: function (value: string | null) {
-          // Allow null or valid hex color
-          return (
-            value === null || /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})$/.test(value)
-          );
+export const createButtonSchema = (maxRows: number) =>
+  new Schema(
+    {
+      Columns: {
+        type: Number,
+        required: true,
+        min: 1,
+        max: 6,
+        default: 1,
+      },
+      Rows: {
+        type: Number,
+        required: true,
+        min: 1,
+        max: maxRows,
+        default: 1,
+      },
+      Text: {
+        type: String,
+        required: true,
+        default: "",
+      },
+      TextColor: {
+        type: String,
+        required: true,
+        match: /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})$/,
+      },
+      BgColor: {
+        type: String,
+        required: false,
+        default: null,
+        validate: {
+          validator: function (value: string | null) {
+            // Allow null or valid hex color
+            return (
+              value === null || /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})$/.test(value)
+            );
+          },
+          message: "BgColor must be a valid hex color code or null",
         },
-        message: "BgColor must be a valid hex color code or null",
+      },
+      BgMedia: {
+        type: String,
+        required: false,
+        default: null,
+      },
+      BgMediaType: {
+        type: String,
+        enum: ["picture", "gif"],
+        default: "picture",
+      },
+      BgMediaScaleType: {
+        type: String,
+        default: "fit",
+      },
+      BgLoop: {
+        type: Boolean,
+        default: true,
+      },
+      ActionType: {
+        type: String,
+        required: true,
+        enum: ["reply", "open-url", "location-picker", "share-phone", "none"],
+      },
+      ActionBody: {
+        type: String,
+        required: true,
+      },
+      OpenURLType: {
+        type: String,
+        enum: ["internal", "external"],
+        required: false, // Conditionally validated in KeyboardModel pre-save hook
+      },
+      InternalBrowser: {
+        type: internalBrowserSchema,
+        required: false, // Conditionally validated in KeyboardModel pre-save hook
+      },
+      TextVAlign: {
+        type: String,
+        enum: ["top", "bottom", "middle"],
+        default: "middle",
+      },
+      TextHAlign: {
+        type: String,
+        enum: ["left", "center", "right"],
+        default: "center",
+      },
+      TextSize: {
+        type: String,
+        enum: ["small", "regular", "large"],
+        default: "regular",
+      },
+      Silent: {
+        type: Boolean,
+        default: true,
+      },
+      isJson: {
+        type: Boolean,
+        default: false,
+      },
+      createdAt: {
+        type: Date,
+        default: Date.now,
+      },
+      updatedAt: {
+        type: Date,
+        default: Date.now,
       },
     },
-    BgMedia: {
-      type: String,
-      required: false,
-      default: null,
-    },
-    BgMediaType: {
-      type: String,
-      enum: ["picture", "gif"],
-      default: "picture",
-    },
-    BgMediaScaleType: {
-      type: String,
-      default: "fit",
-    },
-    BgLoop: {
-      type: Boolean,
-      default: true,
-    },
-    ActionType: {
-      type: String,
-      required: true,
-      enum: ["reply", "open-url", "location-picker", "share-phone", "none"],
-    },
-    ActionBody: {
-      type: String,
-      required: true,
-    },
-    OpenURLType: {
-      type: String,
-      enum: ["internal", "external"],
-      required: false, // Conditionally validated in KeyboardModel pre-save hook
-    },
-    InternalBrowser: {
-      type: internalBrowserSchema,
-      required: false, // Conditionally validated in KeyboardModel pre-save hook
-    },
-    TextVAlign: {
-      type: String,
-      enum: ["top", "bottom", "middle"],
-      default: "middle",
-    },
-    TextHAlign: {
-      type: String,
-      enum: ["left", "center", "right"],
-      default: "center",
-    },
-    TextSize: {
-      type: String,
-      enum: ["small", "regular", "large"],
-      default: "regular",
-    },
-    Silent: {
-      type: Boolean,
-      default: true,
-    },
-    isJson: {
-      type: Boolean,
-      default: false,
-    },
-    createdAt: {
-      type: Date,
-      default: Date.now,
-    },
-    updatedAt: {
-      type: Date,
-      default: Date.now,
-    },
-  },
-  { _id: false, timestamps: false }
-);
+    { _id: false, timestamps: false }
+  );
+
+export const buttonSchema = createButtonSchema(2);

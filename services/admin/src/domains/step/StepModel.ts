@@ -6,6 +6,7 @@
  */
 
 import mongoose, { Schema, Model } from "mongoose";
+import { CUSTOM_STEP_HANDLER_NAMES } from "@vbar/shared";
 
 /**
  * Step document interface (MongoDB document structure)
@@ -17,6 +18,7 @@ export interface IStepDocument extends mongoose.Document {
   keyboard?: mongoose.Types.ObjectId | null; // Optional Keyboard ID (reference to Keyboard model)
   hidden: boolean;
   isAi: boolean;
+  customHandler?: string | null; // Optional custom step handler name (replaces normal sending)
   createdAt: Date;
   updatedAt: Date;
 }
@@ -60,15 +62,29 @@ const stepSchema = new Schema<IStepDocument>(
       ref: "Message",
       required: true,
       validate: {
-        validator: function (value: mongoose.Types.ObjectId[]) {
-          return (
-            Array.isArray(value) &&
-            value.length > 0 &&
-            value.every((item) => mongoose.Types.ObjectId.isValid(item))
-          );
+        validator: function (
+          this: unknown,
+          value: mongoose.Types.ObjectId[]
+        ) {
+          if (!Array.isArray(value)) {
+            return false;
+          }
+          // Steps with a custom handler don't need messages (handler replaces sending).
+          // On update validation `this` is not the document, so allow empty there —
+          // the Step domain entity enforces the rule before persistence.
+          if (value.length === 0) {
+            const doc = this as {
+              get?: (path: string) => unknown;
+            } | null;
+            if (!doc || typeof doc.get !== "function") {
+              return true; // update validation — entity layer enforces the rule
+            }
+            return !!doc.get("customHandler");
+          }
+          return value.every((item) => mongoose.Types.ObjectId.isValid(item));
         },
         message:
-          "Content array is required and must contain at least one valid Message ID",
+          "Content array must contain at least one valid Message ID (unless a custom handler is set)",
       },
     },
     keyboard: {
@@ -93,6 +109,22 @@ const stepSchema = new Schema<IStepDocument>(
     isAi: {
       type: Boolean,
       default: false,
+    },
+    customHandler: {
+      type: String,
+      required: false,
+      default: null,
+      validate: {
+        validator: function (value: string | null) {
+          if (value === null || value === undefined) {
+            return true;
+          }
+          return (CUSTOM_STEP_HANDLER_NAMES as readonly string[]).includes(
+            value
+          );
+        },
+        message: `Custom handler must be one of: ${CUSTOM_STEP_HANDLER_NAMES.join(", ")}`,
+      },
     },
     createdAt: {
       type: Date,
@@ -134,13 +166,15 @@ stepSchema.pre("save", async function () {
     }
   }
 
-  // Validate content array is not empty
+  // Validate content array is not empty (custom-handler steps may have no messages)
   if (
     !this.content ||
     !Array.isArray(this.content) ||
-    this.content.length === 0
+    (this.content.length === 0 && !this.customHandler)
   ) {
-    throw new Error("Content array must have at least one Message ID");
+    throw new Error(
+      "Content array must have at least one Message ID (unless a custom handler is set)"
+    );
   }
 
   // Validate human-readable name

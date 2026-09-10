@@ -40,6 +40,11 @@ export const DEFAULT_TOOLS: Tool[] = [
     route: "/keyboards",
   },
   {
+    id: "carousels",
+    label: "Carousels",
+    route: "/carousels",
+  },
+  {
     id: "messages",
     label: "Messages",
     route: "/messages",

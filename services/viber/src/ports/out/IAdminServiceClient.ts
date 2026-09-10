@@ -10,6 +10,7 @@ import type {
   StepDTO,
   MessageDTO,
   KeyboardDTO,
+  CarouselDTO,
 } from "../../application/types/DTOs";
 
 /**
@@ -50,4 +51,12 @@ export interface IAdminServiceClient {
    * @throws Error if request fails or keyboards cannot be retrieved
    */
   getKeyboards(): Promise<KeyboardDTO[]>;
+
+  /**
+   * Fetch all non-hidden carousels from admin service
+   *
+   * @returns Array of CarouselDTO objects
+   * @throws Error if request fails or carousels cannot be retrieved
+   */
+  getCarousels(): Promise<CarouselDTO[]>;
 }

@@ -7,7 +7,7 @@
  * Location: Application layer (Hexagonal Architecture)
  */
 
-import { StepDTO, MessageDTO, KeyboardDTO } from "./DTOs";
+import { StepDTO, MessageDTO, KeyboardDTO, CarouselDTO } from "./DTOs";
 
 /**
  * Steps Data Structure
@@ -58,6 +58,18 @@ export interface KeyboardsData {
    * Value: KeyboardDTO object
    */
   keyboards: Map<string, KeyboardDTO>;
+}
+
+/**
+ * Carousels Data Structure — carousels indexed by carousel ID.
+ */
+export interface CarouselsData {
+  /**
+   * Map of carousels indexed by carousel ID
+   * Key: carousel ID (string)
+   * Value: CarouselDTO object
+   */
+  carousels: Map<string, CarouselDTO>;
 }
 
 

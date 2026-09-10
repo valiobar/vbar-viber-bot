@@ -22,6 +22,7 @@ export class Step {
   public readonly keyboard: string | null; // Optional Keyboard ID
   public readonly hidden: boolean;
   public readonly isAi: boolean;
+  public readonly customHandler: string | null; // Optional custom handler name (replaces normal sending)
   public readonly createdAt: string;
   public readonly updatedAt: string;
 
@@ -39,6 +40,7 @@ export class Step {
     keyboard?: string | null;
     hidden?: boolean;
     isAi?: boolean;
+    customHandler?: string | null;
     createdAt: string;
     updatedAt: string;
   }) {
@@ -48,7 +50,12 @@ export class Step {
       params.humanReadableName
     );
     this.trigger = this.validateTrigger(params.trigger);
-    this.content = this.validateContent(params.content);
+    this.customHandler = params.customHandler ?? null;
+    // Steps with a custom handler don't need messages (handler replaces sending)
+    this.content = this.validateContent(
+      params.content,
+      this.customHandler !== null
+    );
     this.keyboard = params.keyboard ?? null;
     this.hidden = params.hidden ?? false;
     this.isAi = params.isAi ?? false;
@@ -131,15 +138,16 @@ export class Step {
    * Validates content array (Message IDs)
    *
    * @param content - Content array to validate
+   * @param allowEmpty - Allow empty content (steps with a custom handler)
    * @returns Validated content array
    * @throws Error if content array is invalid
    */
-  private validateContent(content: string[]): string[] {
+  private validateContent(content: string[], allowEmpty: boolean): string[] {
     if (!Array.isArray(content)) {
       throw new Error("Content must be an array");
     }
 
-    if (content.length === 0) {
+    if (content.length === 0 && !allowEmpty) {
       throw new Error("Content array must have at least one Message ID");
     }
 
@@ -204,6 +212,7 @@ export class Step {
     keyboard?: string | { toString(): string } | null;
     hidden?: boolean;
     isAi?: boolean;
+    customHandler?: string | null;
     createdAt: Date | string;
     updatedAt: Date | string;
   }): Step {
@@ -242,6 +251,7 @@ export class Step {
       keyboard,
       hidden: doc.hidden,
       isAi: doc.isAi,
+      customHandler: doc.customHandler ?? null,
       createdAt,
       updatedAt,
     });
@@ -260,6 +270,7 @@ export class Step {
     keyboard?: string | null;
     hidden?: boolean;
     isAi?: boolean;
+    customHandler?: string | null;
   }): Step {
     const now = new Date().toISOString();
 
@@ -274,6 +285,7 @@ export class Step {
       keyboard: params.keyboard ?? null,
       hidden: params.hidden ?? false,
       isAi: params.isAi ?? false,
+      customHandler: params.customHandler ?? null,
       createdAt: now,
       updatedAt: now,
     });
