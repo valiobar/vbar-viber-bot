@@ -232,4 +232,5 @@ Trigger RAG from a Viber step with `isAi=true` after the env is set, or call gRP
 - [Setup](./setup.md) — local `--profile rag` and try ingest
 - [Deployment](./deployment.md) — Compose topology and env
 - [API](./api.md) — gRPC `ProcessMessage` and `/api/knowledge-base/*`
+- [AI service](./ai.md) — AI architecture, chains, consumers, contracts
 - [AI service README](../services/ai/README.md)

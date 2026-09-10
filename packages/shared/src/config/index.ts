@@ -1,8 +1,10 @@
 /**
  * Shared configuration helpers and constants
+ *
+ * Note: this module is part of the main `@vbar/shared` barrel, which must stay
+ * safe for browser/Edge bundles. Node-only helpers (fs, mongoose, amqplib)
+ * belong in `@vbar/shared/infra` — e.g. `resolveRootEnvPath`.
  */
-
-export { resolveRootEnvPath } from "./envPath";
 
 /**
  * Environment configuration interface

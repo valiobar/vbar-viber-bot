@@ -6,8 +6,8 @@
 
 import express, { Express } from "express";
 import dotenv from "dotenv";
-import { ConfigHelper, ServiceConfig, ConsoleLogger, resolveRootEnvPath } from "@vbar/shared";
-import { createMongoConnection, closeMongoConnection, createQueueChannel, closeQueue } from "@vbar/shared/infra";
+import { ConfigHelper, ServiceConfig, ConsoleLogger } from "@vbar/shared";
+import { createMongoConnection, closeMongoConnection, createQueueChannel, closeQueue, resolveRootEnvPath } from "@vbar/shared/infra";
 import { getViberConfig } from "./config/viber";
 import routes from "./adapters/in/routes";
 import { generalRateLimiter } from "./adapters/in/middleware";

@@ -9,6 +9,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./types": {
+      "types": "./dist/types/index.d.ts",
+      "default": "./dist/types/index.js"
+    },
     "./infra": {
       "types": "./dist/infra/index.d.ts",
       "default": "./dist/infra/index.js"
@@ -16,6 +20,7 @@
   },
   "typesVersions": {
     "*": {
+      "types": ["./dist/types/index.d.ts"],
       "infra": ["./dist/infra/index.d.ts"]
     }
   },

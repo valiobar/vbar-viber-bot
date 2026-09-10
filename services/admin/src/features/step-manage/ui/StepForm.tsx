@@ -8,7 +8,9 @@
  */
 
 import { useState, useEffect } from "react";
-import { CUSTOM_STEP_HANDLER_NAMES } from "@vbar/shared";
+// Import from the browser-safe types subpath — the main @vbar/shared barrel
+// pulls in Node-only modules (fs) and cannot be bundled into client components
+import { CUSTOM_STEP_HANDLER_NAMES } from "@vbar/shared/types";
 import type {
   CreateStepInput,
   StepDTO,

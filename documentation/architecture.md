@@ -221,6 +221,7 @@ Profile `rag` adds Chroma on `127.0.0.1:8000`. Compose sets `CHROMA_URL=http://c
 ## Related documentation
 
 - [Admin service](./admin.md) — admin architecture, storage, FSD, auth
+- [AI service](./ai.md) — AI architecture, chains, consumers, contracts
 - [API](./api.md)
 - [Setup](./setup.md)
 - [Deployment](./deployment.md)

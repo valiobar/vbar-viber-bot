@@ -322,6 +322,7 @@ const response = await chainExecutor.executeCustomChain(
 
 ## Related Documentation
 
+- [AI Service Documentation](../../documentation/ai.md) — architecture, chains, consumers, contracts
 - [Architecture Documentation](../../documentation/architecture.md)
 - [API Documentation](../../documentation/api.md)
 - [Setup Guide](../../documentation/setup.md)

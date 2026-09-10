@@ -7,8 +7,8 @@
 import express, { Express } from "express";
 import dotenv from "dotenv";
 import * as grpc from "@grpc/grpc-js";
-import { ConfigHelper, ServiceConfig, ConsoleLogger, resolveRootEnvPath } from "@vbar/shared";
-import { createMongoConnection, closeMongoConnection } from "@vbar/shared/infra";
+import { ConfigHelper, ServiceConfig, ConsoleLogger } from "@vbar/shared";
+import { createMongoConnection, closeMongoConnection, resolveRootEnvPath } from "@vbar/shared/infra";
 import { initializeLangSmith } from "./config/langsmith";
 import { createRoutes } from "./adapters/in/routes";
 import { createGrpcServer } from "./adapters/in/grpc/server";

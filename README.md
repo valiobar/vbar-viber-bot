@@ -94,6 +94,7 @@ Comprehensive documentation is available in the `documentation/` directory:
 - **[Setup Guide](./documentation/setup.md)** - Detailed development environment setup, service-specific configuration, and troubleshooting
 - **[API Documentation](./documentation/api.md)** - Complete API reference for all services, including REST APIs, gRPC APIs, and message queue contracts
 - **[Deployment Guide](./documentation/deployment.md)** - Compose-on-VPS deployment, GHCR images, production configuration
+- **[AI Service](./documentation/ai.md)** - AI service architecture, chain selection, consumers, and contracts
 - **[RAG](./documentation/rag.md)** - How RAG is implemented, configured, and used (Chroma + memory)
 
 ### Architecture Diagrams
@@ -265,6 +266,7 @@ This project is in active development. Current status:
 - [Setup Guide](./documentation/setup.md)
 - [API Documentation](./documentation/api.md)
 - [Deployment Guide](./documentation/deployment.md)
+- [AI Service](./documentation/ai.md)
 - [RAG](./documentation/rag.md)
 
 ## 📝 License
