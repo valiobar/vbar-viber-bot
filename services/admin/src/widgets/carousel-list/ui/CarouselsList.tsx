@@ -26,6 +26,7 @@ interface CarouselsListProps {
 type CarouselListFilters = {
   search: string;
   hidden?: boolean;
+  isTemplate?: boolean;
 };
 
 type SortField = "humanReadableName" | "createdAt";
@@ -49,6 +50,7 @@ export const CarouselsList = ({ initialData }: CarouselsListProps) => {
         {
           search: filters.search.trim() || undefined,
           hidden: filters.hidden,
+          isTemplate: filters.isTemplate,
         },
         pagination
       );
@@ -321,6 +323,12 @@ export const CarouselsList = ({ initialData }: CarouselsListProps) => {
                 scope="col"
                 className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400"
               >
+                Template
+              </th>
+              <th
+                scope="col"
+                className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400"
+              >
                 Hidden
               </th>
               <th
@@ -375,6 +383,17 @@ export const CarouselsList = ({ initialData }: CarouselsListProps) => {
                   <div className="text-sm text-gray-900 dark:text-white">
                     {carousel.ButtonsGroupColumns} × {carousel.ButtonsGroupRows}
                   </div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  {carousel.isTemplate ? (
+                    <span className="inline-flex rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                      Yes
+                    </span>
+                  ) : (
+                    <span className="inline-flex rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-800 dark:bg-gray-700 dark:text-gray-200">
+                      No
+                    </span>
+                  )}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   {carousel.hidden ? (
@@ -451,7 +470,7 @@ export const CarouselsList = ({ initialData }: CarouselsListProps) => {
 
       <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <div className="md:col-span-2">
+          <div className="md:col-span-1">
             <label
               htmlFor="carousel-search"
               className="block text-sm font-medium text-gray-700 dark:text-gray-300"
@@ -500,6 +519,38 @@ export const CarouselsList = ({ initialData }: CarouselsListProps) => {
               <option value="all">All</option>
               <option value="true">Hidden</option>
               <option value="false">Visible</option>
+            </select>
+          </div>
+
+          <div>
+            <label
+              htmlFor="carousel-template-filter"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >
+              Template
+            </label>
+            <select
+              id="carousel-template-filter"
+              aria-label="Filter by template"
+              value={
+                filters.isTemplate === undefined
+                  ? "all"
+                  : filters.isTemplate
+                    ? "true"
+                    : "false"
+              }
+              onChange={(e) => {
+                const value = e.target.value;
+                setFilters((prev) => ({
+                  ...prev,
+                  isTemplate: value === "all" ? undefined : value === "true",
+                }));
+              }}
+              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+            >
+              <option value="all">All</option>
+              <option value="true">Templates</option>
+              <option value="false">Regular</option>
             </select>
           </div>
         </div>

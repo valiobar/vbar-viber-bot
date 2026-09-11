@@ -16,13 +16,14 @@ Collection field lists live in [databases.md](./databases.md). HTTP contracts li
 8. [Authentication](#authentication)
 9. [API conventions](#api-conventions)
 10. [Refresh events](#refresh-events)
-11. [Knowledge-base proxy](#knowledge-base-proxy)
-12. [Client (FSD)](#client-fsd)
-13. [App routes](#app-routes)
-14. [Environment](#environment)
-15. [Adding a new CMS domain](#adding-a-new-cms-domain)
-16. [Leftover code](#leftover-code)
-17. [What is not implemented](#what-is-not-implemented)
+11. [Step usage analytics](#step-usage-analytics)
+12. [Knowledge-base proxy](#knowledge-base-proxy)
+13. [Client (FSD)](#client-fsd)
+14. [App routes](#app-routes)
+15. [Environment](#environment)
+16. [Adding a new CMS domain](#adding-a-new-cms-domain)
+17. [Leftover code](#leftover-code)
+18. [What is not implemented](#what-is-not-implemented)
 
 ---
 
@@ -32,8 +33,10 @@ Collection field lists live in [databases.md](./databases.md). HTTP contracts li
 - CRUD for **messages**, **keyboards**, **carousels**, **steps**
 - Singleton **bot settings** (the only bot config viber consumes)
 - Knowledge Base UI (`/knowledge-base`) — thin proxy to the AI service
+- Analytics page (`/analytics`) — step-usage totals and daily activity
 - Health check
 - Publishes RabbitMQ `viber.refresh` so every viber instance reloads its cache
+- Consumes RabbitMQ `analytics.step-usage` and persists events in `stepusageevents`
 
 It is **one bot per deployment**. Documents have no `botId`. Leftover `botId` fields on old documents are ignored.
 
@@ -46,12 +49,14 @@ Port **3000**. Database name **`admin_service`**.
 ```
 Browser (JWT) ──REST──► Admin :3000
                            │
-                           ├─ Mongo `admin_service`  (CMS + dashboard users)
-                           ├─ RabbitMQ `viber.refresh`  (cache invalidation)
+                           ├─ Mongo `admin_service`  (CMS + dashboard users + analytics events)
+                           ├─ RabbitMQ `viber.refresh`  (cache invalidation, outbound)
+                           ├─ RabbitMQ `analytics.step-usage`  (inbound consumer)
                            └─ REST + X-Service-Token ──► AI `/api/knowledge-base/*`
 
 Viber :3001 ──REST + X-Service-Token──► Admin CMS APIs
               (steps, messages, keyboards, carousels, bot-settings)
+Viber :3001 ──RabbitMQ analytics.step-usage──► Admin consumer
 ```
 
 Admin owns the **source of truth** for conversation content. Viber owns **runtime** (subscribers, current step) in the `bot` database. AI owns **chat history / prompts** in `ai` and **RAG vectors** in Chroma. Admin does not query those stores.
@@ -71,7 +76,7 @@ app/api/messages/route.ts
         → MessageModel (mongoose)
 ```
 
-Same shape for keyboards, carousels, steps, bot-settings, and auth.
+Same shape for keyboards, carousels, steps, bot-settings, auth, and analytics.
 
 | Layer | Lives in | Allowed to do | Must not do |
 |-------|----------|---------------|-------------|
@@ -127,7 +132,8 @@ services/admin/src/
 ├── domains/                     # Server: flat per-domain folders
 │   └── <x>/                     # Model / Repository / Service / DTO / types / index
 │       └── lib/                 # Domain helpers (validators, flatteners)
-├── lib/                         # mongodb, auth, api helpers, refresh publisher, AI proxy
+├── lib/                         # mongodb, auth, api helpers, refresh publisher, step-usage consumer, AI proxy
+├── instrumentation.ts           # Next.js hook: starts the RabbitMQ step-usage consumer
 └── middleware.ts                # Edge: JWT or service token
 ```
 
@@ -157,7 +163,7 @@ Carousel has no entity class: the repository maps documents ↔ `CarouselDTO` fr
 - URI: `MONGODB_URI` (required at runtime; no fallback). `authSource=admin` is appended if missing.
 - Database: `MONGODB_DB_NAME` (default `admin_service`).
 - Build guard: URI is read inside `connectToDatabase()`, so `next build` can run without Mongo.
-- On first connect: `UserModel` / `SessionModel` / `KeyboardModel.ensureIndexes()`, then `seedAdminUser()`.
+- On first connect: `UserModel` / `SessionModel` / `KeyboardModel` / `StepUsageEventModel.ensureIndexes()`, then `seedAdminUser()`.
 
 Viber and AI use `@vbar/shared/infra` for Mongo. Admin does **not** — Next.js needs the build guard, seed, and index bootstrap.
 
@@ -172,6 +178,7 @@ Viber and AI use `@vbar/shared/infra` for Mongo. Admin does **not** — Next.js 
 | `carousels` | Rich-media carousels | `Cards[]` + computed `Buttons[]` embedded |
 | `steps` | Conversation nodes | `content[]` and `keyboard` are **ObjectId refs** |
 | `botsettings` | Singleton bot config | One document; `findOne()` / upsert |
+| `stepusageevents` | Raw step executions from viber | One document per send; 100-day TTL |
 
 Field-level schemas and indexes: [databases.md](./databases.md#admin_service).
 
@@ -316,6 +323,18 @@ Fields viber cares about: `botName`, `botViberName`, `avatarURL`, `status`, `but
 
 `welcomeStepId` must reference an existing step when set.
 
+### Analytics
+
+Read-only aggregates over `stepusageevents`. No CMS mutations, no `notifyRefresh`.
+
+**Service:** `AnalyticsService` — `getStepUsageStats(startDate, endDate)`.
+
+- Repository runs two aggregations in parallel (per-step totals + daily counts).
+- Service resolves `humanReadableName` from `StepModel` in one `$in` batch. Missing steps become `"(deleted step)"`.
+- Default range when the route omits dates: last 30 days.
+
+Route: `GET /api/analytics/step-usage`.
+
 ---
 
 ## Authentication
@@ -407,7 +426,35 @@ Content mutations publish a fire-and-forget `RefreshEvent` to RabbitMQ. A failed
 
 Viber’s `RefreshConsumer` does **not** switch on `dataType`. Any event triggers `refreshAllData()` (steps → messages/keyboards → carousels) plus settings refresh.
 
-Auth, health, and knowledge-base routes do not publish.
+Auth, health, knowledge-base, and analytics routes do not publish.
+
+---
+
+## Step usage analytics
+
+Inbound RabbitMQ path (the reverse of refresh events).
+
+```
+StepSender.sendStep (viber)
+  → AnalyticsPublisher  (routing key analytics.step-usage)
+    → durable queue analytics.step-usage
+      → startStepUsageConsumer (admin)
+        → admin_service.stepusageevents
+          → GET /api/analytics/step-usage
+            → /analytics page
+```
+
+**Consumer startup**
+
+- `src/instrumentation.ts` `register()` runs once per Next.js server start.
+- On the Node.js runtime only (`NEXT_RUNTIME === "nodejs"`) it dynamically imports `src/lib/step-usage-consumer.ts` and calls `startStepUsageConsumer()`.
+- Enabled by `experimental.instrumentationHook` in `services/admin/next.config.js`.
+- Module-level `isConsuming` prevents double consumption if `next dev` hot-reloads `register()`.
+- A failed RabbitMQ connect is logged and swallowed — admin keeps serving; the durable queue buffers events until the next restart.
+
+**Page**
+
+`/analytics` is a server view (`AnalyticsView`) that SSR-loads the last 30 days via `getStepUsageStats`, then the `StepUsageStats` widget (date filter, CSS daily bars, per-step table).
 
 ---
 
@@ -425,7 +472,7 @@ Admin stores **nothing** for RAG. The UI talks only to admin `/api/knowledge-bas
 
 | Admin | AI |
 |-------|----|
-| `POST /api/knowledge-base/files` | multipart, ≤10 files, ≤10 MB, `.pdf` / `.md` / `.txt` |
+| `POST /api/knowledge-base/files` | multipart, ≤10 files, ≤10 MB, `.pdf` / `.md` / `.txt` / `.xlsx` |
 | `POST /api/knowledge-base/urls` | `{ urls }` ≤ 20 |
 | `GET /api/knowledge-base/sources` | list |
 | `DELETE /api/knowledge-base/sources/:id` | delete one source |
@@ -459,6 +506,7 @@ Client types (`KnowledgeSource`, `IngestResult`) live in `entities/knowledge-bas
 | steps | `step` | `step-manage` | `step-list` | `steps`, `step-create`, `step-edit` |
 | bot-settings | `bot-settings` | `bot-settings-manage` | — | `settings` |
 | knowledge-base | `knowledge-base` | `knowledge-base-ingest` | `knowledge-base-sources` | `knowledge-base` |
+| analytics | `analytics` | — | `step-usage-stats` | `analytics` |
 | dashboard | — | — | `dashboard-layout`, `side-menu` | `dashboard` (`/` → `/settings`) |
 
 List pages use `useResourceList` (pagination, filters, reload). Keyboard and carousel editors can reorder with dnd-kit; order is the array sent on POST/PUT.
@@ -468,6 +516,8 @@ Carousel FSD does **not** import keyboard slices (same-layer imports are forbidd
 ### HTTP client
 
 `shared/api/http.ts` unwraps `ApiResponse<T>`, attaches the Bearer token from the session store, and uses `NEXT_PUBLIC_API_URL` on the server (default `http://localhost:3000`).
+
+Server-component calls do **not** forward the browser session cookie, so `getStepUsageStats()` during SSR can return `null` (`AUTH_001`). The `StepUsageStats` widget then loads the default 30-day range on the client.
 
 ---
 
@@ -483,7 +533,8 @@ Carousel FSD does **not** import keyboard slices (same-layer imports are forbidd
 | `/carousels`, `/carousels/new`, `/carousels/[id]` | carousel CRUD | yes |
 | `/steps`, `/steps/new`, `/steps/[id]/edit` | step CRUD | yes |
 | `/knowledge-base` | ingest + sources | yes |
-| `/overview`, `/users`, `/analytics` | side-menu entries only | **no `page.tsx`** |
+| `/analytics` | `AnalyticsView` | yes |
+| `/overview`, `/users` | side-menu entries only | **no `page.tsx`** |
 
 ---
 
@@ -547,7 +598,7 @@ Still on disk, **not imported by live routes or pages**:
 | Old keyboard helpers | `domains/keyboard/services/` | Live imports are `domains/keyboard/lib/`. |
 | Old UI | `src/components/` | Dead. New UI is FSD. |
 | Phantom API list | middleware `PROTECTED_API_ROUTES` | `/api/users`, `/api/config` have no handlers. |
-| Side-menu stubs | `/overview`, `/users`, `/analytics` | No pages. |
+| Side-menu stubs | `/overview`, `/users` | No pages. |
 
 Comments on some auth routes still say “Hexagonal / use case”. Ignore those — the handlers call `AuthService`.
 
@@ -557,7 +608,7 @@ Comments on some auth routes still say “Hexagonal / use case”. Ignore those 
 
 - Admin user-management API / UI (`/api/users`, `/users`)
 - Config API (`/api/config`)
-- Overview and analytics pages
+- Overview page
 - Role-based authorization on CMS routes (roles exist on the user/JWT only)
 - Referential integrity on delete
 - Knowledge-base data in admin Mongo

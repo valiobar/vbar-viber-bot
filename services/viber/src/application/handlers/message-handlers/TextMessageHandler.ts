@@ -144,7 +144,8 @@ export class TextMessageHandler {
           bot,
           userProfile,
           botDataService,
-          buttonsPrefix
+          buttonsPrefix,
+          { source: "trigger", trigger: cleanedText }
         );
       } else {
         this.logger.warn("No step found matching trigger", {

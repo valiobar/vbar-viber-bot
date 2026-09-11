@@ -171,5 +171,16 @@ declare module "viber-bot" {
       );
       richMedia: any;
     }
+
+    export class Keyboard {
+      constructor(
+        keyboard: any,
+        trackingData?: any,
+        timestamp?: any,
+        token?: any,
+        minApiVersion?: number
+      );
+      keyboard: any;
+    }
   }
 }

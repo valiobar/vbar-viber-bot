@@ -111,8 +111,14 @@ export function getAIConfig(): AIConfig {
   ) || "buffer") as "buffer" | "summary";
   const conversationMaxHistory = ConfigHelper.getEnvNumber(
     "CONVERSATION_MAX_HISTORY",
-    10
+    15
   );
+
+  if (!Number.isInteger(conversationMaxHistory) || conversationMaxHistory < 1) {
+    throw new Error(
+      `Invalid CONVERSATION_MAX_HISTORY: ${conversationMaxHistory}. Must be a positive integer`
+    );
+  }
 
   // Validate conversation memory type
   if (

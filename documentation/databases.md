@@ -18,7 +18,7 @@ RabbitMQ is the refresh event bus, not a database. Mongo’s built-in `admin` da
 
 | Database | Service | Owner | What is stored |
 |----------|---------|-------|----------------|
-| `admin_service` | admin | CMS | Dashboard users, JWT sessions, messages, keyboards, carousels, steps, singleton bot settings |
+| `admin_service` | admin | CMS | Dashboard users, JWT sessions, messages, keyboards, carousels, steps, singleton bot settings, step-usage events |
 | `bot` | viber | Runtime | Viber subscribers and per-user conversation position |
 | `ai` | ai | LLM | Per-user chat history and prompt templates only |
 
@@ -155,6 +155,23 @@ Singleton bot config (one document). Viber fetches this over admin REST.
 
 Index: `createdAt` descending.
 
+### `stepusageevents`
+
+One document per step execution in the viber service (written by the RabbitMQ consumer).
+
+| Field | Type | Notes |
+|-------|------|--------|
+| `stepId` | ObjectId → `steps` | Indexed with `timestamp` |
+| `userId` | string | Viber user ID |
+| `source` | `"trigger"` \| `"welcome"` \| `"subscribe"` | How the step was initiated |
+| `trigger` | string \| null | Matched trigger text |
+| `customHandler` | string \| null | Set when the step ran a custom handler |
+| `timestamp` | Date | Event time (from viber); not mongoose `createdAt` |
+
+Indexes: `{ stepId: 1, timestamp: -1 }`, TTL `{ timestamp: 1 }` with `expireAfterSeconds = 8,640,000` (100 days).
+
+Retention: events are kept for **100 days**; MongoDB’s TTL monitor deletes older documents automatically (no cron job needed). Changing retention later requires `collMod` (or drop + recreate) — `ensureIndexes()` will not alter an existing index’s `expireAfterSeconds`.
+
 ## bot
 
 Used by the viber service. Collection name is Mongoose’s default for model `ViberUser`: `viberusers`.
@@ -195,7 +212,7 @@ One document per Viber user id. New messages are `$push`ed; the document is upse
 | `metadata` | object | Default `{}` on insert |
 | `createdAt` / `updatedAt` | Date | |
 
-How much history is sent to the model is controlled by `CONVERSATION_MAX_HISTORY` (default 10), not by deleting old rows.
+How much history is kept and sent to the model is controlled by `CONVERSATION_MAX_HISTORY` (default 15). Older messages are dropped on write with Mongo `$slice`.
 
 ### `prompt_templates`
 
@@ -236,7 +253,7 @@ Chunk metadata on every vector:
 | `sourceId` | string | Groups chunks from one ingest item |
 | `source` | string | Filename or URL |
 | `sourceType` | `"file"` \| `"url"` | |
-| `fileType` | `"pdf"` \| `"md"` \| `"txt"` \| `"html"` | |
+| `fileType` | `"pdf"` \| `"md"` \| `"txt"` \| `"html"` \| `"xlsx"` | |
 | `chunkIndex` | number | 0-based within that source |
 | `ingestedAt` | string | ISO date |
 
@@ -259,7 +276,7 @@ See [setup.md](./setup.md) and [deployment.md](./deployment.md) for env names an
 - **No RAG embeddings in Mongo.** Vectors live in Chroma (profile `rag`) or in-memory. See [rag.md](./rag.md).
 - **No admin content in `bot` or `ai`.** Viber caches steps/messages/keyboards/carousels/settings in memory and refreshes on RabbitMQ `viber.refresh`.
 - **No multi-bot / `botId` tenancy.** One bot per deployment.
-- **No message-queue persistence of CMS data.** RabbitMQ only carries `RefreshEvent`.
+- **No message-queue persistence of CMS data.** RabbitMQ carries `RefreshEvent` (cache invalidation) and `StepUsageEvent` (analytics). CMS content itself is not stored on the queue.
 - **Archived web3 Mongo** lived on `archive/web3-service` and is not in this stack.
 
 ## Related documentation

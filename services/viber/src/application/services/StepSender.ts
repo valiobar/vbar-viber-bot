@@ -12,9 +12,16 @@ import { BotDataService } from "./BotDataService";
 import { MessageConverter } from "./MessageConverter";
 import { KeyboardConverter } from "./KeyboardConverter";
 import { CarouselConverter } from "./CarouselConverter";
-import { Logger, ConsoleLogger } from "@vbar/shared";
+import { Logger, ConsoleLogger, type StepUsageSource } from "@vbar/shared";
 import { IUserRepository } from "../../ports/out/IUserRepository";
 import { getCustomStepHandler } from "../custom-steps";
+import { AnalyticsPublisher } from "../../adapters/out/AnalyticsPublisher";
+
+export interface StepAnalyticsContext {
+  source: StepUsageSource;
+  /** Matched trigger text (source === "trigger") */
+  trigger?: string;
+}
 
 /**
  * Step Sender Service
@@ -31,6 +38,7 @@ export class StepSender {
   private keyboardConverter: KeyboardConverter;
   private carouselConverter: CarouselConverter;
   private userRepository: IUserRepository;
+  private analyticsPublisher: AnalyticsPublisher;
   private logger: Logger;
 
   constructor(userRepository: IUserRepository, logger?: Logger) {
@@ -39,6 +47,7 @@ export class StepSender {
     this.messageConverter = new MessageConverter(this.logger);
     this.keyboardConverter = new KeyboardConverter(this.logger);
     this.carouselConverter = new CarouselConverter(this.logger);
+    this.analyticsPublisher = new AnalyticsPublisher(this.logger);
   }
 
   /**
@@ -49,6 +58,7 @@ export class StepSender {
    * @param userProfile - User profile object (must have id property)
    * @param botDataService - BotDataService instance for retrieving step data
    * @param buttonPrefix - Optional button prefix from bot settings
+   * @param analytics - Optional usage-tracking context (source + matched trigger)
    * @returns Promise that resolves when messages are sent
    */
   async sendStep(
@@ -56,7 +66,8 @@ export class StepSender {
     bot: Bot,
     userProfile: any,
     botDataService: BotDataService,
-    buttonPrefix?: string | null
+    buttonPrefix?: string | null,
+    analytics?: StepAnalyticsContext
   ): Promise<void> {
     try {
       // Retrieve step from BotDataService
@@ -97,6 +108,16 @@ export class StepSender {
           customHandler: step.customHandler,
           userId: userProfile.id,
         });
+
+        if (analytics) {
+          this.analyticsPublisher.publishStepUsage({
+            stepId,
+            userId: userProfile.id,
+            source: analytics.source,
+            trigger: analytics.trigger,
+            customHandler: step.customHandler,
+          });
+        }
 
         // Update user's current step in database after successful execution
         try {
@@ -224,6 +245,16 @@ export class StepSender {
           messageCount: viberMessages.length,
           hasKeyboard: keyboard !== undefined,
         });
+
+        if (analytics) {
+          this.analyticsPublisher.publishStepUsage({
+            stepId,
+            userId: userProfile.id,
+            source: analytics.source,
+            trigger: analytics.trigger,
+            customHandler: null,
+          });
+        }
 
         // Update user's current step in database after successful send
         try {

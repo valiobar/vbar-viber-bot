@@ -15,6 +15,7 @@ import { CardFlattener } from "./lib/CardFlattener";
 export interface CreateCarouselInput {
   humanReadableName: string;
   hidden?: boolean;
+  isTemplate?: boolean;
   BgColor?: string | null;
   ButtonsGroupColumns?: number;
   ButtonsGroupRows?: number;
@@ -24,6 +25,7 @@ export interface CreateCarouselInput {
 export interface UpdateCarouselInput {
   humanReadableName?: string;
   hidden?: boolean;
+  isTemplate?: boolean;
   BgColor?: string | null;
   ButtonsGroupColumns?: number;
   ButtonsGroupRows?: number;
@@ -32,6 +34,7 @@ export interface UpdateCarouselInput {
 
 export interface ListCarouselsFilters {
   hidden?: boolean;
+  isTemplate?: boolean;
   search?: string;
 }
 
@@ -52,6 +55,7 @@ export class CarouselService {
   ): Promise<ListCarouselsResult> {
     const repositoryFilters: CarouselFilters = {
       hidden: filters?.hidden,
+      isTemplate: filters?.isTemplate,
       search: filters?.search,
     };
     const result = await this.carouselRepository.findAll(
@@ -75,6 +79,7 @@ export class CarouselService {
     const data = this.buildWriteData({
       humanReadableName: input.humanReadableName,
       hidden: input.hidden ?? false,
+      isTemplate: input.isTemplate ?? false,
       BgColor: input.BgColor ?? null,
       ButtonsGroupColumns: input.ButtonsGroupColumns ?? 6,
       ButtonsGroupRows: input.ButtonsGroupRows ?? 7,
@@ -88,6 +93,7 @@ export class CarouselService {
     const data = this.buildWriteData({
       humanReadableName: input.humanReadableName ?? existing.humanReadableName,
       hidden: input.hidden ?? existing.hidden,
+      isTemplate: input.isTemplate ?? existing.isTemplate,
       BgColor: input.BgColor !== undefined ? input.BgColor : existing.BgColor,
       ButtonsGroupColumns:
         input.ButtonsGroupColumns ?? existing.ButtonsGroupColumns,
@@ -107,6 +113,7 @@ export class CarouselService {
   private buildWriteData(fields: {
     humanReadableName: string;
     hidden: boolean;
+    isTemplate: boolean;
     BgColor: string | null;
     ButtonsGroupColumns: number;
     ButtonsGroupRows: number;

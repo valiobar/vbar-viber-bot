@@ -14,6 +14,7 @@ import { ICarouselDocument } from "./CarouselModel";
  */
 export interface CarouselFilters {
   hidden?: boolean;
+  isTemplate?: boolean;
   search?: string;
 }
 
@@ -129,6 +130,7 @@ export class CarouselRepository {
       type: "rich_media",
       humanReadableName: plain.humanReadableName,
       hidden: plain.hidden,
+      isTemplate: plain.isTemplate ?? false,
       BgColor: plain.BgColor,
       ButtonsGroupColumns: plain.ButtonsGroupColumns,
       ButtonsGroupRows: plain.ButtonsGroupRows,
@@ -142,6 +144,7 @@ export class CarouselRepository {
   private buildQuery(filters?: CarouselFilters): Record<string, unknown> {
     const query: Record<string, unknown> = {};
     if (filters?.hidden !== undefined) query.hidden = filters.hidden;
+    if (filters?.isTemplate !== undefined) query.isTemplate = filters.isTemplate;
     if (filters?.search) {
       query.humanReadableName = { $regex: filters.search, $options: "i" };
     }

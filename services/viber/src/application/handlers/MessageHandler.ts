@@ -24,6 +24,7 @@ import { IUserRepository } from "../../ports/out/IUserRepository";
 import { ViberBotService } from "../services/ViberBotService";
 import { StepSender } from "../services/StepSender";
 import { ViberAiService } from "../services/ViberAiService";
+import { KeyboardConverter } from "../services/KeyboardConverter";
 import { IAiServiceClient } from "../../ports/out/IAiServiceClient";
 
 export class MessageHandler implements IEventHandler {
@@ -40,6 +41,7 @@ export class MessageHandler implements IEventHandler {
   private stickerHandler: StickerMessageHandler;
   private urlHandler: UrlMessageHandler;
   private viberAiService: ViberAiService;
+  private keyboardConverter: KeyboardConverter;
 
   constructor(
     userRepository: IUserRepository,
@@ -51,6 +53,7 @@ export class MessageHandler implements IEventHandler {
     this.viberBotService = viberBotService || null;
     this.logger = logger || new ConsoleLogger("MessageHandler");
     this.stepSender = new StepSender(userRepository, this.logger);
+    this.keyboardConverter = new KeyboardConverter(this.logger);
     // Initialize message type handlers
     this.textHandler = new TextMessageHandler(
       this.logger,
@@ -160,7 +163,8 @@ export class MessageHandler implements IEventHandler {
               bot,
               userProfile,
               botDataService,
-              settings.buttonsPrefix
+              settings.buttonsPrefix,
+              { source: "welcome" }
             );
             this.logger.info("Welcome step sent on first message", {
               userId,
@@ -270,6 +274,41 @@ export class MessageHandler implements IEventHandler {
 
               // Handle message via AI service
               const bot = this.viberBotService.getBot();
+              let restoreKeyboard: object | undefined;
+              if (step.keyboard) {
+                const keyboardDTO = botDataService.getKeyboardById(step.keyboard);
+                if (keyboardDTO) {
+                  try {
+                    restoreKeyboard = this.keyboardConverter.convertToViberKeyboard(
+                      keyboardDTO,
+                      buttonsPrefix
+                    );
+                  } catch (error) {
+                    this.logger.warn(
+                      "Failed to convert step keyboard for AI restore",
+                      {
+                        keyboardId: step.keyboard,
+                        stepId: user.currentStepId,
+                        userId,
+                        error:
+                          error instanceof Error
+                            ? error.message
+                            : String(error),
+                      }
+                    );
+                  }
+                } else {
+                  this.logger.warn(
+                    "Keyboard not found for AI restore, using dismiss keyboard",
+                    {
+                      keyboardId: step.keyboard,
+                      stepId: user.currentStepId,
+                      userId,
+                    }
+                  );
+                }
+              }
+
               await this.viberAiService.handleMessage(
                 messageContent,
                 messageType,
@@ -278,7 +317,8 @@ export class MessageHandler implements IEventHandler {
                 bot,
                 userProfile,
                 undefined,
-                step.aiPromptName ?? undefined
+                step.aiPromptName ?? undefined,
+                restoreKeyboard
               );
 
               // Return early - don't route to specific handler

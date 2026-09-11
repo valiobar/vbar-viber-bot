@@ -21,6 +21,9 @@ const getCarousels = async (
     if (searchParams.hidden !== undefined) {
       filters.hidden = String(searchParams.hidden) === "true";
     }
+    if (searchParams.isTemplate !== undefined) {
+      filters.isTemplate = String(searchParams.isTemplate) === "true";
+    }
     if (searchParams.search) {
       filters.search = String(searchParams.search);
     }

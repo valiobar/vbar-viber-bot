@@ -14,7 +14,7 @@ import { DocumentProcessor } from "../../out/ingest/DocumentProcessor";
 import { IngestKnowledgeUseCaseImpl } from "../../../application/use-cases/IngestKnowledgeUseCase";
 import { IngestFileInput } from "../../../ports/in/IngestKnowledgeUseCase";
 
-const ALLOWED_EXTENSIONS = /\.(pdf|md|txt)$/i;
+const ALLOWED_EXTENSIONS = /\.(pdf|md|txt|xlsx)$/i;
 
 type AsyncRoute = (
   req: Request,
@@ -77,6 +77,8 @@ export function createKnowledgeBaseRouter(
       const ok =
         ALLOWED_EXTENSIONS.test(file.originalname) ||
         file.mimetype === "application/pdf" ||
+        file.mimetype ===
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
         file.mimetype.startsWith("text/");
       if (ok) {
         cb(null, true);

@@ -10,6 +10,7 @@
 import { useState, useEffect } from "react";
 import {
   CarouselPreview,
+  listCarousels,
   type CarouselCardDTO,
   type CarouselDTO,
   type CreateCarouselInput,
@@ -149,6 +150,9 @@ export const CarouselForm = ({
 }: CarouselFormProps) => {
   const [humanReadableName, setHumanReadableName] = useState("");
   const [hidden, setHidden] = useState(false);
+  const [isTemplate, setIsTemplate] = useState(false);
+  const [templateId, setTemplateId] = useState("");
+  const [templates, setTemplates] = useState<CarouselDTO[]>([]);
   const [bgColor, setBgColor] = useState<string | null>(null);
   const [groupColumns, setGroupColumns] = useState(6);
   const [groupRows, setGroupRows] = useState(7);
@@ -160,11 +164,49 @@ export const CarouselForm = ({
     if (!initialData) return;
     setHumanReadableName(initialData.humanReadableName);
     setHidden(initialData.hidden);
+    setIsTemplate(initialData.isTemplate);
     setBgColor(initialData.BgColor);
     setGroupColumns(initialData.ButtonsGroupColumns);
     setGroupRows(initialData.ButtonsGroupRows);
     setCards(initialData.Cards.map((card, idx) => toEditableCard(card, idx)));
   }, [initialData]);
+
+  useEffect(() => {
+    if (initialData) return;
+    const loadTemplates = async () => {
+      try {
+        const data = await listCarousels(
+          { isTemplate: true, hidden: false },
+          { limit: 100 }
+        );
+        setTemplates(data.carousels);
+      } catch (err) {
+        console.error("Error fetching carousel templates:", err);
+      }
+    };
+    void loadTemplates();
+  }, [initialData]);
+
+  const handleSelectTemplate = (id: string) => {
+    if (!id) {
+      setTemplateId("");
+      return;
+    }
+    const template = templates.find((c) => c.id === id);
+    if (!template) return;
+    if (
+      cards.length > 0 &&
+      !confirm("Replace current cards with this template?")
+    ) {
+      return;
+    }
+    setTemplateId(id);
+    setGroupColumns(template.ButtonsGroupColumns);
+    setGroupRows(template.ButtonsGroupRows);
+    setBgColor(template.BgColor);
+    setCards(template.Cards.map((card, idx) => toEditableCard(card, idx)));
+    setEditingCardIndex(null);
+  };
 
   const handleAddCard = () => {
     const nextIndex = cards.length;
@@ -267,6 +309,7 @@ export const CarouselForm = ({
     const formData: CreateCarouselInput | UpdateCarouselInput = {
       humanReadableName: humanReadableName.trim(),
       hidden,
+      isTemplate,
       BgColor: bgColor || null,
       ButtonsGroupColumns: groupColumns,
       ButtonsGroupRows: groupRows,
@@ -306,6 +349,31 @@ export const CarouselForm = ({
             </h2>
 
             <div className="space-y-4">
+              {!initialData && (
+                <div>
+                  <label
+                    htmlFor="startFromTemplate"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+                  >
+                    Start from template
+                  </label>
+                  <select
+                    id="startFromTemplate"
+                    aria-label="Start from template"
+                    value={templateId}
+                    onChange={(e) => handleSelectTemplate(e.target.value)}
+                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                  >
+                    <option value="">None</option>
+                    {templates.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.humanReadableName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div>
                 <label
                   htmlFor="humanReadableName"
@@ -431,6 +499,21 @@ export const CarouselForm = ({
                   Hidden from Lists
                 </span>
               </label>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={isTemplate}
+                  onChange={(e) => setIsTemplate(e.target.checked)}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600"
+                />
+                <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                  Template Carousel
+                </span>
+              </label>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Templates cannot be attached to messages. Use them as a starting
+                point when creating a new carousel.
+              </p>
             </div>
           </div>
 

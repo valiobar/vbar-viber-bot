@@ -109,6 +109,7 @@ export const ServiceConfig = {
       aiProcessed: "ai.processed",
       adminConfig: "admin.config",
       viberRefresh: "viber.refresh",
+      analyticsStepUsage: "analytics.step-usage",
     },
     exchanges: {
       default: "viber-bot",

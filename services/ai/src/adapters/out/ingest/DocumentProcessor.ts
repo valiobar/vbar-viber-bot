@@ -9,9 +9,23 @@ import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import * as cheerio from "cheerio";
 import pdfParse from "pdf-parse";
 import { Logger } from "@vbar/shared";
+import ExcelJS from "exceljs";
 
 export type ExtractedFile = { text: string; fileType: "pdf" | "md" | "txt" };
 export type FetchedUrl = { text: string; fileType: "html" | "txt"; title?: string };
+
+const ADDRESS_HEADER_KEYWORDS = ["адрес", "address", "местоположение", "локация", "location"];
+const NAME_HEADER_KEYWORDS = ["име", "назв", "name", "обект"];
+
+const mapsLink = (destination: string): string =>
+  `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`;
+
+const findColumn = (headers: string[], keywords: string[]): number | null => {
+  const index = headers.findIndex((header) =>
+    keywords.some((keyword) => header.toLowerCase().includes(keyword))
+  );
+  return index === -1 ? null : index;
+};
 
 /**
  * Output adapter wrapping pdf-parse, cheerio, and RecursiveCharacterTextSplitter.
@@ -80,6 +94,62 @@ export class DocumentProcessor {
       return { text, fileType: "txt" };
     }
     throw new Error(`Unsupported content type: ${contentType || "unknown"}`);
+  }
+
+  /**
+   * Parse an .xlsx workbook into one self-contained chunk per data row.
+   * The first non-empty row of each sheet is treated as the header and its
+   * labels are inlined into every row chunk. Rows with an address-like
+   * column get a precomputed Google Maps directions URL appended.
+   */
+  async extractRowsFromXlsx(buffer: Buffer): Promise<string[]> {
+    const workbook = new ExcelJS.Workbook();
+    // exceljs types Buffer as ArrayBuffer; Node Buffer is compatible at runtime
+    await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
+
+    const chunks: string[] = [];
+    workbook.eachSheet((sheet) => {
+      let headers: string[] | null = null;
+      let addressCol: number | null = null;
+      let nameCol: number | null = null;
+
+      sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+        // row.values is 1-based; normalize to trimmed strings
+        const cells = (row.values as unknown[])
+          .slice(1)
+          .map((v) => (v == null ? "" : String(v).trim()));
+        if (!cells.some(Boolean)) return;
+
+        if (headers === null) {
+          headers = cells;
+          addressCol = findColumn(headers, ADDRESS_HEADER_KEYWORDS);
+          nameCol = findColumn(headers, NAME_HEADER_KEYWORDS);
+          return;
+        }
+
+        const pairs = headers
+          .map((header, i) => ({ header, value: cells[i] ?? "" }))
+          .filter(({ header, value }) => header && value)
+          .map(({ header, value }) => `${header}: ${value}`);
+        if (pairs.length === 0) return;
+
+        let text = `Лист "${sheet.name}", ред ${rowNumber} — ${pairs.join(" | ")}`;
+        if (addressCol !== null && cells[addressCol]) {
+          const destination =
+            nameCol !== null && cells[nameCol]
+              ? `${cells[nameCol]}, ${cells[addressCol]}`
+              : cells[addressCol];
+          text += `\nGoogle Maps посока: ${mapsLink(destination)}`;
+        }
+        chunks.push(text);
+      });
+    });
+
+    if (chunks.length === 0) {
+      throw new Error("No extractable rows in spreadsheet (header-only or empty?)");
+    }
+    this.logger.debug("Extracted spreadsheet rows", { rows: chunks.length });
+    return chunks;
   }
 
   /**

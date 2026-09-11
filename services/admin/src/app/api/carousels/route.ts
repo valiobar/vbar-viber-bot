@@ -29,6 +29,8 @@ export async function GET(request: Request) {
     const filters: ListCarouselsFilters = {};
     const hidden = parseBoolParam(searchParams.get("hidden"));
     if (hidden !== undefined) filters.hidden = hidden;
+    const isTemplate = parseBoolParam(searchParams.get("isTemplate"));
+    if (isTemplate !== undefined) filters.isTemplate = isTemplate;
     const search = searchParams.get("search") || undefined;
     if (search) filters.search = search;
 
@@ -53,6 +55,7 @@ export async function POST(request: Request) {
     const input: CreateCarouselInput = {
       humanReadableName: body.humanReadableName.trim(),
       hidden: body.hidden ?? false,
+      isTemplate: body.isTemplate ?? false,
       BgColor: body.BgColor ?? null,
       ButtonsGroupColumns: body.ButtonsGroupColumns ?? 6,
       ButtonsGroupRows: body.ButtonsGroupRows ?? 7,

@@ -23,6 +23,7 @@ Only endpoints and queues that exist in the working tree are documented.
 | Browser → Admin | REST + JWT | Next.js App Router |
 | Viber platform → Viber | HTTPS webhook | `POST/GET /webhook/viber` |
 | Admin → Viber | RabbitMQ | `viber.refresh` cache invalidation |
+| Viber → Admin | RabbitMQ | `analytics.step-usage` (`StepUsageEvent`) |
 | Admin → AI | REST + `X-Service-Token` | Knowledge-base ingest / sources (`AI_SERVICE_TOKEN`) |
 | Viber → AI | gRPC | `AIProcessingService.ProcessMessage` |
 | Viber → Admin | REST | Content fetch with service token |
@@ -159,13 +160,52 @@ Same paths as the AI service under `/api/knowledge-base/*`. JWT via existing mid
 
 | Method | Path | Body | Returns |
 |--------|------|------|---------|
-| `POST` | `/api/knowledge-base/files` | multipart `files` (≤10 × ≤10 MB, `.pdf` / `.md` / `.txt`) | `IngestResult` |
+| `POST` | `/api/knowledge-base/files` | multipart `files` (≤10 × ≤10 MB, `.pdf` / `.md` / `.txt` / `.xlsx`) | `IngestResult` |
 | `POST` | `/api/knowledge-base/urls` | `{ "urls": string[] }` (≤20) | `IngestResult` |
 | `GET` | `/api/knowledge-base/sources` | — | `KnowledgeSource[]` |
 | `DELETE` | `/api/knowledge-base/sources/:id` | — | `{ "deleted": true }` |
 | `DELETE` | `/api/knowledge-base/sources` | — | `{ "cleared": true }` |
 
 Proxy-only error codes (admin, before the call reaches AI): `AI_SERVICE_NOT_CONFIGURED` (503, token unset on admin), `AI_SERVICE_UNAVAILABLE` (502, AI unreachable). AI error codes are passed through unchanged.
+
+### Analytics
+
+#### `GET /api/analytics/step-usage`
+
+Step usage statistics aggregated from raw events (`admin_service.stepusageevents`). Session auth required (middleware). `route → AnalyticsService → AnalyticsRepository`.
+
+**Query parameters:**
+
+| Param | Required | Notes |
+|-------|----------|--------|
+| `startDate` | no | ISO date. Default: 30 days before `endDate` |
+| `endDate` | no | ISO date. Default: now |
+
+**Success `200`:**
+
+```json
+{
+  "data": {
+    "totals": [
+      {
+        "stepId": "…",
+        "stepName": "Main menu",
+        "triggers": ["menu"],
+        "sources": ["trigger"],
+        "total": 120,
+        "uniqueUsers": 45,
+        "lastUsedAt": "2026-09-10T12:00:00.000Z"
+      }
+    ],
+    "daily": [{ "date": "2026-09-10", "count": 34 }],
+    "range": { "startDate": "…", "endDate": "…" }
+  }
+}
+```
+
+`totals` are sorted by execution count descending. Deleted steps still appear with `stepName` `"(deleted step)"`. `triggers` are the distinct matched trigger texts from events; welcome/subscribe-only rows have an empty `triggers` array and `sources` of `welcome` / `subscribe`.
+
+**Errors:** `400 VALIDATION_ERROR` — invalid ISO dates, or `startDate` after `endDate`.
 
 ### Not implemented (do not call)
 
@@ -203,6 +243,7 @@ Viber events. Requires a public HTTPS URL (`VIBER_BOT_WEBHOOK_URL`).
 - Loads bot content from Admin over REST using `ADMIN_SERVICE_URL` + `ADMIN_SERVICE_TOKEN`.
 - Calls AI via gRPC (`AI_SERVICE_GRPC_HOST` / `AI_SERVICE_GRPC_PORT`).
 - Consumes RabbitMQ queue `viber.refresh`.
+- Publishes `StepUsageEvent` to RabbitMQ queue `analytics.step-usage` (`AnalyticsPublisher`) after a successful `StepSender.sendStep`.
 
 ### Not implemented
 
@@ -233,7 +274,7 @@ Responses are `ApiResponse<T>`: `{ "data": ... }` or `{ "error": { "code", "mess
 
 | Method | Path | Body | Returns |
 | --- | --- | --- | --- |
-| POST | /api/knowledge-base/files | multipart `files` (≤10 × ≤10 MB, .pdf/.md/.txt) | `IngestResult` |
+| POST | /api/knowledge-base/files | multipart `files` (≤10 × ≤10 MB, .pdf/.md/.txt/.xlsx) | `IngestResult` |
 | POST | /api/knowledge-base/urls | `{ "urls": string[] }` (≤20) | `IngestResult` |
 | GET | /api/knowledge-base/sources | — | `KnowledgeSource[]` |
 | DELETE | /api/knowledge-base/sources/:sourceId | — | `{ "deleted": true }` |
@@ -265,7 +306,7 @@ Admin proxy: the same paths under the admin service `/api/knowledge-base/*` (JWT
 }
 ```
 
-Processing is synchronous on the request. Limits and chunk metadata: [rag.md](./rag.md).
+For `.xlsx`, `items[].chunks` equals the number of data rows (header excluded; one row = one chunk). Free-text files still use the character splitter, so `chunks` is not a row count. Limits, row-based chunking, and Maps-link enrichment: [rag.md](./rag.md).
 
 ### Not implemented (REST)
 
@@ -286,6 +327,7 @@ Use gRPC `ProcessMessage` instead.
 | Queue | Routing key | Publisher | Consumer |
 |-------|-------------|-----------|----------|
 | `viber.refresh` | `viber.refresh` | Admin (`publishRefreshEvent`) | Viber (`RefreshConsumer`) |
+| `analytics.step-usage` | `analytics.step-usage` | Viber (`AnalyticsPublisher`) | Admin (`startStepUsageConsumer` via `src/instrumentation.ts`) |
 
 **Payload** (`RefreshEvent` in `@vbar/shared`):
 
@@ -297,6 +339,22 @@ interface RefreshEvent {
   dataType?: "all" | "steps" | "messages" | "keyboards" | "carousels" | "bot_settings";
 }
 ```
+
+**Payload** (`StepUsageEvent` in `@vbar/shared`):
+
+```typescript
+interface StepUsageEvent {
+  type: "step_usage";
+  stepId: string;
+  userId: string;
+  source: "trigger" | "welcome" | "subscribe";
+  trigger?: string;
+  customHandler?: string | null;
+  timestamp: string;
+}
+```
+
+Durable queue, persistent messages. Viber asserts/binds the queue on first publish so events are retained if admin is down. Admin persists each event in `admin_service.stepusageevents`.
 
 ### Named in shared types but unused
 

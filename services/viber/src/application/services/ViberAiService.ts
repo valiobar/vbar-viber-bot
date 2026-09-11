@@ -7,9 +7,12 @@
  * Location: Application Layer (Hexagonal Architecture)
  */
 
-import { Logger } from "@vbar/shared";
+import { ConfigHelper, Logger } from "@vbar/shared";
 import { IAiServiceClient } from "../../ports/out/IAiServiceClient";
 import { Bot, Message } from "viber-bot";
+import { buildDismissKeyboard, buildThinkingKeyboard } from "./thinkingKeyboard";
+
+const MIN_API_VERSION = 7.2;
 
 export class ViberAiService {
   constructor(
@@ -28,6 +31,7 @@ export class ViberAiService {
    * @param userProfile - User profile for sending messages
    * @param taskType - Task type: "simple", "rag", or "custom" (optional)
    * @param promptName - Per-step prompt override (optional)
+   * @param restoreKeyboard - Converted Viber keyboard to attach after the AI reply
    */
   async handleMessage(
     messageContent: string,
@@ -37,10 +41,38 @@ export class ViberAiService {
     bot: Bot,
     userProfile: any,
     taskType?: string,
-    promptName?: string
+    promptName?: string,
+    restoreKeyboard?: object
   ): Promise<void> {
+    const gifUrl = ConfigHelper.getEnv("AI_THINKING_GIF_URL", "").trim();
+    const followUpKeyboard = restoreKeyboard ?? buildDismissKeyboard();
+    let thinkingSent = false;
+
+    if (gifUrl) {
+      try {
+        const thinking = new (Message.Keyboard as any)(
+          buildThinkingKeyboard(gifUrl),
+          null,
+          null,
+          null,
+          MIN_API_VERSION
+        );
+        await bot.sendMessage(userProfile, [thinking]);
+        thinkingSent = true;
+        this.logger.info("ViberAiService - thinking indicator sent", {
+          userId,
+          stepId,
+        });
+      } catch (error) {
+        this.logger.warn("ViberAiService - failed to send thinking indicator", {
+          error: error instanceof Error ? error.message : String(error),
+          userId,
+          stepId,
+        });
+      }
+    }
+
     try {
-      // Call AI service via gRPC client
       const response = await this.aiServiceClient.processMessage({
         messageContent,
         messageType,
@@ -57,28 +89,52 @@ export class ViberAiService {
         promptName,
       });
 
-      // Log the response
       this.logger.info("ViberAiService - AI response received", {
         userId,
         stepId,
         responseLength: response.response?.length || 0,
       });
 
-      // Send AI response back to user
-      if (response && response.response) {
-        const textMessage = new Message.Text(response.response);
-        await bot.sendMessage(userProfile, [textMessage]);
+      const text =
+        response && response.response && response.response.trim()
+          ? response.response
+          : "";
 
-        this.logger.info("ViberAiService - AI response sent to user", {
-          userId,
-          stepId,
-        });
-      } else {
+      if (!text) {
         this.logger.warn("ViberAiService - Empty AI response, not sending", {
           userId,
           stepId,
         });
+        if (thinkingSent) {
+          try {
+            await this.sendRestoreKeyboard(bot, userProfile, followUpKeyboard);
+          } catch (sendError) {
+            this.logger.error("ViberAiService - failed to send AI fallback", {
+              error:
+                sendError instanceof Error
+                  ? sendError.message
+                  : String(sendError),
+              userId,
+              stepId,
+            });
+          }
+        }
+        return;
       }
+
+      const reply = new (Message.Text as any)(
+        text,
+        followUpKeyboard,
+        null,
+        null,
+        null,
+        MIN_API_VERSION
+      );
+      await bot.sendMessage(userProfile, [reply]);
+      this.logger.info("ViberAiService - AI response sent to user", {
+        userId,
+        stepId,
+      });
     } catch (error) {
       this.logger.error("Failed to process message via AI service", {
         error: error instanceof Error ? error.message : String(error),
@@ -86,7 +142,35 @@ export class ViberAiService {
         stepId,
         messageType,
       });
-      // Don't throw - allow message processing to continue even if AI service fails
+      if (thinkingSent) {
+        try {
+          await this.sendRestoreKeyboard(bot, userProfile, followUpKeyboard);
+        } catch (sendError) {
+          this.logger.error("ViberAiService - failed to send AI fallback", {
+            error:
+              sendError instanceof Error
+                ? sendError.message
+                : String(sendError),
+            userId,
+            stepId,
+          });
+        }
+      }
     }
+  }
+
+  private async sendRestoreKeyboard(
+    bot: Bot,
+    userProfile: any,
+    keyboard: object
+  ): Promise<void> {
+    const restore = new (Message.Keyboard as any)(
+      keyboard,
+      null,
+      null,
+      null,
+      MIN_API_VERSION
+    );
+    await bot.sendMessage(userProfile, [restore]);
   }
 }

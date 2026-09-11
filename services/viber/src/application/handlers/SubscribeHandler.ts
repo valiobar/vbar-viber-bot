@@ -98,7 +98,8 @@ export class SubscribeHandler implements IEventHandler {
               bot,
               userProfile,
               botDataService,
-              settings.buttonsPrefix
+              settings.buttonsPrefix,
+              { source: "subscribe" }
             );
             this.logger.info("Welcome step sent on subscription", {
               userId,

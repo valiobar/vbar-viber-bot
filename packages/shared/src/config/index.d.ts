@@ -56,6 +56,7 @@ export declare const ServiceConfig: {
             readonly aiProcessed: "ai.processed";
             readonly adminConfig: "admin.config";
             readonly viberRefresh: "viber.refresh";
+            readonly analyticsStepUsage: "analytics.step-usage";
         };
         readonly exchanges: {
             readonly default: "viber-bot";

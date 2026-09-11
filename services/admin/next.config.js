@@ -15,6 +15,9 @@ const nextConfig = {
   swcMinify: true,
   output: "standalone",
   outputFileTracingRoot: path.join(__dirname, "../.."),
+  experimental: {
+    instrumentationHook: true,
+  },
 };
 
 module.exports = nextConfig;

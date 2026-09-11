@@ -7,7 +7,8 @@ import { HttpError } from "@/shared";
 
 const MAX_FILES = 10;
 const MAX_FILE_SIZE_MB = 10;
-const ACCEPT = ".pdf,.md,.txt,text/plain,application/pdf";
+const ACCEPT =
+  ".pdf,.md,.txt,.xlsx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 type FileUploadFormProps = {
   onIngested: (result: IngestResult) => void;
@@ -76,8 +77,8 @@ export const FileUploadForm = ({
         Upload files
       </h2>
       <p className="text-sm text-gray-600 dark:text-gray-400">
-        PDF, Markdown, or plain text. Up to {MAX_FILES} files,{" "}
-        {MAX_FILE_SIZE_MB} MB each.
+        PDF, Markdown, plain text, or Excel (.xlsx). Up to {MAX_FILES} files,{" "}
+        {MAX_FILE_SIZE_MB} MB each. Excel files are indexed row by row.
       </p>
 
       <div>

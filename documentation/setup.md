@@ -66,6 +66,8 @@ Edit `.env` and set at least:
 | `VIBER_BOT_TOKEN`, `VIBER_BOT_WEBHOOK_URL` | Needed for real Viber traffic |
 | `AI_MODEL_PROVIDER` | `ollama` (local) or a cloud provider + API key |
 
+`AI_THINKING_GIF_URL` is optional. Set it to a public HTTPS GIF (or JPEG/PNG as a Viber picture, max 500 KB) to show a thinking keyboard while the AI step waits on gRPC. SVG is not supported. Unset or empty disables the indicator.
+
 Compose overrides in-container values (`MONGODB_URI` host → `mongodb`, `RABBITMQ_URI` host → `rabbitmq`, gRPC host `ai`, etc.). Host/local npm keeps the localhost URIs from `.env`.
 
 Optional per-service examples still exist under `services/admin/.env.example` and `services/ai/.env.example` for service-only runs; for the default stack, the root file is enough.
@@ -135,7 +137,7 @@ Local RAG: set `RAG_ENABLED=true` and `AI_TASK_TYPE=rag` (or unset `AI_TASK_TYPE
 2. In `.env` set `RAG_ENABLED=true`, an embedding provider (`RAG_EMBEDDING_PROVIDER=openai` + `OPENAI_API_KEY`, or Ollama), and the same `AI_SERVICE_TOKEN` on both admin and ai
 3. Restart `ai` (and `admin` if tokens changed)
 4. Open http://localhost:3000/knowledge-base (log in)
-5. Upload a `.pdf` / `.md` / `.txt` or paste up to 20 URLs
+5. Upload a `.pdf` / `.md` / `.txt` / `.xlsx` or paste up to 20 URLs
 
 Limits: ≤10 files, ≤10 MB each, ≤20 URLs. Ingest is synchronous — a large batch can take 30–60 s. `AI_SERVICE_TOKEN` must match; otherwise the UI shows 401 / 503.
 
