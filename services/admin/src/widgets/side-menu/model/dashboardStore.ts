@@ -60,6 +60,11 @@ export const DEFAULT_TOOLS: Tool[] = [
     route: "/knowledge-base",
   },
   {
+    id: "prompts",
+    label: "Prompts",
+    route: "/prompts",
+  },
+  {
     id: "analytics",
     label: "Analytics",
     route: "/analytics",

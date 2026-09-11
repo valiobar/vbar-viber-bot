@@ -69,6 +69,9 @@ export async function PUT(request: Request, { params }: IdParams) {
     if (body.isAi !== undefined && body.isAi !== null) {
       input.isAi = Boolean(body.isAi);
     }
+    if (body.aiPromptName !== undefined) {
+      input.aiPromptName = body.aiPromptName || null;
+    }
     if (body.customHandler !== undefined) {
       input.customHandler = body.customHandler;
     }

@@ -127,6 +127,8 @@ export interface StepDTO extends BaseEntity {
   hidden: boolean;
   isAi: boolean;
   customHandler: string | null; // Optional custom step handler name (replaces normal sending)
+  /** Optional AI prompt name (AI service prompt_templates.name); null = use the active prompt */
+  aiPromptName: string | null;
 }
 
 /**

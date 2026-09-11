@@ -266,7 +266,7 @@ export function getAIConfig(): AIConfig {
   const promptTemplateConfig: PromptTemplateConfig = {
     enabled: promptTemplatesEnabled,
     storage: promptTemplateStorage as "mongodb" | "file",
-    default: ConfigHelper.getEnv("PROMPT_TEMPLATE_DEFAULT") || undefined,
+    default: ConfigHelper.getEnv("PROMPT_TEMPLATE_DEFAULT", "") || undefined,
   };
 
   // Bulgarian culture prompt template configuration

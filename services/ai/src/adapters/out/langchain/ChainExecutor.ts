@@ -6,7 +6,11 @@
  */
 
 import { ChainExecutorPort } from "../../../ports/out/ChainExecutorPort";
-import { AITask, ConversationContext } from "../../../domains/ai/entities";
+import {
+  AITask,
+  ConversationContext,
+  PromptTemplate,
+} from "../../../domains/ai/entities";
 import { AIProviderPort } from "../../../ports/out/AIProviderPort";
 import { VectorStorePort } from "../../../ports/out/VectorStorePort";
 import { PromptTemplateRepository } from "../../../ports/out/PromptTemplateRepository";
@@ -51,6 +55,44 @@ export class LangChainExecutor implements ChainExecutorPort {
   }
 
   /**
+   * Resolve a managed prompt template for the given chain type.
+   *
+   * Resolution order: per-step override (promptName) > active prompt for the
+   * task type > null (caller falls back to legacy behaviour).
+   * An override whose taskType does not match is ignored with a warning.
+   * Repository errors are swallowed so the chain always has a fallback path.
+   */
+  private async resolvePromptTemplate(
+    taskType: AITaskType,
+    promptName?: string
+  ): Promise<PromptTemplate | null> {
+    try {
+      if (promptName) {
+        const override =
+          await this.promptTemplateRepository.getTemplate(promptName);
+        if (override && override.taskType === taskType) return override;
+        this.logger.warn(
+          "Prompt override unusable, falling back to active prompt",
+          {
+            promptName,
+            wanted: taskType,
+            found: override?.taskType ?? "missing",
+          }
+        );
+      }
+      return await this.promptTemplateRepository.getActiveTemplate(taskType);
+    } catch (error) {
+      this.logger.warn(
+        "Failed to resolve prompt template, continuing without it",
+        {
+          error: error instanceof Error ? error.message : String(error),
+        }
+      );
+      return null;
+    }
+  }
+
+  /**
    * Execute a simple prompt chain (direct prompt to AI model)
    *
    * @param prompt - The prompt to execute
@@ -59,75 +101,79 @@ export class LangChainExecutor implements ChainExecutorPort {
    */
   async executeSimpleChain(
     prompt: string,
-    context?: ConversationContext
+    context?: ConversationContext,
+    promptName?: string
   ): Promise<string> {
     try {
       this.logger.debug("Executing simple chain", {
         promptLength: prompt.length,
         hasContext: !!context,
+        promptName,
       });
 
-      // Get Bulgarian culture prompt configuration
-      const aiConfig = getAIConfig();
-      let systemPrompt: string | undefined;
+      // Try managed prompt first (override > active > null)
+      const resolved = await this.resolvePromptTemplate(
+        AITaskType.SIMPLE,
+        promptName
+      );
+      let systemPrompt: string | undefined = resolved?.template;
 
-      if (aiConfig.bulgarianCulturePromptTemplate) {
-        try {
-          // Load prompt template from repository
-          const template = await this.promptTemplateRepository.getTemplate(
-            aiConfig.bulgarianCulturePromptTemplate
-          );
+      if (systemPrompt) {
+        this.logger.info("Using managed simple prompt", {
+          template: resolved!.name,
+        });
+      } else {
+        // Legacy fallback: Bulgarian culture prompt from env/config
+        const aiConfig = getAIConfig();
+        if (aiConfig.bulgarianCulturePromptTemplate) {
+          try {
+            const template = await this.promptTemplateRepository.getTemplate(
+              aiConfig.bulgarianCulturePromptTemplate
+            );
 
-          if (template) {
-            // Detect if message is about Bulgarian culture
-            const isCultureRelated =
-              CultureDetectionService.isBulgarianCultureRelated(prompt);
+            if (template) {
+              const isCultureRelated =
+                CultureDetectionService.isBulgarianCultureRelated(prompt);
 
-            // Use template content from database
-            // For culture-related questions, try to load enhanced template
-            if (isCultureRelated) {
-              const enhancedTemplateName = `${aiConfig.bulgarianCulturePromptTemplate}_enhanced`;
-              const enhancedTemplate =
-                await this.promptTemplateRepository.getTemplate(
-                  enhancedTemplateName
-                );
-              if (enhancedTemplate) {
-                systemPrompt = enhancedTemplate.template;
-                this.logger.debug(
-                  "Using enhanced Bulgarian culture system prompt",
-                  {
-                    templateName: enhancedTemplateName,
-                  }
-                );
+              if (isCultureRelated) {
+                const enhancedTemplateName = `${aiConfig.bulgarianCulturePromptTemplate}_enhanced`;
+                const enhancedTemplate =
+                  await this.promptTemplateRepository.getTemplate(
+                    enhancedTemplateName
+                  );
+                if (enhancedTemplate) {
+                  systemPrompt = enhancedTemplate.template;
+                  this.logger.debug(
+                    "Using enhanced Bulgarian culture system prompt",
+                    { templateName: enhancedTemplateName }
+                  );
+                } else {
+                  systemPrompt = template.template;
+                  this.logger.debug(
+                    "Enhanced template not found, using base template",
+                    { templateName: aiConfig.bulgarianCulturePromptTemplate }
+                  );
+                }
               } else {
-                // Fall back to base template if enhanced doesn't exist
                 systemPrompt = template.template;
                 this.logger.debug(
-                  "Enhanced template not found, using base template",
-                  {
-                    templateName: aiConfig.bulgarianCulturePromptTemplate,
-                  }
+                  "Using base Bulgarian culture system prompt",
+                  { templateName: aiConfig.bulgarianCulturePromptTemplate }
                 );
               }
             } else {
-              // Use base template for non-culture-related questions
-              systemPrompt = template.template;
-              this.logger.debug("Using base Bulgarian culture system prompt", {
-                templateName: aiConfig.bulgarianCulturePromptTemplate,
-              });
+              this.logger.warn(
+                `Bulgarian culture prompt template "${aiConfig.bulgarianCulturePromptTemplate}" not found, continuing without system prompt`
+              );
             }
-          } else {
+          } catch (error) {
             this.logger.warn(
-              `Bulgarian culture prompt template "${aiConfig.bulgarianCulturePromptTemplate}" not found, continuing without system prompt`
+              "Failed to load Bulgarian culture prompt template, continuing without system prompt",
+              {
+                error: error instanceof Error ? error.message : String(error),
+              }
             );
           }
-        } catch (error) {
-          this.logger.warn(
-            "Failed to load Bulgarian culture prompt template, continuing without system prompt",
-            {
-              error: error instanceof Error ? error.message : String(error),
-            }
-          );
         }
       }
 
@@ -182,7 +228,8 @@ export class LangChainExecutor implements ChainExecutorPort {
    */
   async executeRAGChain(
     query: string,
-    context?: ConversationContext
+    context?: ConversationContext,
+    promptName?: string
   ): Promise<string> {
     try {
       if (!this.vectorStore) {
@@ -194,6 +241,7 @@ export class LangChainExecutor implements ChainExecutorPort {
       this.logger.debug("Executing RAG chain", {
         query,
         hasContext: !!context,
+        promptName,
       });
 
       // Retrieve relevant documents from vector store
@@ -215,8 +263,33 @@ export class LangChainExecutor implements ChainExecutorPort {
         .map((doc, index) => `[Document ${index + 1}]\n${doc.content}`)
         .join("\n\n");
 
-      // Create enhanced prompt with retrieved context
-      const enhancedPrompt = `Based on the following context, answer the question. If the context doesn't contain enough information to answer the question, say so.
+      // Try managed prompt first (override > active > null)
+      const resolved = await this.resolvePromptTemplate(
+        AITaskType.RAG,
+        promptName
+      );
+      let enhancedPrompt: string | null = null;
+
+      if (resolved) {
+        try {
+          enhancedPrompt = PromptTemplateService.renderTemplate(resolved, {
+            context: contextText,
+            question: query,
+          });
+          this.logger.info("Using managed RAG prompt", {
+            template: resolved.name,
+          });
+        } catch (error) {
+          this.logger.warn("RAG prompt render failed, using built-in wrapper", {
+            template: resolved.name,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      if (!enhancedPrompt) {
+        // Legacy fallback: built-in RAG wrapper
+        enhancedPrompt = `Based on the following context, answer the question. If the context doesn't contain enough information to answer the question, say so.
 
 IMPORTANT: Keep your response under 700 characters.
 
@@ -226,6 +299,7 @@ ${contextText}
 Question: ${query}
 
 Answer:`;
+      }
 
       // Generate response using AI provider with enhanced prompt
       const response = await this.aiProvider.generateResponse(
@@ -348,12 +422,20 @@ Answer:`;
       switch (effectiveType) {
         case AITaskType.SIMPLE:
           this.logger.info("Selected chain type", { chain: "simple" });
-          return await this.executeSimpleChain(input, context);
+          return await this.executeSimpleChain(
+            input,
+            context,
+            task.promptTemplateName
+          );
 
         case AITaskType.RAG:
           this.logger.info("Selected chain type", { chain: "rag" });
           try {
-            return await this.executeRAGChain(input, context);
+            return await this.executeRAGChain(
+              input,
+              context,
+              task.promptTemplateName
+            );
           } catch (ragError) {
             this.logger.warn(
               "RAG chain failed, falling back to simple chain",
@@ -364,7 +446,11 @@ Answer:`;
                     : String(ragError),
               }
             );
-            return await this.executeSimpleChain(input, context);
+            return await this.executeSimpleChain(
+              input,
+              context,
+              task.promptTemplateName
+            );
           }
 
         case AITaskType.CUSTOM: {

@@ -18,6 +18,7 @@ import type {
 } from "@/entities/step";
 import { listMessages, type MessageDTO } from "@/entities/message";
 import { getKeyboard, listKeyboards, type KeyboardDTO } from "@/entities/keyboard";
+import { listPrompts, type PromptDTO } from "@/entities/prompt";
 
 interface StepFormProps {
   /**
@@ -55,6 +56,7 @@ export const StepForm = ({
   const [keyboard, setKeyboard] = useState<string | null>(null);
   const [hidden, setHidden] = useState(false);
   const [isAi, setIsAi] = useState(false);
+  const [aiPromptName, setAiPromptName] = useState<string | null>(null);
   const [customHandler, setCustomHandler] = useState<string | null>(null);
   const [selectedMessageId, setSelectedMessageId] = useState<string>("");
 
@@ -64,6 +66,8 @@ export const StepForm = ({
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [keyboards, setKeyboards] = useState<KeyboardDTO[]>([]);
   const [isLoadingKeyboards, setIsLoadingKeyboards] = useState(false);
+  const [prompts, setPrompts] = useState<PromptDTO[]>([]);
+  const [isLoadingPrompts, setIsLoadingPrompts] = useState(false);
 
   /**
    * Fetch messages for content selection
@@ -113,6 +117,26 @@ export const StepForm = ({
   }, [initialData]);
 
   /**
+   * Fetch prompts for the optional AI prompt override.
+   * Custom prompts are not a valid step override.
+   */
+  useEffect(() => {
+    const loadPrompts = async () => {
+      setIsLoadingPrompts(true);
+      try {
+        const all = await listPrompts();
+        setPrompts(all.filter((prompt) => prompt.taskType !== "custom"));
+      } catch (err) {
+        console.error("Error fetching prompts:", err);
+      } finally {
+        setIsLoadingPrompts(false);
+      }
+    };
+
+    void loadPrompts();
+  }, []);
+
+  /**
    * Initialize form with initial data
    */
   useEffect(() => {
@@ -123,6 +147,7 @@ export const StepForm = ({
       setKeyboard(initialData.keyboard);
       setHidden(initialData.hidden);
       setIsAi(initialData.isAi);
+      setAiPromptName(initialData.aiPromptName);
       setCustomHandler(initialData.customHandler);
     }
   }, [initialData]);
@@ -239,6 +264,7 @@ export const StepForm = ({
         keyboard: keyboard || null,
         hidden,
         isAi,
+        aiPromptName: isAi ? aiPromptName : null,
         customHandler: customHandler || null,
       };
       await onSubmit(updateData);
@@ -251,6 +277,7 @@ export const StepForm = ({
         keyboard: keyboard || null,
         hidden,
         isAi,
+        aiPromptName: isAi ? aiPromptName : null,
         customHandler: customHandler || null,
       };
       await onSubmit(createData);
@@ -317,7 +344,14 @@ export const StepForm = ({
               type="checkbox"
               id="isAi"
               checked={isAi}
-              onChange={(e) => setIsAi(e.target.checked)}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setIsAi(checked);
+                if (!checked) {
+                  setAiPromptName(null);
+                }
+              }}
+              aria-label="Is AI step"
               className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600"
             />
             <label
@@ -327,6 +361,36 @@ export const StepForm = ({
               Is AI
             </label>
           </div>
+
+          {isAi && (
+            <div>
+              <label
+                htmlFor="aiPromptName"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+              >
+                AI Prompt (Optional)
+              </label>
+              <select
+                id="aiPromptName"
+                value={aiPromptName || ""}
+                onChange={(e) => setAiPromptName(e.target.value || null)}
+                disabled={isLoadingPrompts}
+                aria-label="AI prompt override"
+                data-testid="step-ai-prompt"
+                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:disabled:bg-gray-800 dark:disabled:text-gray-400"
+              >
+                <option value="">Use the active prompt</option>
+                {prompts.map((prompt) => (
+                  <option key={prompt.name} value={prompt.name}>
+                    {prompt.name} ({prompt.taskType})
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                A rag prompt also switches this step to the RAG chain.
+              </p>
+            </div>
+          )}
 
           {/* Custom Function Select */}
           <div>

@@ -21,6 +21,7 @@ export interface CreateStepInput {
   keyboard?: string | null;
   hidden?: boolean;
   isAi?: boolean;
+  aiPromptName?: string | null;
   customHandler?: string | null;
 }
 
@@ -31,6 +32,7 @@ export interface UpdateStepInput {
   keyboard?: string | null;
   hidden?: boolean;
   isAi?: boolean;
+  aiPromptName?: string | null;
   customHandler?: string | null;
 }
 
@@ -98,6 +100,7 @@ export class StepService {
       keyboard: input.keyboard ?? null,
       hidden: input.hidden ?? false,
       isAi: input.isAi ?? false,
+      aiPromptName: input.aiPromptName ?? null,
       customHandler: input.customHandler ?? null,
     });
 
@@ -130,6 +133,10 @@ export class StepService {
       keyboard: updatedKeyboard,
       hidden: input.hidden ?? existing.hidden,
       isAi: input.isAi ?? existing.isAi,
+      aiPromptName:
+        input.aiPromptName !== undefined
+          ? input.aiPromptName
+          : existing.aiPromptName,
       customHandler:
         input.customHandler !== undefined
           ? input.customHandler

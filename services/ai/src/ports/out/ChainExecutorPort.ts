@@ -9,22 +9,26 @@ export interface ChainExecutorPort {
    * Execute a simple prompt chain (direct prompt to AI model)
    * @param prompt - The prompt to execute
    * @param context - Optional conversation context for maintaining conversation history
+   * @param promptName - Optional managed prompt override (looked up from prompt_templates)
    * @returns Promise resolving to the AI-generated response
    */
   executeSimpleChain(
     prompt: string,
-    context?: ConversationContext
+    context?: ConversationContext,
+    promptName?: string
   ): Promise<string>;
 
   /**
    * Execute a RAG chain with retrieval from vector store
    * @param query - The search query
    * @param context - Optional conversation context for maintaining conversation history
+   * @param promptName - Optional managed prompt override (looked up from prompt_templates)
    * @returns Promise resolving to the AI-generated response with retrieved context
    */
   executeRAGChain(
     query: string,
-    context?: ConversationContext
+    context?: ConversationContext,
+    promptName?: string
   ): Promise<string>;
 
   /**

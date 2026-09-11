@@ -92,6 +92,7 @@ export async function POST(request: Request) {
         keyboard: body.keyboard ?? null,
         hidden: body.hidden ?? false,
         isAi: body.isAi ?? false,
+        aiPromptName: body.aiPromptName || null,
         customHandler: body.customHandler ?? null,
       };
 

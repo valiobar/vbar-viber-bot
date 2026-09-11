@@ -25,6 +25,7 @@ export class StepDTO implements SharedStepDTO {
   public readonly keyboard: string | null; // Optional Keyboard ID
   public readonly hidden: boolean;
   public readonly isAi: boolean;
+  public readonly aiPromptName: string | null;
   public readonly customHandler: string | null; // Optional custom handler name
   public readonly createdAt: string;
   public readonly updatedAt: string;
@@ -37,6 +38,7 @@ export class StepDTO implements SharedStepDTO {
     keyboard: string | null;
     hidden: boolean;
     isAi: boolean;
+    aiPromptName: string | null;
     customHandler: string | null;
     createdAt: string;
     updatedAt: string;
@@ -48,6 +50,7 @@ export class StepDTO implements SharedStepDTO {
     this.keyboard = data.keyboard;
     this.hidden = data.hidden;
     this.isAi = data.isAi;
+    this.aiPromptName = data.aiPromptName;
     this.customHandler = data.customHandler;
     this.createdAt = data.createdAt;
     this.updatedAt = data.updatedAt;
@@ -68,6 +71,7 @@ export class StepDTO implements SharedStepDTO {
       keyboard: step.keyboard,
       hidden: step.hidden,
       isAi: step.isAi,
+      aiPromptName: step.aiPromptName,
       customHandler: step.customHandler,
       createdAt: step.createdAt,
       updatedAt: step.updatedAt,
@@ -92,6 +96,7 @@ export class StepDTO implements SharedStepDTO {
       keyboard: dto.keyboard,
       hidden: dto.hidden,
       isAi: dto.isAi,
+      aiPromptName: dto.aiPromptName,
       customHandler: dto.customHandler,
       createdAt: dto.createdAt,
       updatedAt: dto.updatedAt,

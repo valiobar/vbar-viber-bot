@@ -183,6 +183,12 @@ export class MessageHandler implements IEventHandler {
       // Check if user is in AI step before routing to specific handlers
       try {
         const user = await this.userRepository.findByViberId(userId);
+        if (!user?.currentStepId) {
+          this.logger.debug("Skipping AI processing, user has no current step", {
+            userId,
+            userFound: Boolean(user),
+          });
+        }
         if (user && user.currentStepId) {
           if (this.viberBotService && this.viberBotService.isInitialized()) {
             const buttonsPrefix =
@@ -195,6 +201,16 @@ export class MessageHandler implements IEventHandler {
 
             const botDataService = this.viberBotService.getBotDataService();
             const step = botDataService.getStepById(user.currentStepId);
+            if (!step || step.isAi !== true || isMessageContainsPrefix) {
+              this.logger.debug("Skipping AI processing", {
+                userId,
+                currentStepId: user.currentStepId,
+                stepFound: Boolean(step),
+                stepName: step?.humanReadableName,
+                isAi: step?.isAi ?? false,
+                isMessageContainsPrefix: Boolean(isMessageContainsPrefix),
+              });
+            }
             if (step && step.isAi === true && !isMessageContainsPrefix) {
               // Extract message content based on message typea
               let messageContent: string = "";
@@ -260,7 +276,9 @@ export class MessageHandler implements IEventHandler {
                 userId,
                 user.currentStepId,
                 bot,
-                userProfile
+                userProfile,
+                undefined,
+                step.aiPromptName ?? undefined
               );
 
               // Return early - don't route to specific handler

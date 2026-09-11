@@ -82,6 +82,7 @@ export class AiServiceGrpcClient implements IAiServiceClient {
       avatar?: string;
     };
     taskType?: string;
+    promptName?: string;
   }): Promise<{ response: string }> {
     return new Promise((resolve, reject) => {
       try {
@@ -99,6 +100,7 @@ export class AiServiceGrpcClient implements IAiServiceClient {
               }
             : undefined,
           taskType: data.taskType,
+          promptName: data.promptName,
         };
 
         // Call gRPC ProcessMessage method

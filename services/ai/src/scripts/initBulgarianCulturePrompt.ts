@@ -34,12 +34,17 @@ export async function initBulgarianCulturePrompt(): Promise<void> {
     }
 
     // Create base template (used for all messages)
+    // Preserve isActive and createdAt from the existing template so re-seeding
+    // does not reset an operator's active flag or creation date.
     const baseTemplate = new PromptTemplate(
       BULGARIAN_CULTURE_TEMPLATE_NAME,
       BULGARIAN_CULTURE_BASE_PROMPT,
       AITaskType.SIMPLE,
       [], // No variables
-      "System prompt for Bulgarian culture context in AI responses"
+      "System prompt for Bulgarian culture context in AI responses",
+      existingTemplate?.createdAt,
+      new Date(),
+      existingTemplate?.isActive ?? false
     );
 
     await repository.saveTemplate(baseTemplate);

@@ -15,6 +15,7 @@ export interface IAiServiceClient {
    * @param data.stepId - Current step ID
    * @param data.userProfile - User profile (optional)
    * @param data.taskType - Task type: "simple", "rag", or "custom" (optional)
+   * @param data.promptName - Per-step prompt override (optional)
    * @returns Promise resolving to AI service response
    * @throws Error if request fails or processing cannot be completed
    */
@@ -29,5 +30,6 @@ export interface IAiServiceClient {
       avatar?: string;
     };
     taskType?: string;
+    promptName?: string;
   }): Promise<{ response: string }>;
 }

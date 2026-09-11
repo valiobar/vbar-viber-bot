@@ -12,7 +12,8 @@ message ProcessMessageRequest {
   string userId = 3;
   string stepId = 4;
   UserProfile userProfile = 5;
-  string taskType = 6;  // "simple", "rag", or "custom" (optional)
+  string taskType = 6;    // "simple", "rag", or "custom" (optional)
+  string promptName = 7;  // per-step prompt override (optional)
 }
 
 message UserProfile {
