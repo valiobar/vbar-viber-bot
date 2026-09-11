@@ -240,6 +240,8 @@ Full service guide: [admin.md](./admin.md).
 
 ### Viber (`services/viber`)
 
+Full service guide: [viber.md](./viber.md).
+
 - Express on port 3001; must be reachable for webhooks (public or tunnel)
 - Health: `GET /health`
 - Needs `VIBER_BOT_TOKEN`, `VIBER_BOT_WEBHOOK_URL`, `RABBITMQ_URI`, `ADMIN_SERVICE_*`, `AI_SERVICE_GRPC_*`

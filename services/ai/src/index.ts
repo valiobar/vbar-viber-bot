@@ -13,7 +13,7 @@ import { initializeLangSmith } from "./config/langsmith";
 import { createRoutes } from "./adapters/in/routes";
 import { createGrpcServer } from "./adapters/in/grpc/server";
 import { createVectorStore } from "./adapters/out/langchain/rag/VectorStoreFactory";
-import { initBulgarianCulturePrompt } from "./scripts/initBulgarianCulturePrompt";
+import { initPromptTemplates } from "./scripts/initPromptTemplates";
 
 // Load monorepo-root .env (single system env file)
 const rootEnv = resolveRootEnvPath();
@@ -106,12 +106,12 @@ async function initialize(): Promise<void> {
     });
     console.log("MongoDB connected");
 
-    // Initialize Bulgarian culture prompt template
+    // Initialize prompt templates (indexes, Bulgarian culture, default RAG, activate defaults)
     try {
-      await initBulgarianCulturePrompt();
+      await initPromptTemplates();
     } catch (error) {
       console.warn(
-        "Failed to initialize Bulgarian culture prompt template, continuing anyway:",
+        "Failed to initialize prompt templates, continuing anyway:",
         error instanceof Error ? error.message : String(error)
       );
     }

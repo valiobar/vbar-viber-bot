@@ -353,5 +353,6 @@ Admin application input types (`CreateMessageInput`, etc.) live on the domain se
 - [Deployment](./deployment.md)
 - [Architecture](./architecture.md)
 - [Admin service](./admin.md)
+- [Viber service](./viber.md)
 - [AI service](./ai.md)
 - [Databases](./databases.md)

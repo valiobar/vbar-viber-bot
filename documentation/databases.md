@@ -266,6 +266,7 @@ See [setup.md](./setup.md) and [deployment.md](./deployment.md) for env names an
 
 - [Architecture](./architecture.md)
 - [Admin service](./admin.md)
+- [Viber service](./viber.md)
 - [API](./api.md)
 - [Setup](./setup.md)
 - [Deployment](./deployment.md)

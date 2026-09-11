@@ -360,5 +360,6 @@ Local development: `npm run dev:ai` (tsx watch). Start Chroma separately with `-
 - [RAG](./rag.md) — retrieval, ingest limits, and enablement
 - [Databases](./databases.md) — collections, fields, and Chroma metadata
 - [Admin service](./admin.md) — the knowledge-base UI and proxy
+- [Viber service](./viber.md) — when and how ProcessMessage is called
 - [Setup](./setup.md) / [Deployment](./deployment.md)
 - [AI service README](../services/ai/README.md)

@@ -25,6 +25,7 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-7d}
       - BOT_TOKEN_ENCRYPTION_KEY=${BOT_TOKEN_ENCRYPTION_KEY}
+      - BROADCAST_STALE_MS=${BROADCAST_STALE_MS:-300000}
     depends_on:
       mongodb:
         condition: service_healthy
@@ -64,6 +65,9 @@ services:
       - AI_SERVICE_GRPC_HOST=ai
       - AI_SERVICE_GRPC_PORT=50051
       - SERVICE_TOKEN=${SERVICE_TOKEN}
+      - BROADCAST_POLL_INTERVAL_MS=${BROADCAST_POLL_INTERVAL_MS:-30000}
+      - BROADCAST_USERS_PER_BATCH=${BROADCAST_USERS_PER_BATCH:-300}
+      - BROADCAST_BATCH_INTERVAL_MS=${BROADCAST_BATCH_INTERVAL_MS:-600}
     depends_on:
       mongodb:
         condition: service_healthy

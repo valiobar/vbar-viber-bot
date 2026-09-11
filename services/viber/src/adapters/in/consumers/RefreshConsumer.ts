@@ -12,16 +12,22 @@ import { Channel, Message } from "amqplib";
 import { ConfigHelper, ServiceConfig, RefreshEvent } from "@vbar/shared";
 import { createQueueChannel } from "@vbar/shared/infra";
 import { ViberBotService } from "../../../application/services/ViberBotService";
+import { BroadcastWorker } from "../../../application/services/BroadcastWorker";
 
 export class RefreshConsumer {
   private channel: Channel | null = null;
   private viberBotService: ViberBotService;
+  private broadcastWorker?: BroadcastWorker;
   private queueName: string;
   private exchangeName: string;
   private isConsuming: boolean = false;
 
-  constructor(viberBotService: ViberBotService) {
+  constructor(
+    viberBotService: ViberBotService,
+    broadcastWorker?: BroadcastWorker
+  ) {
     this.viberBotService = viberBotService;
+    this.broadcastWorker = broadcastWorker;
     this.queueName = ServiceConfig.messageQueue.queues.viberRefresh;
     this.exchangeName = ServiceConfig.messageQueue.exchanges.default;
   }
@@ -98,6 +104,13 @@ export class RefreshConsumer {
    * Handle refresh event
    */
   private async handleRefresh(event: RefreshEvent): Promise<void> {
+    // Broadcast nudge — do not refresh content cache, just poll.
+    // All instances may react; the atomic claim makes that harmless.
+    if (event.dataType === "broadcasts") {
+      this.broadcastWorker?.triggerPoll();
+      return;
+    }
+
     try {
       const botDataService = this.viberBotService.getBotDataService();
 

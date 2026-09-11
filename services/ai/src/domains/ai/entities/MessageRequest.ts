@@ -13,6 +13,7 @@ export class MessageRequest {
     avatar?: string;
   };
   public readonly taskType?: string;
+  public readonly promptName?: string;
 
   constructor(
     messageContent: string,
@@ -20,7 +21,8 @@ export class MessageRequest {
     userId: string,
     stepId: string,
     userProfile?: { id: string; name: string; avatar?: string },
-    taskType?: string
+    taskType?: string,
+    promptName?: string
   ) {
     // Validate required fields
     if (!messageContent || messageContent.trim().length === 0) {
@@ -42,5 +44,6 @@ export class MessageRequest {
     this.stepId = stepId.trim();
     this.userProfile = userProfile;
     this.taskType = taskType;
+    this.promptName = promptName?.trim() || undefined;
   }
 }

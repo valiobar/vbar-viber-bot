@@ -1,6 +1,6 @@
 # System Architecture
 
-Accurate as of Phases 2–4. Three app services (admin, viber, ai), one Viber bot per deployment, one shared MongoDB, one RabbitMQ used for cache refresh. Admin service details: [admin.md](./admin.md).
+Accurate as of Phases 2–4. Three app services (admin, viber, ai), one Viber bot per deployment, one shared MongoDB, one RabbitMQ used for cache refresh. Admin: [admin.md](./admin.md). Viber: [viber.md](./viber.md). AI: [ai.md](./ai.md).
 
 ## Table of Contents
 
@@ -221,6 +221,7 @@ Profile `rag` adds Chroma on `127.0.0.1:8000`. Compose sets `CHROMA_URL=http://c
 ## Related documentation
 
 - [Admin service](./admin.md) — admin architecture, storage, FSD, auth
+- [Viber service](./viber.md) — webhooks, step routing, admin cache, AI gRPC
 - [AI service](./ai.md) — AI architecture, chains, consumers, contracts
 - [API](./api.md)
 - [Setup](./setup.md)

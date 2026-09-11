@@ -39,6 +39,24 @@ export interface PromptTemplateRepository {
    * @returns Promise that resolves when the template is deleted
    */
   deleteTemplate(name: string): Promise<void>;
+
+  /**
+   * Active prompt for a chain type, or null when none is active.
+   * @param taskType - The chain type to look up
+   */
+  getActiveTemplate(taskType: AITaskType): Promise<PromptTemplate | null>;
+
+  /**
+   * Clear isActive on every template of a task type except `exceptName`.
+   * @param taskType - The chain type to deactivate
+   * @param exceptName - Optional template name to leave unchanged
+   */
+  deactivateAll(taskType: AITaskType, exceptName?: string): Promise<void>;
+
+  /**
+   * Create the unique name index and the { taskType, isActive } index.
+   */
+  ensureIndexes(): Promise<void>;
 }
 
 

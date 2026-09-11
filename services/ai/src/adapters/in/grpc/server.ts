@@ -86,6 +86,7 @@ export function createGrpcServer(
   const processMessageUseCase = new ProcessMessageUseCaseImpl(
     chainExecutor,
     conversationRepository,
+    promptTemplateRepository,
     serviceLogger
   );
 
@@ -105,6 +106,7 @@ export function createGrpcServer(
           userId: request.userId,
           stepId: request.stepId,
           userProfile: request.userProfile,
+          promptName: request.promptName,
         });
 
         // Map gRPC request to MessageRequest domain entity
@@ -120,7 +122,8 @@ export function createGrpcServer(
                 avatar: request.userProfile.avatar,
               }
             : undefined,
-          request.taskType
+          request.taskType,
+          request.promptName || undefined
         );
 
         // Call use case to process message

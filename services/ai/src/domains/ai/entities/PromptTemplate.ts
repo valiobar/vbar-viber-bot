@@ -12,6 +12,7 @@ export class PromptTemplate {
   public readonly description?: string;
   public readonly createdAt: Date;
   public readonly updatedAt: Date;
+  public readonly isActive: boolean;
 
   constructor(
     name: string,
@@ -20,7 +21,8 @@ export class PromptTemplate {
     variables: string[] = [],
     description?: string,
     createdAt?: Date,
-    updatedAt?: Date
+    updatedAt?: Date,
+    isActive: boolean = false
   ) {
     // Validate required fields
     if (!name || name.trim().length === 0) {
@@ -41,6 +43,7 @@ export class PromptTemplate {
     this.description = description;
     this.createdAt = createdAt || new Date();
     this.updatedAt = updatedAt || new Date();
+    this.isActive = isActive;
   }
 
   /**

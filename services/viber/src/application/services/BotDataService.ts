@@ -72,8 +72,14 @@ export class BotDataService {
         stepsByTrigger: stepsByTriggerMap,
       };
 
+      const aiSteps = stepsArray
+        .filter((step) => step.isAi)
+        .map((step) => `${step.humanReadableName} (${step.id})`);
       console.log(
-        `Steps fetched and stored successfully: ${stepsArray.length} steps, ${stepsByTriggerMap.size} unique triggers`
+        `Steps fetched and stored successfully: ${stepsArray.length} steps, ${stepsByTriggerMap.size} unique triggers` +
+          (aiSteps.length > 0
+            ? `, AI steps: ${aiSteps.join(", ")}`
+            : ", AI steps: none")
       );
     } catch (error) {
       const errorMessage =

@@ -18,6 +18,7 @@ export interface IStepDocument extends mongoose.Document {
   keyboard?: mongoose.Types.ObjectId | null; // Optional Keyboard ID (reference to Keyboard model)
   hidden: boolean;
   isAi: boolean;
+  aiPromptName?: string | null; // Optional AI prompt name (AI service prompt_templates.name)
   customHandler?: string | null; // Optional custom step handler name (replaces normal sending)
   createdAt: Date;
   updatedAt: Date;
@@ -109,6 +110,13 @@ const stepSchema = new Schema<IStepDocument>(
     isAi: {
       type: Boolean,
       default: false,
+    },
+    aiPromptName: {
+      type: String,
+      required: false,
+      default: null,
+      trim: true,
+      maxlength: 64,
     },
     customHandler: {
       type: String,

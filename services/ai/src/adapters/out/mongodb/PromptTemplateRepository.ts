@@ -182,6 +182,94 @@ export class MongoPromptTemplateRepository implements PromptTemplateRepository {
   }
 
   /**
+   * Active prompt for a chain type, or null when none is active.
+   *
+   * @param taskType - The chain type to look up
+   * @returns Promise resolving to the active template or null
+   */
+  async getActiveTemplate(taskType: AITaskType): Promise<PromptTemplate | null> {
+    try {
+      const db = await getMongoDatabase();
+      if (!db) {
+        throw new Error("Database connection failed");
+      }
+
+      const doc = await db
+        .collection(this.collectionName)
+        .findOne({ taskType, isActive: true });
+
+      return doc ? this.documentToEntity(doc) : null;
+    } catch (error) {
+      this.logger.error(
+        `Failed to get active template for "${taskType}":`,
+        error as Error
+      );
+      throw new Error(
+        `Failed to get active template: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  }
+
+  /**
+   * Clear isActive on every template of a task type except `exceptName`.
+   *
+   * @param taskType - The chain type to deactivate
+   * @param exceptName - Optional template name to leave unchanged
+   */
+  async deactivateAll(taskType: AITaskType, exceptName?: string): Promise<void> {
+    try {
+      const db = await getMongoDatabase();
+      if (!db) {
+        throw new Error("Database connection failed");
+      }
+
+      const filter: Record<string, unknown> = { taskType, isActive: true };
+      if (exceptName) {
+        filter.name = { $ne: exceptName };
+      }
+
+      await db.collection(this.collectionName).updateMany(filter, {
+        $set: { isActive: false },
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to deactivate templates for "${taskType}":`,
+        error as Error
+      );
+      throw new Error(
+        `Failed to deactivate templates: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  }
+
+  /**
+   * Create the unique name index and the { taskType, isActive } index.
+   */
+  async ensureIndexes(): Promise<void> {
+    try {
+      const db = await getMongoDatabase();
+      if (!db) {
+        throw new Error("Database connection failed");
+      }
+
+      const collection = db.collection(this.collectionName);
+      await collection.createIndex({ name: 1 }, { unique: true });
+      await collection.createIndex({ taskType: 1, isActive: 1 });
+    } catch (error) {
+      this.logger.error("Failed to ensure prompt template indexes:", error as Error);
+      throw new Error(
+        `Failed to ensure indexes: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  }
+
+  /**
    * Convert MongoDB document to PromptTemplate entity
    *
    * @param doc - MongoDB document
@@ -195,7 +283,8 @@ export class MongoPromptTemplateRepository implements PromptTemplateRepository {
       doc.variables || [],
       doc.description,
       doc.createdAt ? new Date(doc.createdAt) : new Date(),
-      doc.updatedAt ? new Date(doc.updatedAt) : new Date()
+      doc.updatedAt ? new Date(doc.updatedAt) : new Date(),
+      doc.isActive === true
     );
   }
 
@@ -212,6 +301,7 @@ export class MongoPromptTemplateRepository implements PromptTemplateRepository {
       taskType: template.taskType,
       variables: template.variables,
       description: template.description,
+      isActive: template.isActive,
       createdAt: template.createdAt,
       updatedAt: template.updatedAt,
     };

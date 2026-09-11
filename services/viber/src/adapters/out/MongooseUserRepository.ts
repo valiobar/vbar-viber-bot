@@ -8,7 +8,10 @@
  * Location: Output Adapters layer (Hexagonal Architecture)
  */
 
-import { IUserRepository } from "../../ports/out/IUserRepository";
+import {
+  IUserRepository,
+  type SubscribedViberIdsPage,
+} from "../../ports/out/IUserRepository";
 import { ViberUser } from "../../domains/user/entities/ViberUser";
 import { ViberUserModel, IViberUserDocument } from "./models/ViberUserModel";
 import { ConsoleLogger, Logger } from "@vbar/shared";
@@ -153,6 +156,52 @@ export class MongooseUserRepository implements IUserRepository {
       return docs.map((doc) => this.toDomainEntity(doc));
     } catch (error) {
       this.logger.error("Error finding subscribed users", {
+        error: error instanceof Error ? error : new Error(String(error)),
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Find one page of subscribed Viber IDs after an optional Mongo `_id` cursor
+   */
+  async findSubscribedViberIdsAfter(
+    afterId: string | null,
+    limit: number
+  ): Promise<SubscribedViberIdsPage> {
+    try {
+      this.logger.debug("Finding subscribed user ids page", { afterId, limit });
+      const filter = afterId
+        ? { subscribed: true, _id: { $gt: afterId } }
+        : { subscribed: true };
+      const docs = await ViberUserModel.find(filter, { viberId: 1 })
+        .sort({ _id: 1 })
+        .limit(limit)
+        .lean()
+        .exec();
+      return {
+        viberIds: docs.map((doc) => doc.viberId),
+        lastId: docs.length > 0 ? String(docs[docs.length - 1]._id) : null,
+      };
+    } catch (error) {
+      this.logger.error("Error finding subscribed user ids page", {
+        afterId,
+        limit,
+        error: error instanceof Error ? error : new Error(String(error)),
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Count subscribed users without loading documents
+   */
+  async countSubscribedUsers(): Promise<number> {
+    try {
+      this.logger.debug("Counting subscribed users");
+      return ViberUserModel.countDocuments({ subscribed: true }).exec();
+    } catch (error) {
+      this.logger.error("Error counting subscribed users", {
         error: error instanceof Error ? error : new Error(String(error)),
       });
       throw error;

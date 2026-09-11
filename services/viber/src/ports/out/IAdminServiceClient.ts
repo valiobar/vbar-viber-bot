@@ -12,6 +12,7 @@ import type {
   KeyboardDTO,
   CarouselDTO,
 } from "../../application/types/DTOs";
+import type { BroadcastDTO, BroadcastProgressUpdate } from "@vbar/shared";
 
 /**
  * Output port interface for Admin Service Client
@@ -59,4 +60,25 @@ export interface IAdminServiceClient {
    * @throws Error if request fails or carousels cannot be retrieved
    */
   getCarousels(): Promise<CarouselDTO[]>;
+
+  /**
+   * Atomically claim one due broadcast for this instance
+   *
+   * @param instanceId - Unique id of this viber instance (lock owner)
+   * @returns The claimed broadcast, or null if nothing is due
+   * @throws Error if the claim request fails
+   */
+  claimBroadcast(instanceId: string): Promise<BroadcastDTO | null>;
+
+  /**
+   * Report heartbeat / counters / terminal status for a claimed broadcast
+   *
+   * @param broadcastId - Broadcast id
+   * @param update - Progress payload (must include instanceId for the lock guard)
+   * @throws Error if the report fails (including invalid lock)
+   */
+  reportBroadcastProgress(
+    broadcastId: string,
+    update: BroadcastProgressUpdate
+  ): Promise<void>;
 }

@@ -14,7 +14,8 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 COMPOSE_FILE="infrastructure/docker-compose.yml"
-COMPOSE=(docker compose --env-file .env -f "$COMPOSE_FILE")
+# rag profile starts chromadb (not in the default compose stack)
+COMPOSE=(docker compose --env-file .env -f "$COMPOSE_FILE" --profile rag)
 
 # Required variables in root .env (must be set; no insecure defaults)
 REQUIRED_VARS=(
@@ -113,6 +114,7 @@ echo ""
 echo -e "${YELLOW}Checking service health...${NC}"
 check_service_health "Admin Service" "http://localhost:3000/api/health" || true
 check_service_health "Viber Service" "http://localhost:3001/health" || true
+check_service_health "Chroma" "http://localhost:8000/api/v1/heartbeat" || true
 
 echo ""
 echo -e "${GREEN}Running containers:${NC}"
@@ -126,7 +128,6 @@ echo "  View logs:     docker compose --env-file .env -f $COMPOSE_FILE logs -f"
 echo "  Stop services: docker compose --env-file .env -f $COMPOSE_FILE down"
 echo "  Restart:       docker compose --env-file .env -f $COMPOSE_FILE restart"
 echo "  Local LLM:     docker compose --env-file .env -f $COMPOSE_FILE --profile local-llm up -d"
-echo "  RAG / Chroma:  docker compose --env-file .env -f $COMPOSE_FILE --profile rag up -d"
 echo ""
 echo "Service URLs (behind reverse proxy in production):"
 echo "  Admin:    http://localhost:3000"

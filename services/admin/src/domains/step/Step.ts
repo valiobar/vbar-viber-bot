@@ -22,6 +22,7 @@ export class Step {
   public readonly keyboard: string | null; // Optional Keyboard ID
   public readonly hidden: boolean;
   public readonly isAi: boolean;
+  public readonly aiPromptName: string | null; // Optional AI prompt name (null = use the active prompt)
   public readonly customHandler: string | null; // Optional custom handler name (replaces normal sending)
   public readonly createdAt: string;
   public readonly updatedAt: string;
@@ -40,6 +41,7 @@ export class Step {
     keyboard?: string | null;
     hidden?: boolean;
     isAi?: boolean;
+    aiPromptName?: string | null;
     customHandler?: string | null;
     createdAt: string;
     updatedAt: string;
@@ -59,6 +61,7 @@ export class Step {
     this.keyboard = params.keyboard ?? null;
     this.hidden = params.hidden ?? false;
     this.isAi = params.isAi ?? false;
+    this.aiPromptName = params.aiPromptName ?? null;
     this.createdAt = params.createdAt;
     this.updatedAt = params.updatedAt;
   }
@@ -212,6 +215,7 @@ export class Step {
     keyboard?: string | { toString(): string } | null;
     hidden?: boolean;
     isAi?: boolean;
+    aiPromptName?: string | null;
     customHandler?: string | null;
     createdAt: Date | string;
     updatedAt: Date | string;
@@ -251,6 +255,7 @@ export class Step {
       keyboard,
       hidden: doc.hidden,
       isAi: doc.isAi,
+      aiPromptName: doc.aiPromptName ?? null,
       customHandler: doc.customHandler ?? null,
       createdAt,
       updatedAt,
@@ -270,6 +275,7 @@ export class Step {
     keyboard?: string | null;
     hidden?: boolean;
     isAi?: boolean;
+    aiPromptName?: string | null;
     customHandler?: string | null;
   }): Step {
     const now = new Date().toISOString();
@@ -285,6 +291,7 @@ export class Step {
       keyboard: params.keyboard ?? null,
       hidden: params.hidden ?? false,
       isAi: params.isAi ?? false,
+      aiPromptName: params.aiPromptName ?? null,
       customHandler: params.customHandler ?? null,
       createdAt: now,
       updatedAt: now,

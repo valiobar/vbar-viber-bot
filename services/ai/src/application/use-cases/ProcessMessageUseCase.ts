@@ -13,6 +13,7 @@ import {
 import { AIProvider } from "../../domains/ai/value-objects/AIProvider";
 import { ChainExecutorPort } from "../../ports/out/ChainExecutorPort";
 import { ConversationRepository } from "../../ports/out/ConversationRepository";
+import { PromptTemplateRepository } from "../../ports/out/PromptTemplateRepository";
 import { getAIConfig } from "../../config/aiConfig";
 
 /**
@@ -24,15 +25,18 @@ import { getAIConfig } from "../../config/aiConfig";
 export class ProcessMessageUseCaseImpl implements ProcessMessageUseCase {
   private readonly chainExecutor: ChainExecutorPort;
   private readonly conversationRepository: ConversationRepository;
+  private readonly promptTemplateRepository: PromptTemplateRepository;
   private readonly logger: Logger;
 
   constructor(
     chainExecutor: ChainExecutorPort,
     conversationRepository: ConversationRepository,
+    promptTemplateRepository: PromptTemplateRepository,
     logger: Logger
   ) {
     this.chainExecutor = chainExecutor;
     this.conversationRepository = conversationRepository;
+    this.promptTemplateRepository = promptTemplateRepository;
     this.logger = logger;
   }
 
@@ -101,10 +105,39 @@ export class ProcessMessageUseCaseImpl implements ProcessMessageUseCase {
         }
       }
 
+      // Resolve task type from prompt template when no explicit type is set
+      let promptTaskType: AITaskType | undefined;
+      if (!explicitTaskType && request.promptName) {
+        try {
+          const template =
+            await this.promptTemplateRepository.getTemplate(request.promptName);
+          if (template) {
+            promptTaskType = template.taskType;
+          } else {
+            this.logger.warn(
+              "Step prompt not found, using configured task type",
+              { promptName: request.promptName }
+            );
+          }
+        } catch (error) {
+          this.logger.warn(
+            "Failed to load step prompt, using configured task type",
+            {
+              promptName: request.promptName,
+              error: error instanceof Error ? error.message : String(error),
+            }
+          );
+        }
+      }
+
       const ragEnabled =
-        aiConfig.rag.enabled || explicitTaskType === AITaskType.RAG;
+        aiConfig.rag.enabled ||
+        explicitTaskType === AITaskType.RAG ||
+        promptTaskType === AITaskType.RAG;
+
       const taskType =
         explicitTaskType ??
+        promptTaskType ??
         (ragEnabled ? AITaskType.RAG : AITaskType.SIMPLE);
 
       this.logger.info("AI provider configuration", {
@@ -112,6 +145,8 @@ export class ProcessMessageUseCaseImpl implements ProcessMessageUseCase {
         model: this.getModelName(aiConfig),
         taskType,
         taskTypeExplicit: !!explicitTaskTypeStr,
+        promptName: request.promptName,
+        promptTaskType,
         ragEnabled,
         temperature: aiConfig.temperature,
         maxTokens: aiConfig.maxTokens,
@@ -121,9 +156,10 @@ export class ProcessMessageUseCaseImpl implements ProcessMessageUseCase {
       const task = new AITask(
         taskType,
         ragEnabled,
-        taskType === AITaskType.CUSTOM
-          ? ConfigHelper.getEnv("PROMPT_TEMPLATE_DEFAULT")
-          : undefined,
+        request.promptName ??
+          (taskType === AITaskType.CUSTOM
+            ? ConfigHelper.getEnv("PROMPT_TEMPLATE_DEFAULT")
+            : undefined),
         {
           stepId: request.stepId,
           messageType: request.messageType,

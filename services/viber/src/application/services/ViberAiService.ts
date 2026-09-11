@@ -27,6 +27,7 @@ export class ViberAiService {
    * @param bot - Viber Bot instance for sending messages
    * @param userProfile - User profile for sending messages
    * @param taskType - Task type: "simple", "rag", or "custom" (optional)
+   * @param promptName - Per-step prompt override (optional)
    */
   async handleMessage(
     messageContent: string,
@@ -35,7 +36,8 @@ export class ViberAiService {
     stepId: string,
     bot: Bot,
     userProfile: any,
-    taskType?: string
+    taskType?: string,
+    promptName?: string
   ): Promise<void> {
     try {
       // Call AI service via gRPC client
@@ -52,6 +54,7 @@ export class ViberAiService {
             }
           : undefined,
         taskType,
+        promptName,
       });
 
       // Log the response
