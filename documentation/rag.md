@@ -233,4 +233,5 @@ Trigger RAG from a Viber step with `isAi=true` after the env is set, or call gRP
 - [Deployment](./deployment.md) — Compose topology and env
 - [API](./api.md) — gRPC `ProcessMessage` and `/api/knowledge-base/*`
 - [AI service](./ai.md) — AI architecture, chains, consumers, contracts
+- [Viber service](./viber.md) — AI-step gating and gRPC request fields
 - [AI service README](../services/ai/README.md)

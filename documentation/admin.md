@@ -572,4 +572,5 @@ Comments on some auth routes still say “Hexagonal / use case”. Ignore those 
 - [Setup](./setup.md) — local env and Compose
 - [Deployment](./deployment.md)
 - [RAG](./rag.md) — what the knowledge-base UI actually feeds
+- [Viber service](./viber.md) — cache consumer and AI-step runtime
 - Service README: `services/admin/README.md`
