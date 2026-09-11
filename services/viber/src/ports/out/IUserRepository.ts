@@ -10,6 +10,15 @@
 
 import { ViberUser } from "../../domains/user/entities/ViberUser";
 
+/**
+ * One page of subscribed Viber IDs for broadcast send/resume.
+ * `lastId` is the Mongo `_id` of the last document in this page.
+ */
+export interface SubscribedViberIdsPage {
+  viberIds: string[];
+  lastId: string | null;
+}
+
 export interface IUserRepository {
   /**
    * Find a user by Viber ID
@@ -41,6 +50,21 @@ export interface IUserRepository {
    * @returns Array of subscribed user entities
    */
   findSubscribedUsers(): Promise<ViberUser[]>;
+
+  /**
+   * Find one page of subscribed Viber IDs after an optional Mongo `_id` cursor
+   * @param afterId - Exclusive resume cursor (`null` = first page)
+   * @param limit - Page size (typically `BROADCAST_USERS_PER_BATCH`)
+   */
+  findSubscribedViberIdsAfter(
+    afterId: string | null,
+    limit: number
+  ): Promise<SubscribedViberIdsPage>;
+
+  /**
+   * Count subscribed users (index-only) for broadcast `totalCount`
+   */
+  countSubscribedUsers(): Promise<number>;
 
   /**
    * Update user profile information

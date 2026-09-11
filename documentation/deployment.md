@@ -186,9 +186,9 @@ IMAGE_TAG=<sha-or-latest> bash deploy.sh
 `deploy.sh`:
 
 1. Validates `.env` and required variables
-2. `docker compose pull`
-3. `docker compose up -d` (no build)
-4. Checks admin and viber health endpoints
+2. `docker compose --profile rag pull`
+3. `docker compose --profile rag up -d` (no build; starts Chroma with the stack)
+4. Checks admin, viber, and Chroma health endpoints
 
 ### Reverse proxy (Caddy example)
 
@@ -279,13 +279,13 @@ Do not automate this blindly on production without a backup.
 # Local Ollama
 docker compose --env-file .env -f infrastructure/docker-compose.yml --profile local-llm up -d
 
-# RAG / Chroma (does not change the default 5-container stack)
+# RAG / Chroma (local / manual). Production deploy.sh always passes --profile rag.
 docker compose --env-file .env -f infrastructure/docker-compose.yml --profile rag up -d
 ```
 
 Cloud LLM providers do not need the `local-llm` profile; set `AI_MODEL_PROVIDER` and the matching API key in `.env`.
 
-Chroma starts only with `--profile rag`. The `ai` service does not `depends_on` Chroma. If RAG is on and Chroma is down, AI logs `CHROMA_URL` and that `--profile rag` is required, then falls back to the simple chain. See [rag.md](./rag.md).
+A default `docker compose up` still does not start Chroma. `deploy.sh` (and therefore the GitHub Action) always enables `--profile rag`. The `ai` service does not `depends_on` Chroma. If RAG is on and Chroma is down, AI logs `CHROMA_URL` and that `--profile rag` is required, then falls back to the simple chain. See [rag.md](./rag.md).
 
 ## Related Documentation
 

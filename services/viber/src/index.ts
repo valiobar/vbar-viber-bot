@@ -22,6 +22,8 @@ import { MongooseUserRepository } from "./adapters/out/MongooseUserRepository";
 import { RefreshConsumer } from "./adapters/in/consumers/RefreshConsumer";
 import { IAiServiceClient } from "./ports/out/IAiServiceClient";
 import { AiServiceGrpcClient } from "./adapters/out/grpc/AiServiceGrpcClient";
+import { AdminServiceClient } from "./adapters/out/AdminServiceClient";
+import { BroadcastWorker } from "./application/services/BroadcastWorker";
 
 // Load monorepo-root .env (single system env file)
 const rootEnv = resolveRootEnvPath();
@@ -36,6 +38,7 @@ const port = ConfigHelper.getEnvNumber("PORT", ServiceConfig.ports.viber);
 // Store ViberBotService instance globally for middleware access
 let viberBotService: ViberBotService | null = null;
 let refreshConsumer: RefreshConsumer | null = null;
+let broadcastWorker: BroadcastWorker | null = null;
 
 // Middleware to preserve raw body for webhook signature verification
 // This must be applied before JSON parsing for webhook routes
@@ -241,10 +244,16 @@ async function initialize(): Promise<void> {
       console.log("Viber bot configuration loaded");
     }
 
-    // Initialize refresh consumer
+    // Initialize refresh consumer and broadcast worker
     if (viberBotService) {
+      broadcastWorker = new BroadcastWorker(
+        new AdminServiceClient(),
+        userRepository,
+        viberBotService
+      );
+
       try {
-        refreshConsumer = new RefreshConsumer(viberBotService);
+        refreshConsumer = new RefreshConsumer(viberBotService, broadcastWorker);
         await refreshConsumer.start();
         console.log("Refresh consumer initialized and started");
       } catch (error) {
@@ -252,6 +261,9 @@ async function initialize(): Promise<void> {
         // Don't fail service startup if consumer fails
         // Consumer will retry on next connection
       }
+
+      broadcastWorker.start();
+      console.log("Broadcast worker started");
     }
 
     // Start server
@@ -270,6 +282,14 @@ async function initialize(): Promise<void> {
  */
 async function shutdown(): Promise<void> {
   console.log("Shutting down Viber Service...");
+
+  if (broadcastWorker) {
+    try {
+      broadcastWorker.stop();
+    } catch (error) {
+      console.error("Error stopping broadcast worker:", error);
+    }
+  }
 
   // Stop refresh consumer
   if (refreshConsumer) {

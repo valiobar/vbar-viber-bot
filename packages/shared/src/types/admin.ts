@@ -246,3 +246,66 @@ export interface CarouselDTO extends BaseEntity {
   Cards: CarouselCardDTO[];
   Buttons: ButtonDTO[]; // computed on save
 }
+
+// ============================================================================
+// Broadcast Domain Types
+// ============================================================================
+
+/**
+ * Broadcast lifecycle status.
+ *
+ * `scheduled` → (atomic claim) → `sending` → `finished` | `failed`.
+ * `canceled` is reachable only from `scheduled`.
+ */
+export type BroadcastStatus =
+  | "scheduled"
+  | "sending"
+  | "finished"
+  | "failed"
+  | "canceled";
+
+/**
+ * One recipient that failed during a broadcast send.
+ */
+export interface BroadcastFailedEntry {
+  viberId: string;
+  reason: string;
+}
+
+/**
+ * Broadcast DTO interface
+ *
+ * Admin↔viber contract for a scheduled or in-flight broadcast.
+ * Dates are ISO strings.
+ */
+export interface BroadcastDTO {
+  id: string;
+  name: string;
+  stepId: string;
+  sendToAll: boolean;
+  testViberIds: string[];
+  scheduledAt: string;
+  status: BroadcastStatus;
+  totalCount: number;
+  successCount: number;
+  failedList: BroadcastFailedEntry[];
+  startedAt: string | null;
+  finishedAt: string | null;
+  lockedBy: string | null;
+  lastProcessedId: string | null; // Mongo _id (sendToAll) or last test Viber ID
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Body of PATCH /api/broadcasts/[id]/progress (viber → admin).
+ */
+export interface BroadcastProgressUpdate {
+  instanceId: string;
+  totalCount?: number; // set on first report, once recipients are resolved
+  successCount: number;
+  failedList: BroadcastFailedEntry[];
+  status?: "finished" | "failed"; // omitted for heartbeat-only updates
+  errorMessage?: string;
+  lastProcessedId?: string | null; // omitted = leave stored cursor unchanged
+}

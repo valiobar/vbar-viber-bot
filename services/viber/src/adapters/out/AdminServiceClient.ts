@@ -11,7 +11,11 @@
 import { IAdminServiceClient } from "../../ports/out/IAdminServiceClient";
 import { BotSettings } from "../../application/types/BotSettings";
 import { getViberConfig } from "../../config/viber";
-import type { ApiResponse } from "@vbar/shared";
+import type {
+  ApiResponse,
+  BroadcastDTO,
+  BroadcastProgressUpdate,
+} from "@vbar/shared";
 import type {
   StepDTO,
   MessageDTO,
@@ -162,6 +166,57 @@ export class AdminServiceClient implements IAdminServiceClient {
       "carousels",
       "Failed to fetch carousels"
     );
+  }
+
+  /**
+   * Atomically claim one due broadcast. No retry — a failed poll waits for the next tick.
+   */
+  async claimBroadcast(instanceId: string): Promise<BroadcastDTO | null> {
+    const response = await this.fetchWithTimeout(
+      `${this.baseUrl}/api/broadcasts/claim`,
+      {
+        method: "POST",
+        headers: this.buildHeaders(),
+        body: JSON.stringify({ instanceId }),
+      }
+    );
+    if (!response.ok) {
+      throw new Error(`Broadcast claim failed with status ${response.status}`);
+    }
+    const data = (await response.json()) as ApiResponse<{
+      broadcast: BroadcastDTO | null;
+    }>;
+    if (!data.data) {
+      throw new Error(
+        data.error
+          ? `Admin service error: ${data.error.message}`
+          : "Invalid claim response"
+      );
+    }
+    return data.data.broadcast;
+  }
+
+  /**
+   * Heartbeat / counters / terminal status. No retry — the next batch heartbeat supersedes it.
+   * A 500 with "invalid lock" means another instance re-claimed this broadcast — caller must stop.
+   */
+  async reportBroadcastProgress(
+    broadcastId: string,
+    update: BroadcastProgressUpdate
+  ): Promise<void> {
+    const response = await this.fetchWithTimeout(
+      `${this.baseUrl}/api/broadcasts/${broadcastId}/progress`,
+      {
+        method: "PATCH",
+        headers: this.buildHeaders(),
+        body: JSON.stringify(update),
+      }
+    );
+    if (!response.ok) {
+      throw new Error(
+        `Broadcast progress report failed with status ${response.status}`
+      );
+    }
   }
 
   /**

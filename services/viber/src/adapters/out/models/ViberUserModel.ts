@@ -82,6 +82,8 @@ const viberUserSchema = new Schema<IViberUserDocument>(
   }
 );
 
+viberUserSchema.index({ subscribed: 1, _id: 1 });
+
 /**
  * ViberUser Mongoose Model
  */

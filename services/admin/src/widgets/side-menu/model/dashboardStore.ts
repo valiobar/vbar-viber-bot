@@ -55,6 +55,11 @@ export const DEFAULT_TOOLS: Tool[] = [
     route: "/steps",
   },
   {
+    id: "broadcasts",
+    label: "Broadcasts",
+    route: "/broadcasts",
+  },
+  {
     id: "knowledge-base",
     label: "Knowledge Base",
     route: "/knowledge-base",

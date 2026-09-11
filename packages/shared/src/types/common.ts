@@ -96,5 +96,6 @@ export interface RefreshEvent {
     | "messages"
     | "keyboards"
     | "carousels"
-    | "bot_settings";
+    | "bot_settings"
+    | "broadcasts";
 }
