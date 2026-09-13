@@ -28,7 +28,11 @@ export interface CustomStepContext {
   userProfile: any;
   /** Bot data lookups (steps, messages, keyboards, carousels) */
   botDataService: BotDataService;
-  /** User persistence (e.g. updateCurrentStep) */
+  /**
+   * User persistence. Use `findByViberId` to read `user.state`,
+   * `updateState` to shallow-merge keys into it, `clearState` to wipe it,
+   * `updateCurrentStep` for the step pointer.
+   */
   userRepository: IUserRepository;
   /** Button prefix from bot settings, if configured */
   buttonPrefix?: string | null;

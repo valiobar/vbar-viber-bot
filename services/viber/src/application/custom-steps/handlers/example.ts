@@ -19,7 +19,10 @@ import { CustomStepHandler } from "../types";
  * Sends a runtime-built text message greeting the user by name.
  */
 export const exampleHandler: CustomStepHandler = async (ctx) => {
-  const { step, bot, userProfile, logger } = ctx;
+  const { step, bot, userProfile, userRepository, logger } = ctx;
+
+  const user = await userRepository.findByViberId(userProfile.id);
+  const state = user?.state ?? {};
 
   const userName = userProfile.name || "there";
   const text = `Hello ${userName}! This is the "example" custom step handler (step: ${step.humanReadableName}).`;
@@ -29,5 +32,6 @@ export const exampleHandler: CustomStepHandler = async (ctx) => {
   logger.info("Example custom step handler executed", {
     stepId: step.id,
     userId: userProfile.id,
+    stateKeys: Object.keys(state),
   });
 };

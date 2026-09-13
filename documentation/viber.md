@@ -232,11 +232,41 @@ The proto response is a single field: `response` (string). AI also computes `mod
 `ViberAiService`:
 
 - If `AI_THINKING_GIF_URL` is a non-empty public HTTPS URL, first sends a keyboard-only `Message.Keyboard` (no chat bubble) with one button (6 columns × 2 rows, `BgMediaType: gif`, `ActionType: none`, `InputFieldState: hidden`). SVG is not a valid Viber `BgMediaType`.
-- On a non-empty `response`, sends the AI text with the step keyboard restored (converted via `KeyboardConverter` + `buttonsPrefix`). If the step has no keyboard, a dismiss keyboard (`InputFieldState: regular`, one silent `none` button) replaces the GIF.
+- On a non-empty `response`, first tries to parse it as a **carousel directive** (see below); otherwise sends the AI text with the step keyboard restored (converted via `KeyboardConverter` + `buttonsPrefix`). If the step has no keyboard, a dismiss keyboard (`InputFieldState: regular`, one silent `none` button) replaces the GIF.
 - On an empty/missing `response`, or on gRPC / network errors: if a thinking keyboard was sent, sends another keyboard-only message with the same restore keyboard so the GIF does not persist. If no thinking keyboard was sent, behaviour is unchanged (log only).
 - Errors are still swallowed; the type-specific handler is not run.
 
 There is no deadline on the gRPC call. A hung AI process holds the webhook handler until Node or a proxy times out.
+
+### AI carousel directive
+
+The AI reply is still a single string, but `ViberAiService` interprets a JSON object of this shape as an instruction to render a dynamically generated carousel (`src/application/services/AiCarouselDirective.ts`):
+
+```json
+{
+  "type": "carousel",
+  "text": "optional intro text",
+  "cards": [
+    {
+      "title": "Rila Monastery",
+      "description": "10th-century monastery in the Rila mountains",
+      "image": "https://example.com/rila.jpg",
+      "buttons": [
+        { "text": "Open map", "actionType": "open-url", "actionBody": "https://maps.google.com/..." },
+        { "text": "Tell me more", "actionType": "reply", "actionBody": "Tell me more about Rila Monastery" }
+      ]
+    }
+  ]
+}
+```
+
+Behaviour:
+
+- `parseAiCarouselDirective` strips markdown code fences, then requires `type: "carousel"` and at least one renderable card (a card needs a `title` or an `image`; invalid cards/buttons are dropped, max 6 cards). Anything else — including a directive that validates to zero cards — falls back to the plain-text send, so a malformed model answer never silences the bot.
+- `buildRichMediaFromCards` emits a `rich_media` payload (`ButtonsGroupColumns: 6`) with a uniform per-card layout: image (3 rows, when any card has one), title, description, then one row per action button — padded with filler cells and capped at Viber's 7-row limit.
+- The send is `[optional Message.Text intro] + Message.RichMedia` with the restore keyboard attached to the rich-media message (`minApiVersion` 7.2).
+- `reply` buttons carry **no** `buttonsPrefix`, so a tap routes the `actionBody` text back to the AI as a normal user message (follow-up questions). `open-url` buttons open the URL. Other action types are not allowed.
+- The directive contract and the prompt instructions that produce it are documented in [ai.md](./ai.md).
 
 ### Transport and addressing
 

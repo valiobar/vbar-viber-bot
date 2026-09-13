@@ -30,7 +30,8 @@ const carouselButtonSchema = createButtonSchema(7);
 
 const carouselCtaSchema = new Schema(
   {
-    text: { type: String, required: true },
+    // Optional: Viber allows buttons without text (e.g. color-only CTA)
+    text: { type: String, default: "" },
     textColor: {
       type: String,
       required: true,

@@ -102,9 +102,7 @@ const collectCardErrors = (
         "No rows left for the image — reduce text rows or CTA buttons";
     }
     card.ctaButtons.forEach((cta, j) => {
-      if (!cta.text.trim()) {
-        cardErrors[`card-${index}-cta-${j}-text`] = "CTA text is required";
-      }
+      // CTA text is optional (Viber allows buttons without text)
       if (cta.actionType !== "none" && !cta.actionBody.trim()) {
         cardErrors[`card-${index}-cta-${j}-actionBody`] =
           "Action body is required";
@@ -126,9 +124,7 @@ const collectCardErrors = (
       cardErrors[`card-${index}-button-${j}-rows`] =
         `Rows must be 1-${groupRows}`;
     }
-    if (!button.Text.trim()) {
-      cardErrors[`card-${index}-button-${j}-text`] = "Button text is required";
-    }
+    // Button text is optional (Viber allows image-only buttons)
     if (button.ActionType !== "none" && !button.ActionBody.trim()) {
       cardErrors[`card-${index}-button-${j}-actionBody`] =
         "Action body is required";

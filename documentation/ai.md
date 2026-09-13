@@ -193,6 +193,48 @@ The call chain is unchanged (`MessageHandler` → `ViberAiService.handleMessage`
 
 Failure behaviour: `ViberAiService` still catches everything, logs, and does not rethrow. The restore keyboard is sent only when a thinking keyboard was already sent (so the GIF is replaced). If the thinking indicator was skipped or failed to send, a down AI service still produces no user reply. Viber also never sets `taskType`, so chain selection is entirely an AI-service env concern.
 
+#### Carousel directive (viber-side interpretation)
+
+The gRPC contract is unchanged — the reply is one string. Viber, however, parses every non-empty reply for a JSON **carousel directive** and renders it as a Viber rich-media carousel instead of a text bubble (`services/viber/src/application/services/AiCarouselDirective.ts`; render details in [viber.md](./viber.md)). The AI service needs no code change: whether the model produces the directive is purely prompt-template content.
+
+Directive schema the model must emit (as its ENTIRE reply):
+
+```json
+{
+  "type": "carousel",
+  "text": "optional intro sentence",
+  "cards": [
+    {
+      "title": "Item name",
+      "description": "one short sentence",
+      "image": "https://... (optional)",
+      "buttons": [
+        { "text": "Open map", "actionType": "open-url", "actionBody": "https://..." },
+        { "text": "Tell me more", "actionType": "reply", "actionBody": "Tell me more about Item name" }
+      ]
+    }
+  ]
+}
+```
+
+Ready-to-paste block for a managed prompt template (per-step via `StepDTO.aiPromptName`, or the RAG/simple template):
+
+```text
+When your answer recommends or lists multiple concrete items (places, tours, events, options),
+respond with ONLY a JSON object in exactly this shape and nothing else — no markdown, no code
+fences, no text before or after:
+
+{"type":"carousel","text":"<one short intro sentence>","cards":[{"title":"<item name>","description":"<one short sentence>","image":"<https image URL, omit this key if unknown>","buttons":[{"text":"<label>","actionType":"open-url","actionBody":"<https URL>"},{"text":"Tell me more","actionType":"reply","actionBody":"Tell me more about <item name>"}]}]}
+
+Rules:
+- At most 6 cards; every card needs at least a "title".
+- Include "image" only when a real image URL appears in the provided context — never invent URLs.
+- "actionType" is "reply" or "open-url" only. A "reply" button sends its actionBody back to you as the user's next message.
+- For a normal single answer, reply with plain text as usual (no JSON).
+```
+
+Caveat: `executeSimpleChain` appends a hard "under 700 characters" instruction, which pushes the model toward fewer cards. Acceptable for now; relaxing the cap for carousel prompts would be an AI-side change. Viber's parser strips code fences defensively, and any reply that is not a valid directive (or validates to zero cards) is sent as plain text.
+
 ### Admin service — REST (knowledge base)
 
 `services/admin/src/app/api/knowledge-base/**` are thin proxies over `forwardToAiService` (`src/lib/aiService.ts`). Each route forwards to `AI_SERVICE_URL` (default `http://localhost:3002`) with an `X-Service-Token` header and passes the AI body and status through unchanged. Admin owns no knowledge-base data.

@@ -5,14 +5,17 @@
  * Implements prefix-based step triggering:
  * - Checks if message contains buttonsPrefix
  * - Removes prefix if present
- * - Finds matching steps by trigger (case-insensitive)
+ * - If cleaned text is a JSON object: merge non-trigger keys into user state,
+ *   then dispatch by the `trigger` property
+ * - Otherwise find matching steps by the whole cleaned text (case-insensitive)
  * - Sends first matching step to user
  *
  * Location: Application Layer (Hexagonal Architecture)
  */
 import { Message } from "viber-bot";
-import { Logger } from "@vbar/shared";
+import { Logger, StepDTO } from "@vbar/shared";
 import { ViberBotService } from "../../services/ViberBotService";
+import { BotDataService } from "../../services/BotDataService";
 import { StepSender } from "../../services/StepSender";
 import { IUserRepository } from "../../../ports/out/IUserRepository";
 
@@ -100,37 +103,59 @@ export class TextMessageHandler {
         return;
       }
 
-      // Normalize cleaned text to lowercase for matching
-      const normalizedCleanedText = cleanedText.toLowerCase();
-
-      // Get BotDataService to find matching steps
       const botDataService = this.viberBotService.getBotDataService();
+      const bot = this.viberBotService.getBot();
 
-      // Try exact match first (in case triggers are stored in lowercase)
-      let matchingSteps = botDataService.getStepsByTrigger(
-        normalizedCleanedText
-      );
+      // --- JSON payload path (palms-style button replies) ---
+      const jsonPayload = this.parseJsonPayload(cleanedText);
+      if (jsonPayload) {
+        const { trigger, ...statePatch } = jsonPayload;
 
-      // If no exact match, try case-insensitive matching by iterating through all steps
-      if (matchingSteps.length === 0) {
-        const stepsData = botDataService.getStepsData();
-        if (stepsData) {
-          for (const step of stepsData.steps.values()) {
-            // Check if any trigger matches (case-insensitive)
-            for (const trigger of step.trigger) {
-              if (trigger.toLowerCase() === normalizedCleanedText) {
-                matchingSteps.push(step);
-                break; // Found a match for this step, move to next step
-              }
-            }
-          }
+        // Merge non-trigger keys into user state BEFORE sending the step
+        if (Object.keys(statePatch).length > 0) {
+          await this.userRepository.updateState(userProfile.id, statePatch);
+          this.logger.info("Merged JSON payload into user state", {
+            userId: userProfile.id,
+            keys: Object.keys(statePatch),
+          });
         }
+
+        if (typeof trigger === "string" && trigger.trim() !== "") {
+          const matchingSteps = this.matchStepsByTrigger(
+            trigger.trim().toLowerCase(),
+            botDataService
+          );
+          if (matchingSteps.length > 0) {
+            await this.stepSender.sendStep(
+              matchingSteps[0].id,
+              bot,
+              userProfile,
+              botDataService,
+              buttonsPrefix,
+              { source: "trigger", trigger: trigger.trim() }
+            );
+          } else {
+            this.logger.warn("No step found matching JSON payload trigger", {
+              userId: userProfile.id,
+              trigger,
+            });
+          }
+        } else {
+          this.logger.warn("JSON payload has no trigger property", {
+            userId: userProfile.id,
+          });
+        }
+        return;
       }
 
-      // If steps found, send the first matching step
+      // --- Existing plain trigger path ---
+      const normalizedCleanedText = cleanedText.toLowerCase();
+      const matchingSteps = this.matchStepsByTrigger(
+        normalizedCleanedText,
+        botDataService
+      );
       if (matchingSteps.length > 0) {
         const stepToSend = matchingSteps[0];
-        const bot = this.viberBotService.getBot();
 
         this.logger.info("Found matching step, sending to user", {
           userId: userProfile.id,
@@ -161,5 +186,46 @@ export class TextMessageHandler {
         userId: userProfile.id,
       });
     }
+  }
+
+  /**
+   * Parse text as a JSON object payload (palms IsJsonString equivalent).
+   * Returns the object or null if not valid JSON / not a plain object.
+   */
+  private parseJsonPayload(text: string): Record<string, any> | null {
+    try {
+      const parsed = JSON.parse(text);
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+        return parsed as Record<string, any>;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Find steps whose trigger[] matches the given normalized (lowercase) text.
+   * Exact map lookup first, then a case-insensitive scan of all steps.
+   */
+  private matchStepsByTrigger(
+    normalizedTrigger: string,
+    botDataService: BotDataService
+  ): StepDTO[] {
+    let matchingSteps = botDataService.getStepsByTrigger(normalizedTrigger);
+    if (matchingSteps.length === 0) {
+      const stepsData = botDataService.getStepsData();
+      if (stepsData) {
+        for (const step of stepsData.steps.values()) {
+          for (const trigger of step.trigger) {
+            if (trigger.toLowerCase() === normalizedTrigger) {
+              matchingSteps.push(step);
+              break;
+            }
+          }
+        }
+      }
+    }
+    return matchingSteps;
   }
 }

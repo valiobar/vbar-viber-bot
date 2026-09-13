@@ -439,7 +439,7 @@ export const CardEditor = ({
                     htmlFor={`card-${index}-cta-${ctaIndex}-text`}
                     className="block text-sm font-medium text-gray-700 dark:text-gray-300"
                   >
-                    Text <span className="text-red-500">*</span>
+                    Text (Optional)
                   </label>
                   <input
                     type="text"

@@ -11,6 +11,10 @@ import { ConfigHelper, Logger } from "@vbar/shared";
 import { IAiServiceClient } from "../../ports/out/IAiServiceClient";
 import { Bot, Message } from "viber-bot";
 import { buildDismissKeyboard, buildThinkingKeyboard } from "./thinkingKeyboard";
+import {
+  buildRichMediaFromCards,
+  parseAiCarouselDirective,
+} from "./AiCarouselDirective";
 
 const MIN_API_VERSION = 7.2;
 
@@ -119,6 +123,54 @@ export class ViberAiService {
             });
           }
         }
+        return;
+      }
+
+      // Carousel directive path: a JSON reply renders as rich media
+      const directive = parseAiCarouselDirective(text);
+      if (!directive && text.includes('"carousel"')) {
+        this.logger.warn(
+          "ViberAiService - reply looks like a carousel directive but failed to parse/validate, sending as text",
+          {
+            userId,
+            stepId,
+            replyPreview: text.slice(0, 300),
+          }
+        );
+      }
+      if (directive) {
+        const richMedia = buildRichMediaFromCards(directive.cards);
+        const messages: any[] = [];
+        if (directive.text) {
+          messages.push(
+            new (Message.Text as any)(
+              directive.text,
+              null,
+              null,
+              null,
+              null,
+              MIN_API_VERSION
+            )
+          );
+        }
+        // Message.RichMedia(richMedia, keyboard, trackingData, timestamp, token, minApiVersion)
+        // Rich media requires min_api_version >= 7; MIN_API_VERSION (7.2) satisfies it
+        messages.push(
+          new (Message.RichMedia as any)(
+            richMedia,
+            followUpKeyboard,
+            null,
+            null,
+            null,
+            MIN_API_VERSION
+          )
+        );
+        await bot.sendMessage(userProfile, messages);
+        this.logger.info("ViberAiService - AI carousel response sent to user", {
+          userId,
+          stepId,
+          cardCount: directive.cards.length,
+        });
         return;
       }
 

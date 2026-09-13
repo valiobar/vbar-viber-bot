@@ -7,6 +7,7 @@ export enum AIProvider {
   OLLAMA = "ollama",
   ANTHROPIC = "anthropic",
   GOOGLE = "google",
+  DEEPSEEK = "deepseek",
 }
 
 /**
@@ -27,9 +28,11 @@ export function parseAIProvider(value: string): AIProvider {
       return AIProvider.ANTHROPIC;
     case "google":
       return AIProvider.GOOGLE;
+    case "deepseek":
+      return AIProvider.DEEPSEEK;
     default:
       throw new Error(
-        `Unsupported AI provider: ${value}. Supported providers: openai, ollama, anthropic, google`
+        `Unsupported AI provider: ${value}. Supported providers: openai, ollama, anthropic, google, deepseek`
       );
   }
 }

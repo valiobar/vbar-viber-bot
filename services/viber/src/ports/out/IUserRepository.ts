@@ -87,4 +87,23 @@ export interface IUserRepository {
     viberId: string,
     stepId: string | null
   ): Promise<ViberUser | null>;
+
+  /**
+   * Shallow-merge a patch into the user's flow state.
+   * Existing keys not present in the patch are preserved.
+   * @param viberId - The Viber user ID
+   * @param statePatch - Key/value pairs to merge into state
+   * @returns The updated user entity or null if not found
+   */
+  updateState(
+    viberId: string,
+    statePatch: Record<string, any>
+  ): Promise<ViberUser | null>;
+
+  /**
+   * Replace the user's flow state with an empty object.
+   * @param viberId - The Viber user ID
+   * @returns The updated user entity or null if not found
+   */
+  clearState(viberId: string): Promise<ViberUser | null>;
 }

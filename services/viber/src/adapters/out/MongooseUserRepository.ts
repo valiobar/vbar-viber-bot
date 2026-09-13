@@ -294,6 +294,78 @@ export class MongooseUserRepository implements IUserRepository {
   }
 
   /**
+   * Shallow-merge a patch into the user's flow state
+   */
+  async updateState(
+    viberId: string,
+    statePatch: Record<string, any>
+  ): Promise<ViberUser | null> {
+    try {
+      this.logger.debug("Updating user state", {
+        viberId,
+        keys: Object.keys(statePatch),
+      });
+
+      if (Object.keys(statePatch).length === 0) {
+        return this.findByViberId(viberId);
+      }
+
+      // Dotted paths: atomic shallow merge, preserves other state keys
+      const setOps: Record<string, any> = {};
+      for (const [key, value] of Object.entries(statePatch)) {
+        setOps[`state.${key}`] = value;
+      }
+
+      const doc = await ViberUserModel.findOneAndUpdate(
+        { viberId },
+        { $set: setOps },
+        { new: true }
+      ).exec();
+
+      if (!doc) {
+        this.logger.debug("User not found for state update", { viberId });
+        return null;
+      }
+
+      return this.toDomainEntity(doc);
+    } catch (error) {
+      this.logger.error("Error updating user state", {
+        viberId,
+        error: error instanceof Error ? error : new Error(String(error)),
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Replace the user's flow state with an empty object
+   */
+  async clearState(viberId: string): Promise<ViberUser | null> {
+    try {
+      this.logger.debug("Clearing user state", { viberId });
+
+      const doc = await ViberUserModel.findOneAndUpdate(
+        { viberId },
+        { $set: { state: {} } },
+        { new: true }
+      ).exec();
+
+      if (!doc) {
+        this.logger.debug("User not found for state clear", { viberId });
+        return null;
+      }
+
+      return this.toDomainEntity(doc);
+    } catch (error) {
+      this.logger.error("Error clearing user state", {
+        viberId,
+        error: error instanceof Error ? error : new Error(String(error)),
+      });
+      throw error;
+    }
+  }
+
+  /**
    * Convert Mongoose document to ViberUser domain entity
    */
   private toDomainEntity(doc: IViberUserDocument): ViberUser {

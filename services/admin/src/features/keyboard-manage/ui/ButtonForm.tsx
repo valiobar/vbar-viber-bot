@@ -6,6 +6,7 @@
  * Form for editing button properties
  */
 
+import { useState, type KeyboardEvent } from "react";
 import type {
   ActionType,
   ButtonDTO,
@@ -13,6 +14,25 @@ import type {
   TextSize,
   TextVAlign,
 } from "@/entities/keyboard";
+
+const parseJsonObject = (text: string): Record<string, unknown> | null => {
+  try {
+    const parsed = JSON.parse(text);
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+};
+
+const parseValue = (raw: string): unknown => {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+};
 
 interface ButtonFormProps {
   /**
@@ -41,6 +61,49 @@ interface ButtonFormProps {
 }
 
 export const ButtonForm = ({ button, index, errors, onUpdate }: ButtonFormProps) => {
+  const [newKey, setNewKey] = useState("");
+  const [newValue, setNewValue] = useState("");
+  const jsonPayload = button.isJson ? parseJsonObject(button.ActionBody) ?? {} : {};
+
+  const handleToggleJson = (checked: boolean) => {
+    if (!checked) {
+      onUpdate({ isJson: false });
+      return;
+    }
+    if (!parseJsonObject(button.ActionBody)) {
+      onUpdate({ isJson: true, ActionBody: JSON.stringify({ trigger: "" }) });
+      return;
+    }
+    onUpdate({ isJson: true });
+  };
+
+  const updatePayload = (payload: Record<string, unknown>) => {
+    onUpdate({ ActionBody: JSON.stringify(payload) });
+  };
+
+  const handleAddProperty = () => {
+    if (!newKey.trim() || newKey.trim() === "trigger") return;
+    updatePayload({ ...jsonPayload, [newKey.trim()]: parseValue(newValue) });
+    setNewKey("");
+    setNewValue("");
+  };
+
+  const handleRemoveProperty = (key: string) => {
+    const { [key]: _removed, ...rest } = jsonPayload;
+    updatePayload(rest);
+  };
+
+  const handleTriggerChange = (value: string) => {
+    updatePayload({ ...jsonPayload, trigger: value });
+  };
+
+  const handlePropertyKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      handleAddProperty();
+    }
+  };
+
   return (
     <div className="mt-4 space-y-4 border-t border-gray-200 pt-4 dark:border-gray-700">
       {/* Basic Properties */}
@@ -110,7 +173,7 @@ export const ButtonForm = ({ button, index, errors, onUpdate }: ButtonFormProps)
           htmlFor={`button-${index}-text`}
           className="block text-sm font-medium text-gray-700 dark:text-gray-300"
         >
-          Text <span className="text-red-500">*</span>
+          Text (Optional)
         </label>
         <input
           type="text"
@@ -216,63 +279,168 @@ export const ButtonForm = ({ button, index, errors, onUpdate }: ButtonFormProps)
       </div>
 
       {/* Action Type and Action Body */}
-      <div className="grid grid-cols-2 gap-4">
-        {/* Action Type */}
-        <div>
-          <label
-            htmlFor={`button-${index}-actionType`}
-            className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-          >
-            Action Type <span className="text-red-500">*</span>
-          </label>
-          <select
-            id={`button-${index}-actionType`}
-            value={button.ActionType}
-            onChange={(e) =>
-              onUpdate({ ActionType: e.target.value as ActionType })
-            }
-            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-          >
-            <option value="reply">Reply</option>
-            <option value="open-url">Open URL</option>
-            <option value="location-picker">Location Picker</option>
-            <option value="share-phone">Share Phone</option>
-            <option value="none">None</option>
-          </select>
-        </div>
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          {/* Action Type */}
+          <div>
+            <label
+              htmlFor={`button-${index}-actionType`}
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >
+              Action Type <span className="text-red-500">*</span>
+            </label>
+            <select
+              id={`button-${index}-actionType`}
+              value={button.ActionType}
+              onChange={(e) =>
+                onUpdate({ ActionType: e.target.value as ActionType })
+              }
+              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+            >
+              <option value="reply">Reply</option>
+              <option value="open-url">Open URL</option>
+              <option value="location-picker">Location Picker</option>
+              <option value="share-phone">Share Phone</option>
+              <option value="none">None</option>
+            </select>
+            {button.ActionType === "reply" && (
+              <label className="mt-3 flex items-center">
+                <input
+                  type="checkbox"
+                  id={`button-${index}-isJson`}
+                  checked={button.isJson}
+                  onChange={(e) => handleToggleJson(e.target.checked)}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600"
+                  data-testid={`button-${index}-isJson`}
+                />
+                <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                  Is JSON (trigger + user state payload)
+                </span>
+              </label>
+            )}
+          </div>
 
-        {/* Action Body */}
-        <div>
-          <label
-            htmlFor={`button-${index}-actionBody`}
-            className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-          >
-            Action Body <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            id={`button-${index}-actionBody`}
-            value={button.ActionBody}
-            onChange={(e) => onUpdate({ ActionBody: e.target.value })}
-            className={`mt-1 block w-full rounded-md border px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 dark:bg-gray-700 dark:text-white ${
-              errors[`button-${index}-actionBody`]
-                ? "border-red-500"
-                : "border-gray-300 dark:border-gray-600"
-            }`}
-            placeholder={
-              button.ActionType === "reply"
-                ? "Reply text"
-                : button.ActionType === "open-url"
-                ? "URL"
-                : "Action body"
-            }
-          />
-          {errors[`button-${index}-actionBody`] && (
-            <p className="mt-1 text-sm text-red-600 dark:text-red-400">
-              {errors[`button-${index}-actionBody`]}
-            </p>
+          {/* Action Body — plain input when not editing a JSON payload */}
+          {!(button.ActionType === "reply" && button.isJson) && (
+            <div>
+              <label
+                htmlFor={`button-${index}-actionBody`}
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+              >
+                Action Body <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                id={`button-${index}-actionBody`}
+                value={button.ActionBody}
+                onChange={(e) => onUpdate({ ActionBody: e.target.value })}
+                className={`mt-1 block w-full rounded-md border px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 dark:bg-gray-700 dark:text-white ${
+                  errors[`button-${index}-actionBody`]
+                    ? "border-red-500"
+                    : "border-gray-300 dark:border-gray-600"
+                }`}
+                placeholder={
+                  button.ActionType === "reply"
+                    ? "Reply text"
+                    : button.ActionType === "open-url"
+                    ? "URL"
+                    : "Action body"
+                }
+              />
+              {errors[`button-${index}-actionBody`] && (
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+                  {errors[`button-${index}-actionBody`]}
+                </p>
+              )}
+            </div>
           )}
         </div>
+
+        {button.ActionType === "reply" && button.isJson && (
+          <div className="space-y-3" data-testid={`button-${index}-jsonEditor`}>
+            <div>
+              <label
+                htmlFor={`button-${index}-jsonTrigger`}
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+              >
+                Trigger <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                id={`button-${index}-jsonTrigger`}
+                value={
+                  typeof jsonPayload.trigger === "string"
+                    ? jsonPayload.trigger
+                    : ""
+                }
+                onChange={(e) => handleTriggerChange(e.target.value)}
+                placeholder="Step trigger (required)"
+                className={`mt-1 block w-full rounded-md border px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 dark:bg-gray-700 dark:text-white ${
+                  errors[`button-${index}-actionBody`]
+                    ? "border-red-500"
+                    : "border-gray-300 dark:border-gray-600"
+                }`}
+                aria-label="JSON payload trigger"
+              />
+            </div>
+
+            {Object.entries(jsonPayload)
+              .filter(([key]) => key !== "trigger")
+              .map(([key, value]) => (
+                <div key={key} className="flex items-center space-x-2">
+                  <span className="flex-1 text-sm text-gray-700 dark:text-gray-300">
+                    {key}: {JSON.stringify(value)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveProperty(key)}
+                    aria-label={`Remove property ${key}`}
+                    className="rounded px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+
+            <div className="flex space-x-2">
+              <input
+                type="text"
+                value={newKey}
+                onChange={(e) => setNewKey(e.target.value)}
+                onKeyDown={handlePropertyKeyDown}
+                placeholder="Property"
+                aria-label="New JSON property name"
+                className="flex-1 rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+              />
+              <input
+                type="text"
+                value={newValue}
+                onChange={(e) => setNewValue(e.target.value)}
+                onKeyDown={handlePropertyKeyDown}
+                placeholder="Value"
+                aria-label="New JSON property value"
+                className="flex-1 rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+              />
+              <button
+                type="button"
+                onClick={handleAddProperty}
+                aria-label="Add JSON property"
+                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:bg-blue-700 dark:hover:bg-blue-800"
+              >
+                Add Property
+              </button>
+            </div>
+
+            <pre className="overflow-x-auto rounded-md bg-gray-100 p-3 text-xs text-gray-800 dark:bg-gray-900 dark:text-gray-200">
+              {button.ActionBody}
+            </pre>
+            {errors[`button-${index}-actionBody`] && (
+              <p className="text-sm text-red-600 dark:text-red-400">
+                {errors[`button-${index}-actionBody`]}
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Background Media URL and Scale Type */}
