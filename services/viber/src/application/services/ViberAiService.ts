@@ -153,12 +153,12 @@ export class ViberAiService {
             )
           );
         }
-        // Message.RichMedia(richMedia, keyboard, trackingData, timestamp, token, minApiVersion)
-        // Rich media requires min_api_version >= 7; MIN_API_VERSION satisfies it
+        // viber-bot: RichMedia(richMedia, keyboard, trackingData, timestamp, token, altText, minApiVersion)
         messages.push(
           new (Message.RichMedia as any)(
             richMedia,
             followUpKeyboard,
+            null,
             null,
             null,
             null,

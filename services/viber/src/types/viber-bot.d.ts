@@ -167,6 +167,7 @@ declare module "viber-bot" {
         trackingData?: any,
         timestamp?: any,
         token?: any,
+        altText?: string | null,
         minApiVersion?: number
       );
       richMedia: any;
