@@ -91,7 +91,7 @@ export class BroadcastSender {
     const sdkMessages = this.messageConverter.convertToViberMessages(
       messageDTOs,
       keyboard,
-      7.2
+      7
     );
     if (sdkMessages.length === 0) {
       throw new Error(`Broadcast step ${stepId} has no sendable messages`);

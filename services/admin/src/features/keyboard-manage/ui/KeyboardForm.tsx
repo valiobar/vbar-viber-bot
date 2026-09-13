@@ -17,6 +17,10 @@ import {
   type KeyboardDTO,
   type UpdateKeyboardInput,
 } from "@/entities/keyboard";
+import {
+  resolveButtonColors,
+  useBotSettingsStore,
+} from "@/entities/bot-settings";
 import { reorderButtons } from "../lib/reorderButtons";
 import { ButtonForm } from "./ButtonForm";
 import { ButtonsList } from "./ButtonsList";
@@ -53,15 +57,14 @@ interface KeyboardFormProps {
 /**
  * Default button data for new buttons
  */
-const getDefaultButton = (): Omit<
-  ButtonDTO,
-  "id" | "createdAt" | "updatedAt"
-> => ({
+const getDefaultButton = (
+  colors: { BgColor: string | null; TextColor: string }
+): Omit<ButtonDTO, "id" | "createdAt" | "updatedAt"> => ({
   Columns: 1,
   Rows: 1,
   Text: "",
-  TextColor: "#000000",
-  BgColor: null,
+  TextColor: colors.TextColor,
+  BgColor: colors.BgColor,
   BgMedia: null,
   BgMediaType: "picture",
   BgMediaScaleType: "fit",
@@ -109,6 +112,12 @@ export const KeyboardForm = ({
   const [editingButtonIndex, setEditingButtonIndex] = useState<number | null>(
     null
   );
+  const settings = useBotSettingsStore((state) => state.settings);
+  const loadBotSettings = useBotSettingsStore((state) => state.load);
+
+  useEffect(() => {
+    void loadBotSettings();
+  }, [loadBotSettings]);
 
   // Initialize form with initial data
   useEffect(() => {
@@ -296,7 +305,7 @@ export const KeyboardForm = ({
    */
   const handleAddButton = () => {
     const newButton = {
-      ...getDefaultButton(),
+      ...getDefaultButton(resolveButtonColors(settings)),
       tempId: `btn-${Date.now()}`,
     };
     setEditingButton(newButton);

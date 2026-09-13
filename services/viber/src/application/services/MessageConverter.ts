@@ -11,6 +11,23 @@ import { Message } from "viber-bot";
 import { MessageDTO } from "../types/DTOs";
 import { Logger, ConsoleLogger } from "@vbar/shared";
 
+/** InputFieldState is API level 4; Viber docs require an integer min_api_version. */
+const KEYBOARD_MIN_API_VERSION = 7;
+
+const resolveMinApiVersion = (
+  keyboard: unknown,
+  requested?: number
+): number => {
+  const requestedInt =
+    typeof requested === "number" && Number.isFinite(requested)
+      ? Math.floor(requested)
+      : 1;
+  if (!keyboard) {
+    return Math.max(1, requestedInt);
+  }
+  return Math.max(KEYBOARD_MIN_API_VERSION, requestedInt);
+};
+
 /**
  * Message Converter Service
  *
@@ -48,12 +65,9 @@ export class MessageConverter {
     | Message.Url
     | Message.RichMedia {
     const content = messageDTO.content as any;
-    // InputFieldState requires API version 7.2.0 or higher
-    // If keyboard has InputFieldState, ensure minApiVersion is at least 7.2
-    const requiredApiVersion =
-      keyboard?.InputFieldState && (!minApiVersion || minApiVersion < 7.2)
-        ? 7.2
-        : minApiVersion || 1;
+    // Viber requires an integer min_api_version. InputFieldState is API level 4;
+    // send at least 7 whenever a keyboard is attached so hidden/minimized is honored.
+    const apiVersionParam = resolveMinApiVersion(keyboard, minApiVersion);
 
     try {
       let message:
@@ -66,12 +80,6 @@ export class MessageConverter {
         | Message.Sticker
         | Message.Url
         | Message.RichMedia;
-
-      // Pass minApiVersion as the last constructor parameter
-      // Constructor signature: (content, keyboard, trackingData, timestamp, token, minApiVersion)
-      // For InputFieldState support, we need minApiVersion >= 7.2
-      const apiVersionParam =
-        requiredApiVersion >= 7.2 ? requiredApiVersion : undefined;
 
       switch (messageDTO.type) {
         case "text": {
@@ -216,8 +224,7 @@ export class MessageConverter {
               "rich-media message requires a resolved 'richMedia' object in content (carousel missing?)"
             );
           }
-          // Rich media requires min_api_version >= 7
-          const richMediaApiVersion = Math.max(requiredApiVersion, 7);
+          const richMediaApiVersion = Math.max(apiVersionParam, 7);
           // Message.RichMedia(richMedia, keyboard, trackingData, timestamp, token, minApiVersion)
           message = new (Message.RichMedia as any)(
             richMedia,

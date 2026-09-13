@@ -7,7 +7,12 @@
  * Custom mode: free-form button grid with CarouselButtonForm.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import {
+  resolveButtonColors,
+  resolveCtaColors,
+  useBotSettingsStore,
+} from "@/entities/bot-settings";
 import type {
   ButtonDTO,
   CarouselCardDTO,
@@ -34,24 +39,30 @@ interface CardEditorProps {
   onUpdate: (updates: Partial<CarouselCardDTO>) => void;
 }
 
-const getDefaultCta = (): EditableCta => ({
+const getDefaultCta = (colors: {
+  bgColor: string;
+  textColor: string;
+}): EditableCta => ({
   tempId: newTempId("cta"),
   text: "",
-  textColor: "#FFFFFF",
-  bgColor: "#7360F2",
+  textColor: colors.textColor,
+  bgColor: colors.bgColor,
   actionType: "reply",
   actionBody: "",
   openURLType: "external",
   silent: false,
 });
 
-const getDefaultButton = (groupColumns: number): FormButton => ({
+const getDefaultButton = (
+  groupColumns: number,
+  colors: { BgColor: string | null; TextColor: string }
+): FormButton => ({
   tempId: newTempId("btn"),
   Columns: groupColumns,
   Rows: 1,
   Text: "",
-  TextColor: "#000000",
-  BgColor: null,
+  TextColor: colors.TextColor,
+  BgColor: colors.BgColor,
   BgMedia: null,
   BgMediaType: "picture",
   BgMediaScaleType: "fit",
@@ -163,6 +174,13 @@ export const CardEditor = ({
   const [editingButtonIndex, setEditingButtonIndex] = useState<number | null>(
     null
   );
+  const settings = useBotSettingsStore((state) => state.settings);
+  const loadBotSettings = useBotSettingsStore((state) => state.load);
+
+  useEffect(() => {
+    void loadBotSettings();
+  }, [loadBotSettings]);
+
   const formButtons = toFormButtons(card.Buttons);
   const formCtas = toFormCtas(card.ctaButtons);
   const imageRows = Math.max(
@@ -215,11 +233,16 @@ export const CardEditor = ({
 
   const handleAddCta = () => {
     if (card.ctaButtons.length >= 3) return;
-    onUpdate({ ctaButtons: [...card.ctaButtons, getDefaultCta()] });
+    onUpdate({
+      ctaButtons: [...card.ctaButtons, getDefaultCta(resolveCtaColors(settings))],
+    });
   };
 
   const handleAddButton = () => {
-    const next = [...formButtons, getDefaultButton(buttonsGroupColumns)];
+    const next = [
+      ...formButtons,
+      getDefaultButton(buttonsGroupColumns, resolveButtonColors(settings)),
+    ];
     onUpdate({ Buttons: fromFormButtons(next) });
     setEditingButtonIndex(next.length - 1);
   };

@@ -12,6 +12,7 @@ import { HttpError } from "@/shared";
 import {
   getBotSettings,
   updateBotSettings,
+  useBotSettingsStore,
   type BotSettingsDTO,
   type UpdateBotSettingsInput,
 } from "@/entities/bot-settings";
@@ -22,6 +23,7 @@ export const SettingsView = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const setStoreSettings = useBotSettingsStore((state) => state.setSettings);
 
   useEffect(() => {
     const fetchBotSettings = async () => {
@@ -30,11 +32,13 @@ export const SettingsView = () => {
         setError(null);
         const data = await getBotSettings();
         setBotSettings(data);
+        setStoreSettings(data);
       } catch (err) {
         console.error("Error fetching bot settings:", err);
         if (err instanceof HttpError && err.status === 404) {
           setError("Bot settings not found. Creating new settings...");
           setBotSettings(null);
+          setStoreSettings(null);
         } else {
           setError(
             err instanceof Error ? err.message : "Failed to load bot settings"
@@ -56,6 +60,7 @@ export const SettingsView = () => {
 
       const data = await updateBotSettings(input);
       setBotSettings(data);
+      setStoreSettings(data);
       setSuccessMessage("Bot settings updated successfully!");
       setTimeout(() => {
         setSuccessMessage(null);
