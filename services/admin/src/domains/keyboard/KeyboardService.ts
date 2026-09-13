@@ -20,6 +20,7 @@ import {
   OpenURLType,
   InternalBrowserConfig,
   InputFieldState,
+  ButtonFrame,
 } from "./types";
 import { KeyboardDTO } from "./KeyboardDTO";
 import { ButtonDTO } from "./ButtonDTO";
@@ -85,6 +86,7 @@ export interface CreateButtonInput {
   TextSize?: TextSize;
   Silent?: boolean;
   isJson?: boolean;
+  Frame?: ButtonFrame | null;
 }
 
 export interface UpdateButtonInput {
@@ -108,6 +110,7 @@ export interface UpdateButtonInput {
   TextSize?: TextSize;
   Silent?: boolean;
   isJson?: boolean;
+  Frame?: ButtonFrame | null;
 }
 
 export interface ListButtonsFilters {
@@ -242,6 +245,7 @@ export class KeyboardService {
       TextSize: input.TextSize,
       Silent: input.Silent,
       isJson: input.isJson,
+      Frame: input.Frame,
     });
 
     this.viberApiValidator.validateButton(button);
@@ -365,6 +369,7 @@ export class KeyboardService {
       TextSize: dto.TextSize,
       Silent: dto.Silent,
       isJson: dto.isJson,
+      Frame: dto.Frame,
     });
   }
 
@@ -392,6 +397,7 @@ export class KeyboardService {
       TextSize: input.TextSize ?? existing.TextSize,
       Silent: input.Silent ?? existing.Silent,
       isJson: input.isJson ?? existing.isJson,
+      Frame: input.Frame !== undefined ? input.Frame : existing.Frame,
       createdAt: existing.createdAt,
       updatedAt: new Date().toISOString(),
     });

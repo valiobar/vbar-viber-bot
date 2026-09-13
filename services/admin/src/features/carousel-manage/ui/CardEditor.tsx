@@ -9,17 +9,21 @@
 
 import { useEffect, useState } from "react";
 import {
+  FALLBACK_BUTTON_FRAME,
   resolveButtonColors,
+  resolveButtonFrame,
   resolveCtaColors,
   useBotSettingsStore,
 } from "@/entities/bot-settings";
 import type {
   ButtonDTO,
+  ButtonFrame,
   CarouselCardDTO,
   CarouselCardMode,
   CarouselCtaActionType,
   CarouselCtaDTO,
 } from "@/entities/carousel";
+import { ButtonFrameFields } from "@/entities/keyboard";
 import { reorderItems } from "../lib/reorderItems";
 import { newTempId } from "../lib/tempId";
 import { simulateCardRows } from "../lib/simulateCardRows";
@@ -39,10 +43,13 @@ interface CardEditorProps {
   onUpdate: (updates: Partial<CarouselCardDTO>) => void;
 }
 
-const getDefaultCta = (colors: {
-  bgColor: string;
-  textColor: string;
-}): EditableCta => ({
+const getDefaultCta = (
+  colors: {
+    bgColor: string;
+    textColor: string;
+  },
+  frame: ButtonFrame | null
+): EditableCta => ({
   tempId: newTempId("cta"),
   text: "",
   textColor: colors.textColor,
@@ -51,11 +58,13 @@ const getDefaultCta = (colors: {
   actionBody: "",
   openURLType: "external",
   silent: false,
+  Frame: frame,
 });
 
 const getDefaultButton = (
   groupColumns: number,
-  colors: { BgColor: string | null; TextColor: string }
+  colors: { BgColor: string | null; TextColor: string },
+  frame: ButtonFrame | null
 ): FormButton => ({
   tempId: newTempId("btn"),
   Columns: groupColumns,
@@ -76,6 +85,7 @@ const getDefaultButton = (
   TextSize: "regular",
   Silent: true,
   isJson: false,
+  Frame: frame,
 });
 
 const toFormButtons = (buttons: ButtonDTO[]): FormButton[] =>
@@ -234,14 +244,21 @@ export const CardEditor = ({
   const handleAddCta = () => {
     if (card.ctaButtons.length >= 3) return;
     onUpdate({
-      ctaButtons: [...card.ctaButtons, getDefaultCta(resolveCtaColors(settings))],
+      ctaButtons: [
+        ...card.ctaButtons,
+        getDefaultCta(resolveCtaColors(settings), resolveButtonFrame(settings)),
+      ],
     });
   };
 
   const handleAddButton = () => {
     const next = [
       ...formButtons,
-      getDefaultButton(buttonsGroupColumns, resolveButtonColors(settings)),
+      getDefaultButton(
+        buttonsGroupColumns,
+        resolveButtonColors(settings),
+        resolveButtonFrame(settings)
+      ),
     ];
     onUpdate({ Buttons: fromFormButtons(next) });
     setEditingButtonIndex(next.length - 1);
@@ -502,6 +519,14 @@ export const CardEditor = ({
                     }
                   />
                 </div>
+                <ButtonFrameFields
+                  idPrefix={`card-${index}-cta-${ctaIndex}`}
+                  frame={cta.Frame}
+                  defaultFrame={
+                    resolveButtonFrame(settings) ?? FALLBACK_BUTTON_FRAME
+                  }
+                  onChange={(Frame) => handleCtaUpdate(ctaIndex, { Frame })}
+                />
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label

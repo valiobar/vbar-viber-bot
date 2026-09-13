@@ -18,4 +18,5 @@ export type {
   TextSize,
   TextVAlign,
   TextHAlign,
+  ButtonFrame,
 } from "@vbar/shared";

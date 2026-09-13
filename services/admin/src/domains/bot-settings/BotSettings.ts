@@ -7,6 +7,7 @@
  * This entity includes validation and business logic for bot settings properties.
  */
 
+import type { ButtonFrame } from "@vbar/shared";
 import { BotStatus } from "./types";
 import { Validators } from "./lib/Validators";
 
@@ -24,6 +25,7 @@ export class BotSettings {
   public readonly status: BotStatus;
   public readonly buttonsBackground: string | null;
   public readonly buttonsTextColor: string | null;
+  public readonly buttonsFrame: ButtonFrame | null;
   public readonly buttonsPrefix: string | null;
   public readonly welcomeStepId: string | null;
   public readonly GAKey: string | null;
@@ -44,6 +46,7 @@ export class BotSettings {
     status?: BotStatus;
     buttonsBackground?: string | null;
     buttonsTextColor?: string | null;
+    buttonsFrame?: ButtonFrame | null;
     buttonsPrefix?: string | null;
     welcomeStepId?: string | null;
     GAKey?: string | null;
@@ -64,6 +67,7 @@ export class BotSettings {
       params.buttonsTextColor,
       "buttonsTextColor"
     );
+    this.buttonsFrame = Validators.validateButtonsFrame(params.buttonsFrame);
     this.buttonsPrefix = params.buttonsPrefix ?? null;
     this.welcomeStepId = Validators.validateObjectId(
       params.welcomeStepId,
@@ -88,6 +92,7 @@ export class BotSettings {
     status?: BotStatus;
     buttonsBackground?: string | null;
     buttonsTextColor?: string | null;
+    buttonsFrame?: ButtonFrame | null;
     buttonsPrefix?: string | null;
     welcomeStepId?: string | { toString(): string } | null;
     GAKey?: string | null;
@@ -124,6 +129,7 @@ export class BotSettings {
       status: doc.status,
       buttonsBackground: doc.buttonsBackground,
       buttonsTextColor: doc.buttonsTextColor,
+      buttonsFrame: doc.buttonsFrame,
       buttonsPrefix: doc.buttonsPrefix,
       welcomeStepId,
       GAKey: doc.GAKey,
@@ -145,6 +151,7 @@ export class BotSettings {
     status?: BotStatus;
     buttonsBackground?: string | null;
     buttonsTextColor?: string | null;
+    buttonsFrame?: ButtonFrame | null;
     buttonsPrefix?: string | null;
     welcomeStepId?: string | null;
     GAKey?: string | null;
@@ -162,6 +169,7 @@ export class BotSettings {
       status: params.status,
       buttonsBackground: params.buttonsBackground,
       buttonsTextColor: params.buttonsTextColor,
+      buttonsFrame: params.buttonsFrame,
       buttonsPrefix: params.buttonsPrefix,
       welcomeStepId: params.welcomeStepId,
       GAKey: params.GAKey,
@@ -184,6 +192,7 @@ export class BotSettings {
     status?: BotStatus;
     buttonsBackground?: string | null;
     buttonsTextColor?: string | null;
+    buttonsFrame?: ButtonFrame | null;
     buttonsPrefix?: string | null;
     welcomeStepId?: string | null;
     GAKey?: string | null;
@@ -208,6 +217,10 @@ export class BotSettings {
         updates.buttonsTextColor !== undefined
           ? updates.buttonsTextColor
           : this.buttonsTextColor,
+      buttonsFrame:
+        updates.buttonsFrame !== undefined
+          ? updates.buttonsFrame
+          : this.buttonsFrame,
       buttonsPrefix:
         updates.buttonsPrefix !== undefined
           ? updates.buttonsPrefix

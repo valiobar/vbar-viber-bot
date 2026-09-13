@@ -15,6 +15,7 @@ import {
   BgMediaType,
   OpenURLType,
   InternalBrowserConfig,
+  ButtonFrame,
 } from "./types";
 import type { ButtonDTO as SharedButtonDTO } from "@vbar/shared";
 
@@ -46,6 +47,7 @@ export class ButtonDTO implements SharedButtonDTO {
   public readonly TextSize: TextSize;
   public readonly Silent: boolean;
   public readonly isJson: boolean;
+  public readonly Frame: ButtonFrame | null;
   public readonly createdAt: string;
   public readonly updatedAt: string;
 
@@ -69,6 +71,7 @@ export class ButtonDTO implements SharedButtonDTO {
     TextSize: TextSize;
     Silent: boolean;
     isJson: boolean;
+    Frame: ButtonFrame | null;
     createdAt: string;
     updatedAt: string;
   }) {
@@ -91,6 +94,7 @@ export class ButtonDTO implements SharedButtonDTO {
     this.TextSize = data.TextSize;
     this.Silent = data.Silent;
     this.isJson = data.isJson;
+    this.Frame = data.Frame;
     this.createdAt = data.createdAt;
     this.updatedAt = data.updatedAt;
   }
@@ -122,6 +126,7 @@ export class ButtonDTO implements SharedButtonDTO {
       TextSize: button.TextSize,
       Silent: button.Silent,
       isJson: button.isJson,
+      Frame: button.Frame,
       createdAt: button.createdAt,
       updatedAt: button.updatedAt,
     });
@@ -157,6 +162,7 @@ export class ButtonDTO implements SharedButtonDTO {
       TextSize: dto.TextSize,
       Silent: dto.Silent,
       isJson: dto.isJson,
+      Frame: dto.Frame,
       createdAt: dto.createdAt,
       updatedAt: dto.updatedAt,
     });

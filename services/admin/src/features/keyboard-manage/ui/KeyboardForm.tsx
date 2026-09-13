@@ -12,6 +12,7 @@ import {
   KeyboardPreview,
   listKeyboards,
   type ButtonDTO,
+  type ButtonFrame,
   type CreateKeyboardInput,
   type InputFieldState,
   type KeyboardDTO,
@@ -19,6 +20,7 @@ import {
 } from "@/entities/keyboard";
 import {
   resolveButtonColors,
+  resolveButtonFrame,
   useBotSettingsStore,
 } from "@/entities/bot-settings";
 import { reorderButtons } from "../lib/reorderButtons";
@@ -58,7 +60,8 @@ interface KeyboardFormProps {
  * Default button data for new buttons
  */
 const getDefaultButton = (
-  colors: { BgColor: string | null; TextColor: string }
+  colors: { BgColor: string | null; TextColor: string },
+  frame: ButtonFrame | null
 ): Omit<ButtonDTO, "id" | "createdAt" | "updatedAt"> => ({
   Columns: 1,
   Rows: 1,
@@ -78,6 +81,7 @@ const getDefaultButton = (
   TextSize: "regular",
   Silent: true,
   isJson: false,
+  Frame: frame,
 });
 
 export const KeyboardForm = ({
@@ -305,7 +309,10 @@ export const KeyboardForm = ({
    */
   const handleAddButton = () => {
     const newButton = {
-      ...getDefaultButton(resolveButtonColors(settings)),
+      ...getDefaultButton(
+        resolveButtonColors(settings),
+        resolveButtonFrame(settings)
+      ),
       tempId: `btn-${Date.now()}`,
     };
     setEditingButton(newButton);

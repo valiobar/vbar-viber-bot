@@ -6,6 +6,8 @@ export type {
 export { getBotSettings, updateBotSettings } from "./api/botSettings";
 export { useBotSettingsStore } from "./model/botSettingsStore";
 export {
+  FALLBACK_BUTTON_FRAME,
   resolveButtonColors,
+  resolveButtonFrame,
   resolveCtaColors,
 } from "./lib/buttonColorDefaults";

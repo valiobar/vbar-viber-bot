@@ -4,6 +4,7 @@
  * Route → service → repository for bot settings (singleton).
  */
 
+import type { ButtonFrame } from "@vbar/shared";
 import { BotSettingsRepository } from "./BotSettingsRepository";
 import { StepRepository } from "../step/StepRepository";
 import { BotSettingsDTO } from "./BotSettingsDTO";
@@ -49,6 +50,13 @@ export interface UpdateBotSettingsInput {
    * Optional - if not provided, buttonsTextColor remains unchanged
    */
   buttonsTextColor?: string | null;
+
+  /**
+   * Default frame copied onto newly added buttons/CTAs.
+   * Optional — if not provided, buttonsFrame remains unchanged.
+   * null means "no frame default".
+   */
+  buttonsFrame?: ButtonFrame | null;
 
   /**
    * Buttons prefix
@@ -150,6 +158,10 @@ export class BotSettingsService {
         input.buttonsTextColor !== undefined
           ? input.buttonsTextColor
           : existingSettings.buttonsTextColor,
+      buttonsFrame:
+        input.buttonsFrame !== undefined
+          ? input.buttonsFrame
+          : existingSettings.buttonsFrame,
       buttonsPrefix:
         input.buttonsPrefix !== undefined
           ? input.buttonsPrefix && input.buttonsPrefix.trim() !== ""

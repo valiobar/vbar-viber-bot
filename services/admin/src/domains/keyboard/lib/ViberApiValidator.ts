@@ -109,6 +109,10 @@ export class ViberApiValidator {
       // Note: This is a warning-level validation. We keep BgColor in the entity
       // but it should be removed during transformation to Viber API format
     }
+
+    if (button.Frame !== null) {
+      Validators.validateFrame(button.Frame);
+    }
   }
 
   /**

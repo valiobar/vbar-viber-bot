@@ -14,6 +14,7 @@ import type {
   BgMediaType,
   OpenURLType,
   InternalBrowserConfig,
+  ButtonFrame,
 } from "./types";
 
 /**
@@ -39,6 +40,7 @@ export interface IButtonDocument {
   TextSize: TextSize;
   Silent: boolean;
   isJson: boolean;
+  Frame?: ButtonFrame | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -56,6 +58,28 @@ const internalBrowserSchema = new Schema(
   },
   { _id: false }
 );
+
+/**
+ * Viber API level 6 button frame subdocument.
+ * Product default when enabled is BorderWidth 1 / CornerRadius 10;
+ * schema defaults match Viber API (BorderWidth 1, CornerRadius 0).
+ */
+export const createFrameSchema = () =>
+  new Schema(
+    {
+      BorderWidth: { type: Number, min: 0, max: 10, default: 1 },
+      BorderColor: {
+        type: String,
+        validate: {
+          validator: (value: string) =>
+            /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})$/.test(value),
+          message: "Frame.BorderColor must be a valid hex color code",
+        },
+      },
+      CornerRadius: { type: Number, min: 0, max: 10, default: 0 },
+    },
+    { _id: false }
+  );
 
 /**
  * Creates the embedded Button schema. Keyboards cap Rows at 2,
@@ -166,6 +190,11 @@ export const createButtonSchema = (maxRows: number) =>
       isJson: {
         type: Boolean,
         default: false,
+      },
+      Frame: {
+        type: createFrameSchema(),
+        required: false,
+        default: null,
       },
       createdAt: {
         type: Date,

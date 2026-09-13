@@ -89,6 +89,14 @@ export class KeyboardTransformer {
       viberButton.InternalBrowser = button.InternalBrowser;
     }
 
+    if (button.Frame !== null) {
+      viberButton.Frame = {
+        BorderWidth: button.Frame.BorderWidth,
+        BorderColor: button.Frame.BorderColor,
+        CornerRadius: button.Frame.CornerRadius,
+      };
+    }
+
     return viberButton;
   }
 

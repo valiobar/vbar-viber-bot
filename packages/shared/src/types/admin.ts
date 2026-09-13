@@ -97,6 +97,13 @@ export interface InternalBrowserConfig {
   Mode: InternalBrowserMode;
 }
 
+/** Viber API level 6 button frame. Null means "do not send Frame". */
+export interface ButtonFrame {
+  BorderWidth: number; // 0-10, Viber default 1
+  BorderColor: string; // #RRGGBB or #RRGGBBAA
+  CornerRadius: number; // 0-10, Viber default 0
+}
+
 // ============================================================================
 // DTO Interfaces (Data Transfer Objects)
 // ============================================================================
@@ -171,6 +178,7 @@ export interface ButtonDTO extends BaseEntity {
   TextSize: TextSize;
   Silent: boolean;
   isJson: boolean;
+  Frame: ButtonFrame | null;
 }
 
 /**
@@ -209,6 +217,7 @@ export interface CarouselCtaDTO {
   actionBody: string;
   openURLType: OpenURLType;
   silent: boolean;
+  Frame: ButtonFrame | null;
 }
 
 export type CarouselCardMode = "structured" | "custom";

@@ -16,4 +16,5 @@ export type {
   InternalBrowserMode,
   InputFieldState,
   InternalBrowserConfig,
+  ButtonFrame,
 } from "@vbar/shared";

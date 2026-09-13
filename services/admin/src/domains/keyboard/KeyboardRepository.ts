@@ -208,6 +208,7 @@ export class KeyboardRepository {
         TextSize: button.TextSize,
         Silent: button.Silent,
         isJson: button.isJson,
+        Frame: button.Frame,
         createdAt: new Date(button.createdAt),
         updatedAt: new Date(button.updatedAt),
       })),

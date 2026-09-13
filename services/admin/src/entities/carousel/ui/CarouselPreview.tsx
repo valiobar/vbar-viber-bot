@@ -106,6 +106,11 @@ const getButtonStyle = (button: ButtonDTO): CSSProperties => {
     baseStyle.backgroundColor = button.BgColor || "#ffffff";
   }
 
+  if (button.Frame != null) {
+    baseStyle.borderRadius = `${button.Frame.CornerRadius}px`;
+    baseStyle.border = `${button.Frame.BorderWidth}px solid ${button.Frame.BorderColor}`;
+  }
+
   return baseStyle;
 };
 
@@ -154,6 +159,12 @@ const StructuredCard = ({
             height: ROW_HEIGHT,
             color: cta.textColor,
             backgroundColor: cta.bgColor || "#ffffff",
+            ...(cta.Frame != null
+              ? {
+                  borderRadius: `${cta.Frame.CornerRadius}px`,
+                  border: `${cta.Frame.BorderWidth}px solid ${cta.Frame.BorderColor}`,
+                }
+              : {}),
           }}
         >
           {cta.text || "Button"}

@@ -5,6 +5,8 @@
  * This type represents bot configuration fetched from admin service.
  */
 
+import type { ButtonFrame } from "@vbar/shared";
+
 /**
  * Bot status type
  */
@@ -24,6 +26,7 @@ export interface BotSettings {
   status: BotStatus;
   buttonsBackground: string | null;
   buttonsTextColor: string | null;
+  buttonsFrame: ButtonFrame | null;
   buttonsPrefix: string | null;
   welcomeStepId: string | null;
   GAKey: string | null;

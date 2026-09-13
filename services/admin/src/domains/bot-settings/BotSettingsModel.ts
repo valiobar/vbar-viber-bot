@@ -6,6 +6,8 @@
  */
 
 import mongoose, { Schema, Model } from "mongoose";
+import type { ButtonFrame } from "@vbar/shared";
+import { createFrameSchema } from "../keyboard/ButtonModel";
 import { BotStatus } from "./types";
 
 /**
@@ -18,6 +20,7 @@ export interface IBotSettingsDocument extends mongoose.Document {
   status: BotStatus;
   buttonsBackground: string | null;
   buttonsTextColor: string | null;
+  buttonsFrame: ButtonFrame | null;
   buttonsPrefix: string | null;
   welcomeStepId: mongoose.Types.ObjectId | null; // Reference to Step model
   GAKey: string | null;
@@ -104,6 +107,11 @@ const botSettingsSchema = new Schema<IBotSettingsDocument>(
         },
         message: "buttonsTextColor must be a valid hex color code or null",
       },
+    },
+    buttonsFrame: {
+      type: createFrameSchema(),
+      required: false,
+      default: null,
     },
     buttonsPrefix: {
       type: String,

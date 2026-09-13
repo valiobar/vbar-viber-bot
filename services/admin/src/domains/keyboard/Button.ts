@@ -15,6 +15,7 @@ import {
   OpenURLType,
   InternalBrowserMode,
   InternalBrowserConfig,
+  ButtonFrame,
 } from "./types";
 import { Validators } from "./lib/Validators";
 
@@ -44,6 +45,7 @@ export class Button {
   public readonly TextSize: TextSize;
   public readonly Silent: boolean;
   public readonly isJson: boolean;
+  public readonly Frame: ButtonFrame | null;
   public readonly createdAt: string;
   public readonly updatedAt: string;
 
@@ -73,6 +75,7 @@ export class Button {
     TextSize?: TextSize;
     Silent?: boolean;
     isJson?: boolean;
+    Frame?: ButtonFrame | null;
     createdAt: string;
     updatedAt: string;
   }) {
@@ -108,6 +111,7 @@ export class Button {
     this.TextSize = Validators.validateTextSize(params.TextSize);
     this.Silent = params.Silent ?? true;
     this.isJson = params.isJson ?? false;
+    this.Frame = Validators.validateFrame(params.Frame);
     this.createdAt = params.createdAt;
     this.updatedAt = params.updatedAt;
 
@@ -189,6 +193,14 @@ export class Button {
       button.InternalBrowser = this.InternalBrowser;
     }
 
+    if (this.Frame !== null) {
+      button.Frame = {
+        BorderWidth: this.Frame.BorderWidth,
+        BorderColor: this.Frame.BorderColor,
+        CornerRadius: this.Frame.CornerRadius,
+      };
+    }
+
     return button;
   }
 
@@ -219,6 +231,7 @@ export class Button {
     TextSize?: TextSize;
     Silent?: boolean;
     isJson?: boolean;
+    Frame?: ButtonFrame | null;
     createdAt?: Date | string;
     updatedAt?: Date | string;
   }): Button {
@@ -261,6 +274,7 @@ export class Button {
       TextSize: doc.TextSize,
       Silent: doc.Silent,
       isJson: doc.isJson,
+      Frame: doc.Frame,
       createdAt,
       updatedAt,
     });
@@ -291,6 +305,7 @@ export class Button {
     TextSize?: TextSize;
     Silent?: boolean;
     isJson?: boolean;
+    Frame?: ButtonFrame | null;
   }): Button {
     const now = new Date().toISOString();
 
@@ -317,6 +332,7 @@ export class Button {
       TextSize: params.TextSize,
       Silent: params.Silent,
       isJson: params.isJson,
+      Frame: params.Frame,
       createdAt: now,
       updatedAt: now,
     });
