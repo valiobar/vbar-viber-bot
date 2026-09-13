@@ -136,7 +136,7 @@ The reasoning strip and the template lookup apply to the simple chain **only**. 
 
 ## AI providers
 
-`createAIProvider(logger)` reads `AI_MODEL_PROVIDER` and returns one of four adapters, all extending `LangChainAdapter` (which implements `AIProviderPort`):
+`createAIProvider(logger)` reads `AI_MODEL_PROVIDER` and returns one of five adapters, all extending `LangChainAdapter` (which implements `AIProviderPort`):
 
 | Provider | Adapter | Model env | Notes |
 |----------|---------|-----------|-------|
@@ -144,6 +144,7 @@ The reasoning strip and the template lookup apply to the simple chain **only**. 
 | `openai` | `OpenAIProvider` → `ChatOpenAI` | `OPENAI_MODEL` (default `gpt-3.5-turbo`) | `OPENAI_API_KEY` required |
 | `anthropic` | `AnthropicProvider` → `ChatAnthropic` | `ANTHROPIC_MODEL` (required) | `ANTHROPIC_API_KEY` required |
 | `google` | `GoogleProvider` → `ChatGoogleGenerativeAI` | `GOOGLE_AI_MODEL` (default `gemini-pro`) | `GOOGLE_AI_API_KEY` required |
+| `deepseek` | `DeepSeekProvider` → `ChatOpenAI` (OpenAI-compatible API, `baseURL: https://api.deepseek.com`) | `DEEPSEEK_MODEL` (default `deepseek-flash`) | `DEEPSEEK_API_KEY` required; optional `DEEPSEEK_BASE_URL` override |
 
 Missing keys throw during `getAIConfig()`, which runs on the first request path that touches config as well as at provider creation.
 
@@ -331,7 +332,7 @@ All env parsing and validation is centralised in `src/config/aiConfig.ts` via `C
 | `PORT` | `3002` | Express HTTP port |
 | `GRPC_PORT` | `50051` | gRPC port |
 | `MONGODB_URI` / `MONGODB_DB_NAME` | local URI / `ai` | Conversation history + prompt templates |
-| `AI_MODEL_PROVIDER` | `ollama` | `ollama` / `openai` / `anthropic` / `google` |
+| `AI_MODEL_PROVIDER` | `ollama` | `ollama` / `openai` / `anthropic` / `google` / `deepseek` |
 | `AI_TEMPERATURE` | `0.7` | Sampling temperature |
 | `AI_MAX_TOKENS` | unset | Optional response cap |
 | `AI_TASK_TYPE` | unset (`simple` in `.env.example`) | Explicit chain override |

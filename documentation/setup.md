@@ -64,7 +64,7 @@ Edit `.env` and set at least:
 | `AI_SERVICE_TOKEN` | **Must match** on admin (outbound) and ai (inbound) |
 | `JWT_SECRET`, `BOT_TOKEN_ENCRYPTION_KEY` | ≥32 characters |
 | `VIBER_BOT_TOKEN`, `VIBER_BOT_WEBHOOK_URL` | Needed for real Viber traffic |
-| `AI_MODEL_PROVIDER` | `ollama` (local) or a cloud provider + API key |
+| `AI_MODEL_PROVIDER` | `ollama` (local) or a cloud provider (`openai` / `anthropic` / `google` / `deepseek`) + API key |
 
 `AI_THINKING_GIF_URL` is optional. Set it to a public HTTPS GIF (or JPEG/PNG as a Viber picture, max 500 KB) to show a thinking keyboard while the AI step waits on gRPC. SVG is not supported. Unset or empty disables the indicator.
 
@@ -82,7 +82,7 @@ Optional per-service examples still exist under `services/admin/.env.example` an
 | `VIBER_BOT_WEBHOOK_URL` | `VIBER_WEBHOOK_URL` |
 | `OLLAMA_BASE_URL` | `OLLAMA_URL` |
 | `OLLAMA_MODEL` | `AI_MODEL_NAME` |
-| `AI_MODEL_PROVIDER` | — |
+| `AI_MODEL_PROVIDER` (`ollama` / `openai` / `anthropic` / `google` / `deepseek`) | — |
 
 ## Local Development Setup
 
@@ -254,7 +254,7 @@ Full service guide: [viber.md](./viber.md).
 - HTTP `:3002` (localhost bind in Compose) + gRPC `:50051` (Compose network only)
 - Health: `GET /api/health`
 - Does **not** connect to RabbitMQ
-- Providers via `AI_MODEL_PROVIDER`; Ollama vars are `OLLAMA_BASE_URL` / `OLLAMA_MODEL`
+- Providers via `AI_MODEL_PROVIDER` (`ollama` / `openai` / `anthropic` / `google` / `deepseek`); Ollama vars are `OLLAMA_BASE_URL` / `OLLAMA_MODEL`; DeepSeek vars are `DEEPSEEK_API_KEY` / `DEEPSEEK_MODEL`
 - RAG: explicit `AI_TASK_TYPE` wins over `RAG_ENABLED` (see [rag.md](./rag.md))
 - Persistent RAG store is Chroma (`RAG_VECTOR_STORE_TYPE=chroma`); start with `--profile rag`
 - Knowledge-base ingest: HTTP `/api/knowledge-base/*` (`X-Service-Token` = `AI_SERVICE_TOKEN`)
