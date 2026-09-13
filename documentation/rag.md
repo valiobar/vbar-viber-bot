@@ -60,15 +60,7 @@ Viber (AI step) --gRPC ProcessMessage--> AI
     save user + assistant messages to Mongo
 ```
 
-`executeRAGChain` reads `getAIConfig().rag.retrieverK` and `.similarityThreshold` (defaults 4 / 0.7). Retrieved text is formatted as:
-
-```
-Based on the following context, answer the question. ...
-Context:
-[Document 1]
-...
-Question: <user query>
-```
+`executeRAGChain` reads `getAIConfig().rag.retrieverK` and `.similarityThreshold` (defaults 4 / 0.7). Retrieved text is formatted as `[Document N]` blocks. The built-in fallback prompt tells the model to answer from context, stay under 700 characters, copy Google Maps URLs verbatim, and recommend only items that appear in the context (see [RAG prompt rules](#rag-prompt-rules-maps--recommendations)). An active managed RAG template in Mongo **replaces** that fallback.
 
 An empty collection returns `[]`. The prompt still runs, with no context. Ingest files or URLs from Admin `/knowledge-base` (or the AI REST API) so retrieval has documents.
 
@@ -84,7 +76,7 @@ AI already uses Ports & Adapters for the LLM and the vector store. `VectorStoreP
 | Embeddings | `services/ai/src/adapters/out/langchain/rag/EmbeddingProvider.ts` | `openai` or `ollama` (`local` throws) |
 | Factory | `services/ai/src/adapters/out/langchain/rag/VectorStoreFactory.ts` | Returns `null` when `RAG_ENABLED=false` |
 | Ingest use case | `services/ai/src/application/use-cases/IngestKnowledgeUseCase.ts` | Extract, chunk, embed, store; list / delete / clear |
-| Document processor | `services/ai/src/adapters/out/ingest/DocumentProcessor.ts` | PDF / MD / TXT / HTML → text + chunks |
+| Document processor | `services/ai/src/adapters/out/ingest/DocumentProcessor.ts` | PDF / MD / TXT / HTML → text + char chunks; `.xlsx` → one chunk per data row |
 | HTTP routes | `services/ai/src/adapters/in/routes/knowledgeBase.ts` | `/api/knowledge-base/*` + `X-Service-Token` |
 | Chain | `services/ai/src/adapters/out/langchain/ChainExecutor.ts` | `executeRAGChain` |
 | Config | `services/ai/src/config/aiConfig.ts` | Env via `ConfigHelper` (`ingest` + `serviceToken`) |
@@ -104,14 +96,45 @@ Synchronous: the HTTP request waits until extraction, chunking, embedding, and s
 |-------|--------|--------|
 | Files per request | ≤10 | multer `files` |
 | File size | ≤10 MB | `INGEST_MAX_FILE_SIZE_MB` |
-| File types | `.pdf`, `.md`, `.txt` (or `application/pdf` / `text/*`) | route filter |
+| File types | `.pdf`, `.md`, `.txt`, `.xlsx` (or `application/pdf` / `text/*` / the OpenXML spreadsheet MIME type) | route filter |
 | URLs per request | ≤20 | `INGEST_MAX_URLS` |
 | URL schemes | `http` / `https` | use case validation |
 | URL fetch timeout | 15 s | `INGEST_URL_TIMEOUT_MS` |
 
-### Chunking
+### Formats and chunking
 
-`RecursiveCharacterTextSplitter` (`@langchain/textsplitters`): `RAG_CHUNK_SIZE` (default 1000) and `RAG_CHUNK_OVERLAP` (default 200). Each chunk is embedded with the configured `RAG_EMBEDDING_PROVIDER` and written via `VectorStorePort.addDocuments`.
+| Format | Extraction | Chunking |
+|---|---|---|
+| .pdf / .md / .txt / URL | pdf-parse / utf-8 / cheerio | RecursiveCharacterTextSplitter (RAG_CHUNK_SIZE / RAG_CHUNK_OVERLAP) |
+| .xlsx | exceljs, row by row | 1 row = 1 chunk, headers inlined (`Лист "{sheet}", ред {n} — Име: … \| Адрес: …`); rows with an address-like header (`адрес`/`address`/`локация`/`местоположение`/`location`) get a `https://www.google.com/maps/dir/?api=1&destination=<encodeURIComponent(име, адрес)>` line |
+
+Free-text files and URLs still go through `RecursiveCharacterTextSplitter` (`@langchain/textsplitters`): `RAG_CHUNK_SIZE` (default 1000) and `RAG_CHUNK_OVERLAP` (default 200). **`.xlsx` bypasses the character splitter** — character chunking would merge unrelated table rows and cut cells mid-value. `IngestKnowledgeUseCase.ingestFiles` branches on the `.xlsx` extension and calls `DocumentProcessor.extractRowsFromXlsx` instead of `extractFromFile` + `chunk`.
+
+Each resulting chunk (either kind) is embedded with the configured `RAG_EMBEDDING_PROVIDER` and written via `VectorStorePort.addDocuments`. For a spreadsheet, `chunks` in the ingest response equals the number of data rows (the header row is not a chunk).
+
+#### Spreadsheet rows (`.xlsx`)
+
+`extractRowsFromXlsx` loads the workbook with exceljs. On every worksheet the first non-empty row is the header; every later non-empty row becomes exactly one self-contained chunk with the sheet name, 1-based row number, and header labels inlined:
+
+```text
+Лист "Обекти", ред 3 — Име: Офис Пловдив | Адрес: бул. България 1, Пловдив | Телефон: 032123456
+Google Maps посока: https://www.google.com/maps/dir/?api=1&destination=...
+```
+
+Empty cells are skipped. A header-only or empty workbook throws (`No extractable rows…`); the per-file catch in `ingestFiles` records `status: "error"` for that file and continues the batch.
+
+**Locations / Maps enrichment.** If a header matches an address keyword (`адрес`, `address`, `местоположение`, `локация`, `location` — case-insensitive substring), the chunk gets a precomputed Google Maps directions URL: `https://www.google.com/maps/dir/?api=1&destination=<encodeURIComponent(destination)>`. When a name-like column also exists (`име`, `назв`, `name`, `обект` — not `продукт`), the destination is `"{name}, {address}"` so Google can match the place. Encoding is done at ingest (`encodeURIComponent`, Cyrillic-safe); the LLM must copy the URL verbatim and never build or alter it.
+
+**Products table.** A sheet with no address-like header (names, descriptions, prices, …) produces the same `Лист/ред` row chunks **without** a Maps line. That is the expected products path, not an error. Recommendation answers compare at most `RAG_RETRIEVER_K` retrieved rows, not the whole catalog.
+
+#### RAG prompt rules (Maps + recommendations)
+
+The built-in RAG fallback wrapper in `LangChainExecutor.executeRAGChain` adds two rules on top of the 700-character cap:
+
+- If the user asks where a place is, for an address, or how to get there, and the context contains a Google Maps URL for it, include that URL **verbatim on its own line**. Never construct or alter Maps URLs.
+- If the user asks for a recommendation or comparison, suggest only items that appear in the context, using their exact names and a one-line reason. If nothing fits, say so — never invent products.
+
+**Operational note:** an **active managed RAG prompt in Mongo overrides this fallback**. The same Maps / recommendation rules must be present on the active RAG template (admin Prompts UI) or the feature regresses silently even though ingest still writes the URLs into the chunks. Viber sends answers as `Message.Text`; clients auto-linkify `https://` URLs, so a copied Maps link is tappable with no Viber-service change.
 
 ### Chunk metadata
 
@@ -122,7 +145,7 @@ Stored on every vector. Sources are grouped by `sourceId` for list / delete.
   sourceId: string;
   source: string;          // filename or URL
   sourceType: "file" | "url";
-  fileType: "pdf" | "md" | "txt" | "html";
+  fileType: "pdf" | "md" | "txt" | "html" | "xlsx";
   chunkIndex: number;
   ingestedAt: string;      // ISO date
 }
@@ -146,7 +169,7 @@ All paths under `/api/knowledge-base` require `X-Service-Token` (`AI_SERVICE_TOK
 
 ### Admin UI
 
-`/knowledge-base` (JWT). Upload files, paste up to 20 URLs (one per line), list ingested sources, delete one source, or clear the collection. Admin is a **thin proxy**: `app/api/knowledge-base/*` forwards to AI with `X-Service-Token`. Admin owns no knowledge-base data (vectors live in Chroma behind AI), so there is no admin repository or domain service.
+`/knowledge-base` (JWT). Upload files (PDF, Markdown, plain text, or Excel `.xlsx` — spreadsheets are indexed row by row), paste up to 20 URLs (one per line), list ingested sources, delete one source, or clear the collection. Admin is a **thin proxy**: `app/api/knowledge-base/*` forwards to AI with `X-Service-Token`. Admin owns no knowledge-base data (vectors live in Chroma behind AI), so there is no admin repository or domain service.
 
 `AI_SERVICE_TOKEN` must be identical on admin (outbound) and ai (inbound). Mismatch or an unset token on either side fails loudly (401 / 503), not silently.
 
@@ -223,6 +246,7 @@ Trigger RAG from a Viber step with `isAi=true` after the env is set, or call gRP
 - `local` embedding provider
 - Async ingest jobs (processing is synchronous on the request)
 - URL-to-PDF ingest (non-HTML / non-text URLs fail per item)
+- `.xls` (legacy binary) and `.csv` ingest (exceljs reads `.xlsx` only)
 - gRPC contract changes (still `ProcessMessage` + optional `taskType`)
 
 ## Related documentation

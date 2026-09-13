@@ -11,6 +11,7 @@ import { seedAdminUser } from "./seed";
 import { UserModel } from "@/domains/user/UserModel";
 import { SessionModel } from "@/domains/user/SessionModel";
 import { KeyboardModel } from "@/domains/keyboard/KeyboardModel";
+import { StepUsageEventModel } from "@/domains/analytics/StepUsageEventModel";
 
 // Default database name - using 'admin_service' to avoid conflicts with MongoDB's 'admin' auth database
 const dbName = ConfigHelper.getEnv("MONGODB_DB_NAME", "admin_service");
@@ -101,6 +102,7 @@ export async function connectToDatabase(): Promise<typeof mongoose> {
         await UserModel.ensureIndexes();
         await SessionModel.ensureIndexes();
         await KeyboardModel.ensureIndexes();
+        await StepUsageEventModel.ensureIndexes();
         console.log("✅ Database indexes verified/created");
       } catch (error) {
         console.error("⚠️  Failed to ensure database indexes:", error);

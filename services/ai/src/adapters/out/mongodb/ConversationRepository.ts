@@ -7,6 +7,7 @@
 
 import { ConversationRepository } from "../../../ports/out/ConversationRepository";
 import { ConversationContext } from "../../../domains/ai/entities";
+import { getAIConfig } from "../../../config/aiConfig";
 import { getMongoDatabase } from "@vbar/shared/infra";
 import { Logger } from "@vbar/shared";
 
@@ -33,14 +34,17 @@ interface ConversationDocument {
 export class MongoConversationRepository implements ConversationRepository {
   private readonly collectionName = "conversations";
   private readonly logger: Logger;
+  private readonly maxHistory: number;
 
   /**
    * Constructor
    *
    * @param logger - Logger instance for logging
+   * @param maxHistory - Max messages kept in Mongo and returned to the model
    */
-  constructor(logger: Logger) {
+  constructor(logger: Logger, maxHistory?: number) {
     this.logger = logger;
+    this.maxHistory = maxHistory ?? getAIConfig().conversationMaxHistory;
   }
 
   /**
@@ -61,7 +65,10 @@ export class MongoConversationRepository implements ConversationRepository {
       const collection = db.collection<ConversationDocument>(
         this.collectionName
       );
-      const doc = await collection.findOne({ userId });
+      const doc = await collection.findOne(
+        { userId },
+        { projection: { messages: { $slice: -this.maxHistory } } }
+      );
 
       if (!doc) {
         return null;
@@ -121,7 +128,10 @@ export class MongoConversationRepository implements ConversationRepository {
             updatedAt: timestamp,
           },
           $push: {
-            messages: message,
+            messages: {
+              $each: [message],
+              $slice: -this.maxHistory,
+            },
           },
           $setOnInsert: {
             createdAt: timestamp,

@@ -1,6 +1,6 @@
 # System Architecture
 
-Accurate as of Phases 2–4. Three app services (admin, viber, ai), one Viber bot per deployment, one shared MongoDB, one RabbitMQ used for cache refresh. Admin: [admin.md](./admin.md). Viber: [viber.md](./viber.md). AI: [ai.md](./ai.md).
+Accurate as of Phases 2–4. Three app services (admin, viber, ai), one Viber bot per deployment, one shared MongoDB, one RabbitMQ used for cache refresh and step-usage analytics. Admin: [admin.md](./admin.md). Viber: [viber.md](./viber.md). AI: [ai.md](./ai.md).
 
 ## Table of Contents
 
@@ -19,9 +19,12 @@ Accurate as of Phases 2–4. Three app services (admin, viber, ai), one Viber bo
 ```
 Admin (Next.js :3000)  --REST+JWT / service token-->  CMS APIs
         | publish RefreshEvent
+        | consume analytics.step-usage  (instrumentation hook)
         | REST + X-Service-Token  /api/knowledge-base
         v
-RabbitMQ (viber.refresh) --> Viber (Express :3001)
+RabbitMQ
+  viber.refresh          --> Viber (Express :3001)  cache reload
+  analytics.step-usage   <-- Viber StepSender / AnalyticsPublisher
                                 | REST (content cache)
                                 | gRPC ProcessMessage
                                 v
@@ -41,16 +44,18 @@ Principles:
 
 ### Admin (`services/admin`)
 
-Next.js 14 App Router, MongoDB (`admin_service`), RabbitMQ publisher.
+Next.js 14 App Router, MongoDB (`admin_service`), RabbitMQ publisher **and** consumer.
 
 - CMS for messages, keyboards, carousels, steps, and singleton bot settings
 - Knowledge Base page (`/knowledge-base`): upload files, ingest URLs, list / delete / clear sources
+- Analytics page (`/analytics`): step-usage totals and daily activity (last 30 days by default)
 - JWT login / refresh / logout
 - Service-token access so viber can pull content
 - Publishes `viber.refresh` on content mutations
+- Consumes `analytics.step-usage` via the Next.js instrumentation hook (`src/instrumentation.ts`, `experimental.instrumentationHook`) and persists events in `admin_service.stepusageevents`
 - Thin proxy to AI for knowledge-base ingest (`AI_SERVICE_URL` + `AI_SERVICE_TOKEN`)
 
-**Server** lives in `src/app/api/**`, `src/domains/**`, `src/lib/**`, `src/middleware.ts`. Each domain is a flat folder (`Model` / `Repository` / `Service` / `DTO` / `types` / `index`). Repositories are concrete Mongo classes. Auth is `AuthService` (`login` / `logout` / `refresh`); bot settings is `BotSettingsService` (`get` / `update`).
+**Server** lives in `src/app/api/**`, `src/domains/**`, `src/lib/**`, `src/instrumentation.ts`, `src/middleware.ts`. Each domain is a flat folder (`Model` / `Repository` / `Service` / `DTO` / `types` / `index`). Repositories are concrete Mongo classes. Auth is `AuthService` (`login` / `logout` / `refresh`); bot settings is `BotSettingsService` (`get` / `update`). Analytics is `AnalyticsService` (`getStepUsageStats`).
 
 **Client** is FSD (see [Admin layering](#admin-layering)).
 
@@ -65,6 +70,7 @@ Express, MongoDB (`bot`), RabbitMQ consumer, Viber webhook.
 - `StepSender` resolves `rich-media` messages via `BotDataService.getCarouselById`, converts with `CarouselConverter`, injects `content.richMedia`, then `MessageConverter` builds `Message.RichMedia` (`min_api_version` ≥ 7)
 - Step routing; AI steps call gRPC `ProcessMessage`
 - Reloads the full in-memory cache (`refreshAllData`, including carousels) when a `RefreshEvent` arrives
+- Publishes fire-and-forget `StepUsageEvent` messages (`AnalyticsPublisher`) when `StepSender.sendStep` succeeds (trigger / welcome / subscribe; broadcasts and AI turns are not tracked)
 
 Connects to Mongo and RabbitMQ via `@vbar/shared/infra` (`createMongoConnection`, `createQueueChannel`).
 
@@ -91,7 +97,7 @@ app/api/messages/route.ts
         → MessageRepository (concrete Mongo class)
 ```
 
-Same shape for keyboards, carousels, steps, bot-settings, and auth. Routes use `withDb`, shared error codes, `parsePagination`, and `notifyRefresh` from `src/lib/api/`. Do not add `ports/in/`, `adapters/`, or `*UseCaseImpl`.
+Same shape for keyboards, carousels, steps, bot-settings, auth, and analytics. Routes use `withDb`, shared error codes, `parsePagination`, and `notifyRefresh` from `src/lib/api/`. Do not add `ports/in/`, `adapters/`, or `*UseCaseImpl`.
 
 **Deviation — knowledge-base proxy:** `app/api/knowledge-base/*` forwards to the AI service (`lib/aiService.ts` + `X-Service-Token`) and does not use `route → service → repository`. Admin owns no knowledge-base data (vectors live in Chroma behind AI), so there is no admin repository or domain service. Justified as a transport adapter, not a second CMS domain.
 
@@ -144,6 +150,7 @@ Current content / feature slices:
 | steps | `step` | `step-manage` | `step-list` | `steps` |
 | bot-settings | `bot-settings` | `bot-settings-manage` | — | `settings` |
 | knowledge-base | `knowledge-base` | `knowledge-base-ingest` | `knowledge-base-sources` | `knowledge-base` |
+| analytics | `analytics` | — | `step-usage-stats` | `analytics` |
 
 Keyboard create/edit (`keyboard-manage` / `KeyboardForm`) can reorder embedded `Buttons` with drag-and-drop from the buttons list and the phone preview. Order is the array sent on POST/PUT; there is no separate order field.
 
@@ -157,7 +164,7 @@ One MongoDB container. Databases appear on first write:
 
 | Service | `MONGODB_DB_NAME` | What is stored |
 |---------|-------------------|----------------|
-| admin | `admin_service` | Users, sessions, messages, keyboards, carousels, steps, singleton bot settings |
+| admin | `admin_service` | Users, sessions, messages, keyboards, carousels, steps, singleton bot settings, step-usage events |
 | viber | `bot` | Viber users and bot runtime state |
 | ai | `ai` | Per-user conversation history and prompt templates. RAG vectors live in Chroma, not Mongo. |
 
@@ -169,10 +176,11 @@ Collection names, fields, and indexes: [databases.md](./databases.md).
 
 | Path | Protocol | Notes |
 |------|----------|--------|
-| Browser → Admin | REST + JWT | CMS + Knowledge Base UI |
+| Browser → Admin | REST + JWT | CMS + Knowledge Base + Analytics UI |
 | Viber platform → Viber | HTTPS webhook | `GET/POST /webhook/viber` |
 | Viber → Admin | REST + `X-Service-Token` | Content + bot-settings fetch |
 | Admin → Viber | RabbitMQ `viber.refresh` | Cache invalidation (`RefreshEvent`) |
+| Viber → Admin | RabbitMQ `analytics.step-usage` | Step usage events (`StepUsageEvent`); admin consumer started from `src/instrumentation.ts` |
 | Admin → AI | REST + `X-Service-Token` | Knowledge-base ingest / sources. `AI_SERVICE_TOKEN` must match on both services. |
 | Viber → AI | gRPC `:50051` | `ProcessMessage` only |
 
@@ -187,11 +195,27 @@ interface RefreshEvent {
 }
 ```
 
+`StepUsageEvent` (`@vbar/shared`):
+
+```typescript
+interface StepUsageEvent {
+  type: "step_usage";
+  stepId: string;
+  userId: string;
+  source: "trigger" | "welcome" | "subscribe";
+  trigger?: string;
+  customHandler?: string | null;
+  timestamp: string;
+}
+```
+
+Admin persists consumed events in `admin_service.stepusageevents` (100-day TTL). The dashboard reads aggregates via `GET /api/analytics/step-usage`.
+
 ## Shared package
 
 `@vbar/shared` (root barrel) and `@vbar/shared/infra` (Mongo/RabbitMQ helpers — not on the root barrel so Edge middleware can import `ConfigHelper` without mongoose/amqplib).
 
-- **Types:** `common.ts` (`ApiResponse`, `PaginationParams`, `HealthCheckResponse`, `RefreshEvent`, queue names) and `admin.ts` (content DTOs, `User`)
+- **Types:** `common.ts` (`ApiResponse`, `PaginationParams`, `HealthCheckResponse`, `RefreshEvent`, `StepUsageEvent`, queue names) and `admin.ts` (content DTOs, `User`)
 - **Utils:** `Logger` / `ConsoleLogger`, `PathUtils`
 - **Config:** `ConfigHelper`, `EnvironmentConfig`, `resolveRootEnvPath`
 - **Infra:** `createMongoConnection`, `createQueueChannel` — mandated for new connections in viber/ai. Admin `lib/mongodb.ts` stays Next.js-specific.
@@ -206,7 +230,7 @@ Compose file: `infrastructure/docker-compose.yml`. Images built in GitHub Action
 | `vbar-viber` | `:3001` | Webhooks |
 | `vbar-ai` | `127.0.0.1:3002` | HTTP health; gRPC 50051 internal |
 | `vbar-mongodb` | `127.0.0.1:27017` | Shared Mongo |
-| `vbar-rabbitmq` | `127.0.0.1:5672` / `:15672` | Refresh events |
+| `vbar-rabbitmq` | `127.0.0.1:5672` / `:15672` | Refresh events and step-usage analytics |
 
 Profile `local-llm` adds Ollama on `127.0.0.1:11434`. Set `AI_MODEL_PROVIDER=ollama` and `OLLAMA_BASE_URL=http://ollama:11434` inside Compose.
 

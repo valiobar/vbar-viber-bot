@@ -244,7 +244,10 @@ export class AdminServiceClient implements IAdminServiceClient {
     while (hasMorePages) {
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
-          const extra = dataKey === "keyboards" ? "&isTemplate=false" : "";
+          const extra =
+            dataKey === "keyboards" || dataKey === "carousels"
+              ? "&isTemplate=false"
+              : "";
           const url = `${this.baseUrl}${endpoint}?hidden=false${extra}&page=${currentPage}&limit=${pageLimit}`;
           const response = await this.fetchWithTimeout(url, {
             method: "GET",

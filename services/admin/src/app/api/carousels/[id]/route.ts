@@ -34,6 +34,7 @@ export async function PUT(request: Request, { params }: IdParams) {
     const input: UpdateCarouselInput = {};
     if (body.humanReadableName !== undefined) input.humanReadableName = body.humanReadableName.trim();
     if (body.hidden !== undefined) input.hidden = body.hidden;
+    if (body.isTemplate !== undefined) input.isTemplate = body.isTemplate;
     if (body.BgColor !== undefined) input.BgColor = body.BgColor;
     if (body.ButtonsGroupColumns !== undefined) input.ButtonsGroupColumns = body.ButtonsGroupColumns;
     if (body.ButtonsGroupRows !== undefined) input.ButtonsGroupRows = body.ButtonsGroupRows;

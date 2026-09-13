@@ -128,7 +128,7 @@ The reasoning strip and the template lookup apply to the simple chain **only**. 
 
 ### RAG
 
-`executeRAGChain` requires a non-null vector store. It runs `similaritySearch(query, RAG_RETRIEVER_K, RAG_SIMILARITY_THRESHOLD)`, formats hits as `[Document N]` blocks, and wraps them in a fixed prompt that instructs the model to answer from context and say so when the context is insufficient (also capped at 700 characters). An empty collection returns no documents; the prompt still runs with an empty context block. Details and ingest limits: [rag.md](./rag.md).
+`executeRAGChain` requires a non-null vector store. It runs `similaritySearch(query, RAG_RETRIEVER_K, RAG_SIMILARITY_THRESHOLD)`, formats hits as `[Document N]` blocks, and wraps them in a prompt that instructs the model to answer from context, stay under 700 characters, copy Google Maps URLs verbatim, and recommend only items present in the context. An active managed RAG template in Mongo overrides that fallback. An empty collection returns no documents; the prompt still runs with an empty context block. Details and ingest limits: [rag.md](./rag.md).
 
 ### Custom
 
@@ -136,7 +136,7 @@ The reasoning strip and the template lookup apply to the simple chain **only**. 
 
 ## AI providers
 
-`createAIProvider(logger)` reads `AI_MODEL_PROVIDER` and returns one of four adapters, all extending `LangChainAdapter` (which implements `AIProviderPort`):
+`createAIProvider(logger)` reads `AI_MODEL_PROVIDER` and returns one of five adapters, all extending `LangChainAdapter` (which implements `AIProviderPort`):
 
 | Provider | Adapter | Model env | Notes |
 |----------|---------|-----------|-------|
@@ -144,6 +144,7 @@ The reasoning strip and the template lookup apply to the simple chain **only**. 
 | `openai` | `OpenAIProvider` → `ChatOpenAI` | `OPENAI_MODEL` (default `gpt-3.5-turbo`) | `OPENAI_API_KEY` required |
 | `anthropic` | `AnthropicProvider` → `ChatAnthropic` | `ANTHROPIC_MODEL` (required) | `ANTHROPIC_API_KEY` required |
 | `google` | `GoogleProvider` → `ChatGoogleGenerativeAI` | `GOOGLE_AI_MODEL` (default `gemini-pro`) | `GOOGLE_AI_API_KEY` required |
+| `deepseek` | `DeepSeekProvider` → `ChatOpenAI` (OpenAI-compatible API, `baseURL: https://api.deepseek.com`) | `DEEPSEEK_MODEL` (default `deepseek-flash`) | `DEEPSEEK_API_KEY` required; optional `DEEPSEEK_BASE_URL` override |
 
 Missing keys throw during `getAIConfig()`, which runs on the first request path that touches config as well as at provider creation.
 
@@ -157,12 +158,9 @@ Missing keys throw during `getAIConfig()`, which runs on the first request path 
 { userId, messages: [{ role: "user" | "assistant", content, timestamp }], metadata, createdAt, updatedAt }
 ```
 
-The whole document is loaded per request and converted to LangChain `HumanMessage` / `AIMessage` objects for `chat_history`. There is no process-scoped LangChain memory — history is Mongo-only and per request, so multiple AI service replicas stay consistent.
+Only the last `CONVERSATION_MAX_HISTORY` messages (default 15) are loaded, stored, and sent to the model. Mongo `$push` uses `$slice: -N` so older messages are dropped on write; reads use the same slice. `LangChainAdapter` also trims via `ConversationContext.getRecentMessages(n)` before building `chat_history`. There is no process-scoped LangChain memory — history is Mongo-only and per request, so multiple AI service replicas stay consistent.
 
-Two caveats worth knowing:
-
-- `CONVERSATION_MAX_HISTORY` and `CONVERSATION_MEMORY_TYPE` are parsed and validated in `aiConfig.ts` but **never used**. The full stored history is sent to the model on every call, so prompt size grows without bound for long-running users. `ConversationContext.getRecentMessages(n)` exists but has no callers.
-- History load/save failures never fail the request; they are logged as warnings, so a Mongo outage degrades to stateless answers rather than errors.
+`CONVERSATION_MEMORY_TYPE` is parsed and validated in `aiConfig.ts` but unused (`buffer` / `summary` have no effect). History load/save failures never fail the request; they are logged as warnings, so a Mongo outage degrades to stateless answers rather than errors.
 
 `clearConversationHistory(userId)` exists on the port and adapter but no inbound adapter calls it — there is no "reset conversation" API.
 
@@ -178,7 +176,7 @@ There is no admin UI or API for prompt templates; they are managed directly in M
 
 Ingest is an inbound HTTP adapter (`routes/knowledgeBase.ts`) over `IngestKnowledgeUseCaseImpl`. Two middlewares run before anything else: the service-token check (503 when `AI_SERVICE_TOKEN` is unset on the AI service, 401 on mismatch), then the RAG guard (503 when the vector store is `null`).
 
-Processing is synchronous on the request: extract → chunk → embed → write. `DocumentProcessor` handles PDF (`pdf-parse`), Markdown, plain text, and HTML-at-URL (`cheerio`, stripping `script/style/nav/footer/noscript/svg`). Chunking is `RecursiveCharacterTextSplitter` with `RAG_CHUNK_SIZE` / `RAG_CHUNK_OVERLAP`. URLs are fetched three at a time; a per-item failure is reported in the result and never aborts the batch.
+Processing is synchronous on the request: extract → chunk → embed → write. `DocumentProcessor` handles PDF (`pdf-parse`), Markdown, plain text, HTML-at-URL (`cheerio`, stripping `script/style/nav/footer/noscript/svg`), and Excel `.xlsx` (exceljs). Free-text files and URLs use `RecursiveCharacterTextSplitter` with `RAG_CHUNK_SIZE` / `RAG_CHUNK_OVERLAP`. Spreadsheets bypass the splitter: one data row = one chunk with headers inlined; address-like columns get a precomputed Google Maps directions URL. URLs are fetched three at a time; a per-item failure is reported in the result and never aborts the batch.
 
 Every chunk carries `{ sourceId, source, sourceType, fileType, chunkIndex, ingestedAt }`, which is how `listSources` groups and how per-source delete works. Two implementations sit behind `VectorStorePort`: `ChromaVectorStore` (persistent, Compose profile `rag`) and `MemoryVectorStoreAdapter` (ephemeral, tests). Chroma delete takes a metadata `where` filter, not Mongo `deleteMany` semantics.
 
@@ -192,9 +190,51 @@ There are exactly two consumers, and neither shares a database with the AI servi
 
 Trigger, in `MessageHandler.handleMessage`: the user has a `currentStepId`, the bot cache resolves that step, `step.isAi === true`, and the message text does **not** contain the configured `buttonsPrefix` (so button presses still route to normal step handling). Media messages are flattened to a text description first — a picture becomes `<url> | Text: ...`, a location becomes `lat,lng`, a contact becomes `Contact: name (phone)`, and so on.
 
-The call chain is `MessageHandler` → `ViberAiService.handleMessage` → `AiServiceGrpcClient.processMessage` (`services/viber/src/adapters/out/grpc/AiServiceGrpcClient.ts`), targeting `AI_SERVICE_GRPC_HOST:AI_SERVICE_GRPC_PORT` (defaults `localhost:50051`) with insecure credentials. The answer is sent back as a single `Message.Text`.
+The call chain is unchanged (`MessageHandler` → `ViberAiService.handleMessage` → `AiServiceGrpcClient.processMessage`, `services/viber/src/adapters/out/grpc/AiServiceGrpcClient.ts`), targeting `AI_SERVICE_GRPC_HOST:AI_SERVICE_GRPC_PORT` (defaults `localhost:50051`) with insecure credentials. When `AI_THINKING_GIF_URL` is set, viber sends a keyboard-only thinking message (6×2 GIF, no `"..."` bubble) before the gRPC call, then sends the answer as `Message.Text` with the step keyboard restored. On empty/error after a thinking send, viber sends another keyboard-only message with that restore keyboard.
 
-Failure behaviour is important: `ViberAiService` catches everything, logs, and returns — it does not rethrow and does not send a fallback message. When the AI service is down, the user simply gets no reply. Viber also never sets `taskType`, so chain selection is entirely an AI-service env concern.
+Failure behaviour: `ViberAiService` still catches everything, logs, and does not rethrow. The restore keyboard is sent only when a thinking keyboard was already sent (so the GIF is replaced). If the thinking indicator was skipped or failed to send, a down AI service still produces no user reply. Viber also never sets `taskType`, so chain selection is entirely an AI-service env concern.
+
+#### Carousel directive (viber-side interpretation)
+
+The gRPC contract is unchanged — the reply is one string. Viber, however, parses every non-empty reply for a JSON **carousel directive** and renders it as a Viber rich-media carousel instead of a text bubble (`services/viber/src/application/services/AiCarouselDirective.ts`; render details in [viber.md](./viber.md)). The AI service needs no code change: whether the model produces the directive is purely prompt-template content.
+
+Directive schema the model must emit (as its ENTIRE reply):
+
+```json
+{
+  "type": "carousel",
+  "text": "optional intro sentence",
+  "cards": [
+    {
+      "title": "Item name",
+      "description": "one short sentence",
+      "image": "https://... (optional)",
+      "buttons": [
+        { "text": "Open map", "actionType": "open-url", "actionBody": "https://..." },
+        { "text": "Tell me more", "actionType": "reply", "actionBody": "Tell me more about Item name" }
+      ]
+    }
+  ]
+}
+```
+
+Ready-to-paste block for a managed prompt template (per-step via `StepDTO.aiPromptName`, or the RAG/simple template):
+
+```text
+When your answer recommends or lists multiple concrete items (places, tours, events, options),
+respond with ONLY a JSON object in exactly this shape and nothing else — no markdown, no code
+fences, no text before or after:
+
+{"type":"carousel","text":"<one short intro sentence>","cards":[{"title":"<item name>","description":"<one short sentence>","image":"<https image URL, omit this key if unknown>","buttons":[{"text":"<label>","actionType":"open-url","actionBody":"<https URL>"},{"text":"Tell me more","actionType":"reply","actionBody":"Tell me more about <item name>"}]}]}
+
+Rules:
+- At most 6 cards; every card needs at least a "title".
+- Include "image" only when a real image URL appears in the provided context — never invent URLs.
+- "actionType" is "reply" or "open-url" only. A "reply" button sends its actionBody back to you as the user's next message.
+- For a normal single answer, reply with plain text as usual (no JSON).
+```
+
+Caveat: `executeSimpleChain` appends a hard "under 700 characters" instruction, which pushes the model toward fewer cards. Acceptable for now; relaxing the cap for carousel prompts would be an AI-side change. Viber's parser strips code fences defensively, and any reply that is not a valid directive (or validates to zero cards) is sent as plain text.
 
 ### Admin service — REST (knowledge base)
 
@@ -256,7 +296,7 @@ Knowledge base — all paths require `X-Service-Token`, responses are `ApiRespon
 
 | Method | Path | Body | Returns |
 |--------|------|------|---------|
-| `POST` | `/api/knowledge-base/files` | multipart `files` (≤10 files × ≤`INGEST_MAX_FILE_SIZE_MB`, `.pdf` / `.md` / `.txt`) | `IngestResult` |
+| `POST` | `/api/knowledge-base/files` | multipart `files` (≤10 files × ≤`INGEST_MAX_FILE_SIZE_MB`, `.pdf` / `.md` / `.txt` / `.xlsx`) | `IngestResult` |
 | `POST` | `/api/knowledge-base/urls` | `{ "urls": string[] }` (1–`INGEST_MAX_URLS`) | `IngestResult` |
 | `GET` | `/api/knowledge-base/sources` | — | `KnowledgeSource[]` |
 | `DELETE` | `/api/knowledge-base/sources/:sourceId` | — | `{ "deleted": true }` |
@@ -292,11 +332,11 @@ All env parsing and validation is centralised in `src/config/aiConfig.ts` via `C
 | `PORT` | `3002` | Express HTTP port |
 | `GRPC_PORT` | `50051` | gRPC port |
 | `MONGODB_URI` / `MONGODB_DB_NAME` | local URI / `ai` | Conversation history + prompt templates |
-| `AI_MODEL_PROVIDER` | `ollama` | `ollama` / `openai` / `anthropic` / `google` |
+| `AI_MODEL_PROVIDER` | `ollama` | `ollama` / `openai` / `anthropic` / `google` / `deepseek` |
 | `AI_TEMPERATURE` | `0.7` | Sampling temperature |
 | `AI_MAX_TOKENS` | unset | Optional response cap |
 | `AI_TASK_TYPE` | unset (`simple` in `.env.example`) | Explicit chain override |
-| `CONVERSATION_MEMORY_TYPE` / `CONVERSATION_MAX_HISTORY` | `buffer` / `10` | Validated but unused |
+| `CONVERSATION_MEMORY_TYPE` / `CONVERSATION_MAX_HISTORY` | `buffer` / `15` | Memory type unused; max history limits Mongo and the model prompt |
 | `PROMPT_TEMPLATES_ENABLED` / `PROMPT_TEMPLATE_STORAGE` / `PROMPT_TEMPLATE_DEFAULT` | `true` / `mongodb` / unset | Template storage and custom-chain template |
 | `BULGARIAN_CULTURE_PROMPT_TEMPLATE` | `bulgarian_culture_system` | System-prompt template name for the simple chain |
 | `AI_SERVICE_TOKEN` | unset | Inbound ingest auth; must match admin |
@@ -314,7 +354,7 @@ Provider keys are required only for the selected provider. `PROMPT_TEMPLATES_ENA
 | Chroma collection (`RAG_VECTOR_STORE_COLLECTION`, default `embeddings`) | One embedding per ingested chunk | `RAG_ENABLED=true` + `RAG_VECTOR_STORE_TYPE=chroma` |
 | In-memory store | Same shape, ephemeral | `RAG_VECTOR_STORE_TYPE=memory` |
 
-Field-level detail: [databases.md](./databases.md). Note that the claim there about `CONVERSATION_MAX_HISTORY` limiting what is sent to the model does not match the code — see [Conversation history](#conversation-history).
+Field-level detail: [databases.md](./databases.md).
 
 ## Observability and error handling
 
@@ -345,7 +385,7 @@ Local development: `npm run dev:ai` (tsx watch). Start Chroma separately with `-
 
 ## Known gaps
 
-- `CONVERSATION_MAX_HISTORY` / `CONVERSATION_MEMORY_TYPE` are inert; history grows unbounded per user.
+- `CONVERSATION_MEMORY_TYPE` is inert (`buffer` / `summary` have no effect).
 - No API to clear a user's conversation, even though the port method exists.
 - Health reports the AI provider as `connected` unconditionally.
 - `tokensUsed`, `model`, and `processingTimeMs` never cross the gRPC boundary.

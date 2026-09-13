@@ -292,6 +292,9 @@ export class LangChainExecutor implements ChainExecutorPort {
         enhancedPrompt = `Based on the following context, answer the question. If the context doesn't contain enough information to answer the question, say so.
 
 IMPORTANT: Keep your response under 700 characters.
+If the user asks where a place is, for an address, or how to get somewhere, and the context contains a Google Maps URL for it, include that URL verbatim on its own line. Never build or alter Google Maps URLs yourself.
+If the user asks for a recommendation or comparison, suggest only items that appear in the context, using their exact names, with a one-line reason for each. If nothing in the context fits, say so — never invent products.
+Answer in the language of the question.
 
 Context:
 ${contextText}

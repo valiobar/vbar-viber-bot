@@ -38,6 +38,7 @@ Viber :3001
     ├─ Mongo `bot`          subscribers + currentStepId
     ├─ REST + X-Service-Token ──► Admin CMS (steps, messages, keyboards, carousels, bot-settings)
     ├─ RabbitMQ consume `viber.refresh`  (reload in-memory cache)
+    ├─ RabbitMQ publish `analytics.step-usage`  (AnalyticsPublisher)
     └─ gRPC ProcessMessage ──► AI :50051
 ```
 
@@ -77,7 +78,7 @@ application/   handlers, ViberBotService, BotDataService, StepSender, ViberAiSer
       │
 ports/out/     IAdminServiceClient, IAiServiceClient, IUserRepository
       │
-adapters/out/  AdminServiceClient, AiServiceGrpcClient, MongooseUserRepository
+adapters/out/  AdminServiceClient, AiServiceGrpcClient, MongooseUserRepository, AnalyticsPublisher
 ```
 
 | Layer | Path | Contents |
@@ -86,7 +87,7 @@ adapters/out/  AdminServiceClient, AiServiceGrpcClient, MongooseUserRepository
 | Application | `src/application/` | Event handlers, `ViberBotService`, `BotDataService`, `StepSender`, converters, `ViberAiService` |
 | Domain | `src/domains/user/` | `ViberUser` entity |
 | Outbound ports | `src/ports/out/` | `IAdminServiceClient`, `IAiServiceClient`, `IUserRepository` |
-| Outbound adapters | `src/adapters/out/` | Admin REST client, `grpc/AiServiceGrpcClient`, mongoose user model/repo |
+| Outbound adapters | `src/adapters/out/` | Admin REST client, `grpc/AiServiceGrpcClient`, mongoose user model/repo, `AnalyticsPublisher` |
 | Config | `src/config/` | `viber.ts`, `security.ts` |
 
 Wiring is in `index.ts`: construct the gRPC client, construct `MessageHandler` with that client (required — constructor throws if it is missing).
@@ -112,9 +113,19 @@ Scripted replies go through `TextMessageHandler` + `StepSender`.
 1. Bot settings supply `buttonsPrefix` (e.g. a hidden prefix on keyboard buttons).
 2. If the inbound text contains that prefix, the prefix is stripped and the remainder is matched against step `trigger` strings (case-insensitive).
 3. The first matching step is sent: resolve message IDs → optional carousel → optional keyboard → `bot.sendMessage`.
-4. On success, `user.currentStepId` is updated in Mongo.
+4. On success, `user.currentStepId` is updated in Mongo and a `StepUsageEvent` is published (fire-and-forget).
 
-`StepSender` also runs a **custom handler** when `step.customHandler` is set (`application/custom-steps/`). That replaces the normal send path.
+`StepSender` also runs a **custom handler** when `step.customHandler` is set (`application/custom-steps/`). That replaces the normal send path; a successful custom handler still publishes analytics (with `customHandler` set).
+
+**Analytics instrumentation** (`AnalyticsPublisher`): `sendStep` accepts an optional `{ source, trigger? }` context from the call site. Sources:
+
+| Source | Call site | When |
+|--------|-----------|------|
+| `trigger` | `TextMessageHandler` | Matched step trigger (includes the trigger text) |
+| `welcome` | `MessageHandler` | Welcome step on first message |
+| `subscribe` | `SubscribeHandler` | Welcome step on subscribe |
+
+Not tracked: broadcasts (`BroadcastSender` does not go through `sendStep`) and AI conversation turns while the user stays on the same `isAi` step (no step transition). Publish failures are logged only — they never block or fail the user-visible send.
 
 Non-text message types (picture, video, file, location, contact, sticker, URL) have dedicated handlers that currently **log only**, unless the user is on an AI step (see below).
 
@@ -137,6 +148,8 @@ Auth: `X-Service-Token`. Viber sends `ADMIN_SERVICE_TOKEN`, then `VIBER_SERVICE_
 `BotDataService` holds the result in memory (maps by id and by trigger). Fetch order: steps → messages + keyboards in parallel → carousels (after messages, because rich-media content references carousel IDs).
 
 `RefreshConsumer` binds queue `viber.refresh` and calls `refreshAllData()` so every instance reloads after an admin save. Viber never writes to `admin_service` Mongo.
+
+`AnalyticsPublisher` publishes persistent `StepUsageEvent` messages to the `viber-bot` topic exchange with routing key `analytics.step-usage`. It asserts and binds the durable queue on first publish so events are retained if admin’s consumer is not yet running.
 
 Retries: the REST client uses a 30 s timeout and up to 3 retries with backoff on transient HTTP failures.
 
@@ -218,11 +231,42 @@ The proto response is a single field: `response` (string). AI also computes `mod
 
 `ViberAiService`:
 
-- On a non-empty `response`, sends one `Message.Text` via `bot.sendMessage`.
-- On an empty/missing `response`, logs a warning and sends nothing.
-- On gRPC / network / invalid-response errors, logs and **swallows the error**. The user gets no fallback text. Message processing is considered finished (the type-specific handler is not run).
+- If `AI_THINKING_GIF_URL` is a non-empty public HTTPS URL, first sends a keyboard-only `Message.Keyboard` (no chat bubble) with one button (6 columns × 2 rows, `BgMediaType: gif`, `ActionType: none`, `InputFieldState: hidden`). SVG is not a valid Viber `BgMediaType`.
+- On a non-empty `response`, first tries to parse it as a **carousel directive** (see below); otherwise sends the AI text with the step keyboard restored (converted via `KeyboardConverter` + `buttonsPrefix`). If the step has no keyboard, a dismiss keyboard (`InputFieldState: regular`, one silent `none` button) replaces the GIF.
+- On an empty/missing `response`, or on gRPC / network errors: if a thinking keyboard was sent, sends another keyboard-only message with the same restore keyboard so the GIF does not persist. If no thinking keyboard was sent, behaviour is unchanged (log only).
+- Errors are still swallowed; the type-specific handler is not run.
 
 There is no deadline on the gRPC call. A hung AI process holds the webhook handler until Node or a proxy times out.
+
+### AI carousel directive
+
+The AI reply is still a single string, but `ViberAiService` interprets a JSON object of this shape as an instruction to render a dynamically generated carousel (`src/application/services/AiCarouselDirective.ts`):
+
+```json
+{
+  "type": "carousel",
+  "text": "optional intro text",
+  "cards": [
+    {
+      "title": "Rila Monastery",
+      "description": "10th-century monastery in the Rila mountains",
+      "image": "https://example.com/rila.jpg",
+      "buttons": [
+        { "text": "Open map", "actionType": "open-url", "actionBody": "https://maps.google.com/..." },
+        { "text": "Tell me more", "actionType": "reply", "actionBody": "Tell me more about Rila Monastery" }
+      ]
+    }
+  ]
+}
+```
+
+Behaviour:
+
+- `parseAiCarouselDirective` strips markdown code fences, then requires `type: "carousel"` and at least one renderable card (a card needs a `title` or an `image`; invalid cards/buttons are dropped, max 6 cards). Anything else — including a directive that validates to zero cards — falls back to the plain-text send, so a malformed model answer never silences the bot.
+- `buildRichMediaFromCards` emits a `rich_media` payload (`ButtonsGroupColumns: 6`) with a uniform per-card layout: image (3 rows, when any card has one), title, description, then one row per action button — padded with filler cells and capped at Viber's 7-row limit.
+- The send is `[optional Message.Text intro] + Message.RichMedia` with the restore keyboard attached to the rich-media message (`minApiVersion` 7.2).
+- `reply` buttons carry **no** `buttonsPrefix`, so a tap routes the `actionBody` text back to the AI as a normal user message (follow-up questions). `open-url` buttons open the URL. Other action types are not allowed.
+- The directive contract and the prompt instructions that produce it are documented in [ai.md](./ai.md).
 
 ### Transport and addressing
 
@@ -250,10 +294,10 @@ User on step isAi=true
   → POST /webhook/viber
   → MessageHandler (prefix? → scripted step : AI)
   → ViberAiService
-  → AiServiceGrpcClient.ProcessMessage
-  → AI ProcessMessageUseCase (history + chain + save)
-  → { response }
-  → bot.sendMessage(Message.Text)
+      → bot.sendMessage(thinking keyboard only)   # when AI_THINKING_GIF_URL is set
+      → AiServiceGrpcClient.ProcessMessage
+      → AI ProcessMessageUseCase (history + chain + save)
+      → bot.sendMessage(AI text, restored keyboard)
 ```
 
 ## Storage
@@ -287,10 +331,11 @@ Root `.env` (Compose and `deploy.sh`). Relevant keys:
 |----------|------|
 | `PORT` | HTTP listen (default `3001`) |
 | `MONGODB_URI` / `MONGODB_DB_NAME` | Runtime DB; Compose injects `/bot` |
-| `RABBITMQ_URI` | Refresh consumer |
+| `RABBITMQ_URI` | Refresh consumer and analytics publisher |
 | `VIBER_BOT_TOKEN` | Viber API + webhook HMAC |
 | `VIBER_BOT_WEBHOOK_URL` | Public `https://…/webhook/viber` |
 | `PUBLIC_URL` | Fallback only: `${PUBLIC_URL}/webhook/viber` if webhook URL is empty |
+| `AI_THINKING_GIF_URL` | Optional public HTTPS GIF for the AI thinking keyboard. Empty disables it |
 | `ADMIN_SERVICE_URL` | Admin base (Compose: `http://admin:3000`) |
 | `ADMIN_SERVICE_TOKEN` / `VIBER_SERVICE_TOKEN` / `SERVICE_TOKEN` | Token sent to admin |
 | `AI_SERVICE_GRPC_HOST` / `AI_SERVICE_GRPC_PORT` | AI gRPC (`ai` / `50051` in Compose) |

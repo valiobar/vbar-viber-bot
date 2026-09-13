@@ -31,6 +31,12 @@ export interface GoogleConfig {
   model: string;
 }
 
+export interface DeepSeekConfig {
+  apiKey: string;
+  model: string;
+  baseUrl: string;
+}
+
 /**
  * RAG (Retrieval Augmented Generation) configuration
  */
@@ -79,6 +85,7 @@ export interface AIConfig {
   ollama?: OllamaConfig;
   anthropic?: AnthropicConfig;
   google?: GoogleConfig;
+  deepseek?: DeepSeekConfig;
   rag: RAGConfig;
   ingest: IngestConfig;
   serviceToken?: string; // AI_SERVICE_TOKEN — required for ingest routes at runtime
@@ -111,8 +118,14 @@ export function getAIConfig(): AIConfig {
   ) || "buffer") as "buffer" | "summary";
   const conversationMaxHistory = ConfigHelper.getEnvNumber(
     "CONVERSATION_MAX_HISTORY",
-    10
+    15
   );
+
+  if (!Number.isInteger(conversationMaxHistory) || conversationMaxHistory < 1) {
+    throw new Error(
+      `Invalid CONVERSATION_MAX_HISTORY: ${conversationMaxHistory}. Must be a positive integer`
+    );
+  }
 
   // Validate conversation memory type
   if (
@@ -129,6 +142,7 @@ export function getAIConfig(): AIConfig {
   let ollama: OllamaConfig | undefined;
   let anthropic: AnthropicConfig | undefined;
   let google: GoogleConfig | undefined;
+  let deepseek: DeepSeekConfig | undefined;
 
   // OpenAI configuration
   if (provider === AIProvider.OPENAI) {
@@ -181,6 +195,24 @@ export function getAIConfig(): AIConfig {
     google = {
       apiKey,
       model: ConfigHelper.getEnv("GOOGLE_AI_MODEL", "gemini-pro"),
+    };
+  }
+
+  // DeepSeek configuration
+  if (provider === AIProvider.DEEPSEEK) {
+    const apiKey = ConfigHelper.getEnv("DEEPSEEK_API_KEY");
+    if (!apiKey) {
+      throw new Error(
+        "DEEPSEEK_API_KEY is required when using DeepSeek provider"
+      );
+    }
+    deepseek = {
+      apiKey,
+      model: ConfigHelper.getEnv("DEEPSEEK_MODEL", "deepseek-flash"),
+      baseUrl: ConfigHelper.getEnv(
+        "DEEPSEEK_BASE_URL",
+        "https://api.deepseek.com"
+      ),
     };
   }
 
@@ -285,6 +317,7 @@ export function getAIConfig(): AIConfig {
     ollama,
     anthropic,
     google,
+    deepseek,
     rag: ragConfig,
     ingest: ingestConfig,
     serviceToken,

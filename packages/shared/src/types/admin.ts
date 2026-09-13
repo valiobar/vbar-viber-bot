@@ -240,6 +240,8 @@ export interface CarouselDTO extends BaseEntity {
   type: "rich_media";
   humanReadableName: string;
   hidden: boolean;
+  /** Starter-only carousel: selectable in the create form, never sent by the bot */
+  isTemplate: boolean;
   BgColor: string | null;
   ButtonsGroupColumns: number; // 1-6, default 6
   ButtonsGroupRows: number; // 1-7, default 7

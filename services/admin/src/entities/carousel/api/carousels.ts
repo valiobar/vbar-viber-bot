@@ -16,6 +16,9 @@ const buildListQuery = (
   if (pagination.limit !== undefined) params.set("limit", String(pagination.limit));
   if (filters.search?.trim()) params.set("search", filters.search.trim());
   if (filters.hidden !== undefined) params.set("hidden", String(filters.hidden));
+  if (filters.isTemplate !== undefined) {
+    params.set("isTemplate", String(filters.isTemplate));
+  }
   const query = params.toString();
   return query ? `?${query}` : "";
 };

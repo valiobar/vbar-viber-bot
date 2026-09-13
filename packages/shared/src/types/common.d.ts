@@ -51,7 +51,7 @@ export interface MessageQueueEvent<T = any> {
 /**
  * Message Queue Queue Names
  */
-export type MessageQueueName = "viber.messages" | "ai.processed" | "admin.config" | "viber.refresh";
+export type MessageQueueName = "viber.messages" | "ai.processed" | "admin.config" | "viber.refresh" | "analytics.step-usage";
 /**
  * Health Check Response
  */
@@ -74,6 +74,27 @@ export interface RefreshEvent {
     type: "bot_data_refresh";
     timestamp: string;
     source: "admin_service";
-    dataType?: "all" | "steps" | "messages" | "keyboards" | "bot_settings";
+    dataType?: "all" | "steps" | "messages" | "keyboards" | "carousels" | "bot_settings" | "broadcasts";
+}
+/**
+ * How a step execution was initiated
+ */
+export type StepUsageSource = "trigger" | "welcome" | "subscribe";
+/**
+ * Step usage analytics event (viber → admin via RabbitMQ)
+ */
+export interface StepUsageEvent {
+    type: "step_usage";
+    /** Step ID from admin_service.steps */
+    stepId: string;
+    /** Viber user ID */
+    userId: string;
+    /** How the step was initiated */
+    source: StepUsageSource;
+    /** Matched trigger text (only when source === "trigger") */
+    trigger?: string;
+    /** Custom handler name when the step ran a custom handler */
+    customHandler?: string | null;
+    timestamp: string;
 }
 //# sourceMappingURL=common.d.ts.map

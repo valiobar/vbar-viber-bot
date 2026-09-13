@@ -103,7 +103,7 @@ Use the root `.env` (copy from `.env.example`). Compose and `deploy.sh` read thi
 | `SERVICE_TOKEN`            | Shared inbound service token                         |
 | `JWT_SECRET`               | Admin JWT signing secret (≥32 chars)                 |
 | `BOT_TOKEN_ENCRYPTION_KEY` | Bot token encryption key                             |
-| `AI_MODEL_PROVIDER`        | `ollama` \| `openai` \| `anthropic` \| `google`      |
+| `AI_MODEL_PROVIDER`        | `ollama` \| `openai` \| `anthropic` \| `google` \| `deepseek` |
 
 ### Other important variables
 
@@ -112,8 +112,9 @@ Use the root `.env` (copy from `.env.example`). Compose and `deploy.sh` read thi
 | `IMAGE_TAG` | Image tag to pull (`latest` locally; CI sets git SHA) |
 | `MONGODB_URI` / `MONGODB_DB_NAME` | Host/local npm; Compose injects per-service URIs and DB names (`admin_service`, `bot`, `ai`) |
 | `OLLAMA_BASE_URL` / `OLLAMA_MODEL` | Used when provider is Ollama; Compose defaults `OLLAMA_BASE_URL` to `http://ollama:11434` |
-| `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_AI_API_KEY` | Cloud LLM keys as needed |
+| `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_AI_API_KEY`, `DEEPSEEK_API_KEY` | Cloud LLM keys as needed |
 | `AI_SERVICE_GRPC_HOST` / `AI_SERVICE_GRPC_PORT` | Set by Compose for viber (`ai` / `50051`) |
+| `AI_THINKING_GIF_URL` | Optional. Public HTTPS GIF (or JPEG/PNG as Viber picture, max 500 KB) for the AI thinking keyboard. SVG is not supported. Unset/empty = no thinking indicator |
 | `JWT_EXPIRES_IN`, `JWT_REFRESH_EXPIRES_IN` | Optional JWT TTLs |
 | `NEXT_PUBLIC_APP_URL` | Admin public URL |
 | `RAG_ENABLED` / `AI_TASK_TYPE` | RAG stays off unless enabled; explicit `AI_TASK_TYPE` wins. See [rag.md](./rag.md) |

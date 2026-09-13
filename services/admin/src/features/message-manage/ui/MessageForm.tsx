@@ -150,7 +150,10 @@ export const MessageForm = ({
     const loadCarousels = async () => {
       setIsLoadingCarousels(true);
       try {
-        const data = await listCarousels({ hidden: false }, { limit: 100 });
+        const data = await listCarousels(
+          { hidden: false, isTemplate: false },
+          { limit: 100 }
+        );
         let options = data.carousels;
         const currentId =
           initialData?.type === "rich-media"

@@ -48,6 +48,7 @@ See `.env.example` for all available environment variables.
 
 **Conversation history**:
 - Loaded and saved per `userId` in Mongo. Chains receive `chat_history` for that request only.
+- Only the last `CONVERSATION_MAX_HISTORY` messages are kept (default 15).
 - `CONVERSATION_MEMORY_TYPE` is unused by the adapter (history is Mongo-only).
 
 **Task type vs RAG (precedence)**:
@@ -166,7 +167,7 @@ The AI Service uses **LangChain** as the core framework for AI processing, provi
 
 ### Conversation history
 
-Mongo-loaded `chat_history` is the only conversation context. There is no LangChain `BufferMemory` / `ConversationSummaryMemory` at adapter scope.
+Mongo-loaded `chat_history` is the only conversation context (last `CONVERSATION_MAX_HISTORY` messages, default 15). There is no LangChain `BufferMemory` / `ConversationSummaryMemory` at adapter scope.
 
 ### Flexible Task System
 

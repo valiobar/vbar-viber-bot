@@ -191,9 +191,7 @@ export const KeyboardForm = ({
   ): Record<string, string> => {
     const buttonErrors: Record<string, string> = {};
 
-    if (!button.Text.trim()) {
-      buttonErrors[`button-${index}-text`] = "Button text is required";
-    }
+    // Button text is optional (Viber allows image-only buttons)
     if (!button.TextColor || !/^#[0-9A-F]{6}$/i.test(button.TextColor)) {
       buttonErrors[`button-${index}-textColor`] = "Valid hex color is required";
     }
@@ -209,6 +207,19 @@ export const KeyboardForm = ({
     }
     if (!button.ActionBody.trim()) {
       buttonErrors[`button-${index}-actionBody`] = "Action body is required";
+    } else if (button.isJson && button.ActionType === "reply") {
+      try {
+        const parsed = JSON.parse(button.ActionBody);
+        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+          buttonErrors[`button-${index}-actionBody`] =
+            "JSON action body must be an object";
+        } else if (typeof parsed.trigger !== "string" || !parsed.trigger.trim()) {
+          buttonErrors[`button-${index}-actionBody`] =
+            "JSON action body requires a non-empty 'trigger' property";
+        }
+      } catch {
+        buttonErrors[`button-${index}-actionBody`] = "Action body must be valid JSON";
+      }
     }
 
     return buttonErrors;

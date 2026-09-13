@@ -9,6 +9,7 @@ import { OpenAIProvider } from "../providers/OpenAIProvider";
 import { OllamaProvider } from "../providers/OllamaProvider";
 import { AnthropicProvider } from "../providers/AnthropicProvider";
 import { GoogleProvider } from "../providers/GoogleProvider";
+import { DeepSeekProvider } from "../providers/DeepSeekProvider";
 import { AIProviderPort } from "../../../../ports/out/AIProviderPort";
 import { AIConfig, getAIConfig } from "../../../../config/aiConfig";
 import { Logger } from "@vbar/shared";
@@ -18,7 +19,7 @@ import { AIProvider } from "../../../../domains/ai/value-objects";
  * Create an AI provider instance based on configuration
  *
  * Reads AI configuration and creates the appropriate provider instance
- * (OpenAI, Ollama, Anthropic, or Google) based on the configured provider.
+ * (OpenAI, Ollama, Anthropic, Google, or DeepSeek) based on the configured provider.
  *
  * @param logger - Logger instance for logging
  * @returns AIProviderPort instance for the configured provider
@@ -43,6 +44,9 @@ export function createAIProvider(logger: Logger): AIProviderPort {
 
     case AIProvider.GOOGLE:
       return new GoogleProvider(config, logger);
+
+    case AIProvider.DEEPSEEK:
+      return new DeepSeekProvider(config, logger);
 
     default:
       throw new Error(

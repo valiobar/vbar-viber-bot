@@ -16,6 +16,7 @@ export interface ICarouselDocument extends mongoose.Document {
   Type: string;
   humanReadableName: string;
   hidden: boolean;
+  isTemplate: boolean;
   BgColor: string | null;
   ButtonsGroupColumns: number;
   ButtonsGroupRows: number;
@@ -29,7 +30,8 @@ const carouselButtonSchema = createButtonSchema(7);
 
 const carouselCtaSchema = new Schema(
   {
-    text: { type: String, required: true },
+    // Optional: Viber allows buttons without text (e.g. color-only CTA)
+    text: { type: String, default: "" },
     textColor: {
       type: String,
       required: true,
@@ -77,6 +79,7 @@ const carouselSchema = new Schema<ICarouselDocument>(
       maxlength: 100,
     },
     hidden: { type: Boolean, default: false },
+    isTemplate: { type: Boolean, default: false },
     BgColor: {
       type: String,
       default: null,
@@ -106,6 +109,8 @@ const carouselSchema = new Schema<ICarouselDocument>(
 
 carouselSchema.index({ hidden: 1 });
 carouselSchema.index({ humanReadableName: 1 });
+carouselSchema.index({ isTemplate: 1 });
+carouselSchema.index({ hidden: 1, isTemplate: 1 });
 
 carouselSchema.pre("save", function () {
   (this as any).updatedAt = new Date();

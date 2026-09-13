@@ -105,7 +105,10 @@ export abstract class LangChainAdapter implements AIProviderPort {
           model: this.chatModel.constructor.name,
           hasContext: !!context,
           contextUserId: context?.userId,
-          historyMessageCount: context?.messages.length ?? 0,
+          historyMessageCount: Math.min(
+            context?.messages.length ?? 0,
+            this.config.conversationMaxHistory
+          ),
           promptLength: prompt.length,
           attempt: attempt + 1,
           maxRetries: maxRetries + 1,
@@ -225,19 +228,21 @@ export abstract class LangChainAdapter implements AIProviderPort {
   protected conversationToMessages(
     context?: ConversationContext
   ): BaseMessage[] {
-    const messages: BaseMessage[] = [];
-
-    if (context && context.messages.length > 0) {
-      for (const msg of context.messages) {
-        if (msg.role === "user") {
-          messages.push(new HumanMessage(msg.content));
-        } else if (msg.role === "assistant") {
-          messages.push(new AIMessage(msg.content));
-        }
-      }
+    if (!context || context.messages.length === 0) {
+      return [];
     }
 
-    return messages;
+    return context
+      .getRecentMessages(this.config.conversationMaxHistory)
+      .flatMap((msg) => {
+        if (msg.role === "user") {
+          return [new HumanMessage(msg.content)];
+        }
+        if (msg.role === "assistant") {
+          return [new AIMessage(msg.content)];
+        }
+        return [];
+      });
   }
 
   /**

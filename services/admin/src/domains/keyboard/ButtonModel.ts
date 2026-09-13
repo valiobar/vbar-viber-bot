@@ -84,8 +84,9 @@ export const createButtonSchema = (maxRows: number) =>
         default: 1,
       },
       Text: {
+        // Optional: Viber allows buttons without text (e.g. image-only buttons).
+        // Note: `required: true` on a Mongoose String rejects "" — do not add it back.
         type: String,
-        required: true,
         default: "",
       },
       TextColor: {

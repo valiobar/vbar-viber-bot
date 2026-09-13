@@ -32,12 +32,21 @@ export class IngestKnowledgeUseCaseImpl implements IngestKnowledgeUseCase {
     const items: IngestResultItem[] = [];
     for (const file of files) {
       try {
-        const { text, fileType } = await this.documentProcessor.extractFromFile(
-          file.buffer,
-          file.filename,
-          file.mimeType
-        );
-        const chunks = await this.documentProcessor.chunk(text, this.ingestConfig);
+        let chunks: string[];
+        let fileType: string;
+        if (file.filename.toLowerCase().endsWith(".xlsx")) {
+          // Row-based: 1 spreadsheet row = 1 chunk; no char splitting
+          chunks = await this.documentProcessor.extractRowsFromXlsx(file.buffer);
+          fileType = "xlsx";
+        } else {
+          const extracted = await this.documentProcessor.extractFromFile(
+            file.buffer,
+            file.filename,
+            file.mimeType
+          );
+          chunks = await this.documentProcessor.chunk(extracted.text, this.ingestConfig);
+          fileType = extracted.fileType;
+        }
         const sourceId = randomUUID();
         const ingestedAt = new Date().toISOString();
         await this.vectorStore.addDocuments(

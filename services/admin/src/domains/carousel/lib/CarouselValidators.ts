@@ -112,9 +112,7 @@ export class CarouselValidators {
     index: number
   ): void {
     for (const [i, cta] of card.ctaButtons.entries()) {
-      if (!cta.text.trim()) {
-        throw new Error(`Card ${index + 1}, button ${i + 1}: text is required`);
-      }
+      // CTA text is optional (Viber allows buttons without text)
       if (cta.actionType !== "none" && !cta.actionBody.trim()) {
         throw new Error(
           `Card ${index + 1}, button ${i + 1}: action body is required`
