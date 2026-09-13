@@ -217,10 +217,14 @@ export class StepSender {
       }
 
       // Convert messages to Viber format
-      // Set minApiVersion to support InputFieldState (requires 7.2+)
-      // Use user's API version if available, otherwise default to 7.2
-      const userApiVersion = userProfile.apiVersion || 7.2;
-      const minApiVersion = userApiVersion >= 7.2 ? userApiVersion : 7.2;
+      // Integer min_api_version; 7 covers InputFieldState (API level 4)
+      const userApiVersion = Number(userProfile.apiVersion);
+      const userApiVersionInt = Number.isFinite(userApiVersion)
+        ? Math.floor(userApiVersion)
+        : 0;
+      const minApiVersion = keyboard
+        ? Math.max(7, userApiVersionInt || 7)
+        : userApiVersionInt || 1;
 
       const viberMessages = this.messageConverter.convertToViberMessages(
         resolvedMessageDTOs,

@@ -16,7 +16,7 @@ import {
   parseAiCarouselDirective,
 } from "./AiCarouselDirective";
 
-const MIN_API_VERSION = 7.2;
+const MIN_API_VERSION = 7;
 
 export class ViberAiService {
   constructor(
@@ -154,7 +154,7 @@ export class ViberAiService {
           );
         }
         // Message.RichMedia(richMedia, keyboard, trackingData, timestamp, token, minApiVersion)
-        // Rich media requires min_api_version >= 7; MIN_API_VERSION (7.2) satisfies it
+        // Rich media requires min_api_version >= 7; MIN_API_VERSION satisfies it
         messages.push(
           new (Message.RichMedia as any)(
             richMedia,

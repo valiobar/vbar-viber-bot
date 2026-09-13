@@ -55,7 +55,7 @@ const keyboardSchema = new Schema<IKeyboardDocument>(
     InputFieldState: {
       type: String,
       enum: ["regular", "minimized", "hidden"],
-      default: "regular",
+      default: "hidden",
     },
     BgColor: {
       type: String,
