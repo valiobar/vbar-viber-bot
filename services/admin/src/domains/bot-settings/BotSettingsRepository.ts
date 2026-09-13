@@ -101,6 +101,9 @@ export class BotSettingsRepository {
     if (updates.buttonsTextColor !== undefined) {
       updateData.buttonsTextColor = updates.buttonsTextColor;
     }
+    if (updates.buttonsFrame !== undefined) {
+      updateData.buttonsFrame = updates.buttonsFrame;
+    }
     if (updates.buttonsPrefix !== undefined) {
       updateData.buttonsPrefix = updates.buttonsPrefix;
     }
@@ -146,6 +149,7 @@ export class BotSettingsRepository {
       status: doc.status,
       buttonsBackground: doc.buttonsBackground,
       buttonsTextColor: doc.buttonsTextColor,
+      buttonsFrame: doc.buttonsFrame,
       buttonsPrefix: doc.buttonsPrefix,
       welcomeStepId: doc.welcomeStepId,
       GAKey: doc.GAKey,
@@ -170,6 +174,7 @@ export class BotSettingsRepository {
       status: settings.status,
       buttonsBackground: settings.buttonsBackground,
       buttonsTextColor: settings.buttonsTextColor,
+      buttonsFrame: settings.buttonsFrame,
       buttonsPrefix: settings.buttonsPrefix,
       welcomeStepId:
         settings.welcomeStepId === null

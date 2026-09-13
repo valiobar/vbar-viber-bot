@@ -6,7 +6,7 @@
  */
 
 import mongoose, { Schema, Model } from "mongoose";
-import { createButtonSchema } from "../keyboard/ButtonModel";
+import { createButtonSchema, createFrameSchema } from "../keyboard/ButtonModel";
 import type { CarouselCardDTO } from "./types";
 
 /**
@@ -50,6 +50,11 @@ const carouselCtaSchema = new Schema(
       default: "external",
     },
     silent: { type: Boolean, default: false },
+    Frame: {
+      type: createFrameSchema(),
+      required: false,
+      default: null,
+    },
   },
   { _id: false }
 );

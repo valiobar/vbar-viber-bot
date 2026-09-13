@@ -1,3 +1,4 @@
+import type { ButtonFrame } from "@vbar/shared";
 import type { BotSettingsDTO } from "../model/types";
 
 export const FALLBACK_BUTTON_TEXT_COLOR = "#000000";
@@ -13,3 +14,13 @@ export const resolveCtaColors = (settings: BotSettingsDTO | null) => ({
   bgColor: settings?.buttonsBackground ?? FALLBACK_CTA_BG_COLOR,
   textColor: settings?.buttonsTextColor ?? FALLBACK_CTA_TEXT_COLOR,
 });
+
+export const FALLBACK_BUTTON_FRAME: ButtonFrame = {
+  BorderWidth: 1,
+  BorderColor: "#000000",
+  CornerRadius: 10,
+};
+
+export const resolveButtonFrame = (
+  settings: BotSettingsDTO | null
+): ButtonFrame | null => settings?.buttonsFrame ?? null;

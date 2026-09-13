@@ -74,6 +74,16 @@ interface SortablePreviewButtonProps {
 const getButtonId = (button: PreviewButton, index: number): string =>
   button.tempId || `btn-${index}`;
 
+const applyFrameStyle = (
+  baseStyle: CSSProperties,
+  frame: PreviewButton["Frame"]
+) => {
+  if (frame != null) {
+    baseStyle.borderRadius = `${frame.CornerRadius}px`;
+    baseStyle.border = `${frame.BorderWidth}px solid ${frame.BorderColor}`;
+  }
+};
+
 const SortablePreviewButton = ({
   id,
   button,
@@ -202,6 +212,8 @@ export const KeyboardPreview = ({
       // Only BgColor, no media
       baseStyle.backgroundColor = button.BgColor || "#ffffff";
     }
+
+    applyFrameStyle(baseStyle, button.Frame);
 
     return baseStyle;
   };

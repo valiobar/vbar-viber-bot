@@ -8,6 +8,11 @@
  * location-picker and share-phone are not offered (Viber forbids them in rich media).
  */
 
+import {
+  FALLBACK_BUTTON_FRAME,
+  resolveButtonFrame,
+  useBotSettingsStore,
+} from "@/entities/bot-settings";
 import type {
   ActionType,
   ButtonDTO,
@@ -15,6 +20,7 @@ import type {
   TextSize,
   TextVAlign,
 } from "@/entities/carousel";
+import { ButtonFrameFields } from "@/entities/keyboard";
 
 type FormButton = Omit<ButtonDTO, "id" | "createdAt" | "updatedAt"> & {
   tempId?: string;
@@ -41,6 +47,7 @@ export const CarouselButtonForm = ({
   errors,
   onUpdate,
 }: CarouselButtonFormProps) => {
+  const settings = useBotSettingsStore((state) => state.settings);
   const fieldKey = (field: string) => `card-${cardIndex}-button-${index}-${field}`;
 
   return (
@@ -214,6 +221,13 @@ export const CarouselButtonForm = ({
           )}
         </div>
       </div>
+
+      <ButtonFrameFields
+        idPrefix={`card-${cardIndex}-button-${index}`}
+        frame={button.Frame}
+        defaultFrame={resolveButtonFrame(settings) ?? FALLBACK_BUTTON_FRAME}
+        onChange={(Frame) => onUpdate({ Frame })}
+      />
 
       <div className="grid grid-cols-2 gap-4">
         <div>

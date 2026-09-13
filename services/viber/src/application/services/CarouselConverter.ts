@@ -98,6 +98,13 @@ export class CarouselConverter {
       viberButton.OpenURLType = buttonDTO.OpenURLType;
       viberButton.InternalBrowser = buttonDTO.InternalBrowser;
     }
+    if (buttonDTO.Frame != null) {
+      viberButton.Frame = {
+        BorderWidth: buttonDTO.Frame.BorderWidth,
+        BorderColor: buttonDTO.Frame.BorderColor,
+        CornerRadius: buttonDTO.Frame.CornerRadius,
+      };
+    }
     return viberButton;
   }
 

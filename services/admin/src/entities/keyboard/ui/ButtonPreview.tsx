@@ -62,6 +62,12 @@ export const ButtonPreview = ({ button }: ButtonPreviewProps) => {
           color: button.TextColor,
           width: `${(button.Columns / 6) * 100}%`,
           minHeight: `${button.Rows * 40}px`,
+          ...(button.Frame != null
+            ? {
+                borderRadius: `${button.Frame.CornerRadius}px`,
+                border: `${button.Frame.BorderWidth}px solid ${button.Frame.BorderColor}`,
+              }
+            : {}),
         }}
       >
         {button.Text || "Button Text"}

@@ -15,6 +15,7 @@ import {
   InternalBrowserMode,
   InternalBrowserConfig,
   InputFieldState,
+  ButtonFrame,
 } from "../types";
 import { Button } from "../Button";
 
@@ -146,6 +147,45 @@ export class Validators {
     }
 
     return trimmedColor;
+  }
+
+  /**
+   * Validates Viber API level 6 button frame.
+   * Null / undefined means "do not send Frame".
+   */
+  static validateFrame(
+    frame: ButtonFrame | null | undefined
+  ): ButtonFrame | null {
+    if (frame === null || frame === undefined) {
+      return null;
+    }
+
+    if (typeof frame !== "object") {
+      throw new Error("Frame must be an object or null");
+    }
+
+    if (typeof frame.BorderWidth !== "number" || isNaN(frame.BorderWidth)) {
+      throw new Error("Frame.BorderWidth must be a number");
+    }
+    if (typeof frame.CornerRadius !== "number" || isNaN(frame.CornerRadius)) {
+      throw new Error("Frame.CornerRadius must be a number");
+    }
+
+    const BorderWidth = Math.floor(frame.BorderWidth);
+    const CornerRadius = Math.floor(frame.CornerRadius);
+
+    if (BorderWidth < 0 || BorderWidth > 10) {
+      throw new Error("Frame.BorderWidth must be between 0 and 10");
+    }
+    if (CornerRadius < 0 || CornerRadius > 10) {
+      throw new Error("Frame.CornerRadius must be between 0 and 10");
+    }
+
+    return {
+      BorderWidth,
+      BorderColor: this.validateHexColor(frame.BorderColor, "Frame.BorderColor"),
+      CornerRadius,
+    };
   }
 
   /**

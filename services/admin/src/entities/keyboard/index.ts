@@ -6,6 +6,7 @@ export type {
   TextSize,
   TextVAlign,
   TextHAlign,
+  ButtonFrame,
   CreateKeyboardInput,
   UpdateKeyboardInput,
   ListKeyboardsResult,
@@ -20,3 +21,4 @@ export {
 } from "./api/keyboards";
 export { KeyboardPreview } from "./ui/KeyboardPreview";
 export { ButtonPreview } from "./ui/ButtonPreview";
+export { ButtonFrameFields } from "./ui/ButtonFrameFields";

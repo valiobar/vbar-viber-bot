@@ -7,12 +7,18 @@
  */
 
 import { useState, type KeyboardEvent } from "react";
-import type {
-  ActionType,
-  ButtonDTO,
-  TextHAlign,
-  TextSize,
-  TextVAlign,
+import {
+  FALLBACK_BUTTON_FRAME,
+  resolveButtonFrame,
+  useBotSettingsStore,
+} from "@/entities/bot-settings";
+import {
+  ButtonFrameFields,
+  type ActionType,
+  type ButtonDTO,
+  type TextHAlign,
+  type TextSize,
+  type TextVAlign,
 } from "@/entities/keyboard";
 
 const parseJsonObject = (text: string): Record<string, unknown> | null => {
@@ -64,6 +70,7 @@ export const ButtonForm = ({ button, index, errors, onUpdate }: ButtonFormProps)
   const [newKey, setNewKey] = useState("");
   const [newValue, setNewValue] = useState("");
   const jsonPayload = button.isJson ? parseJsonObject(button.ActionBody) ?? {} : {};
+  const settings = useBotSettingsStore((state) => state.settings);
 
   const handleToggleJson = (checked: boolean) => {
     if (!checked) {
@@ -277,6 +284,13 @@ export const ButtonForm = ({ button, index, errors, onUpdate }: ButtonFormProps)
           )}
         </div>
       </div>
+
+      <ButtonFrameFields
+        idPrefix={`button-${index}`}
+        frame={button.Frame}
+        defaultFrame={resolveButtonFrame(settings) ?? FALLBACK_BUTTON_FRAME}
+        onChange={(Frame) => onUpdate({ Frame })}
+      />
 
       {/* Action Type and Action Body */}
       <div className="space-y-4">

@@ -5,7 +5,8 @@
  * fields, image URL), custom-card buttons, and the total button cap.
  */
 
-import type { ButtonDTO, CarouselCardDTO } from "../types";
+import type { ButtonDTO, ButtonFrame, CarouselCardDTO } from "../types";
+import { Validators } from "../../keyboard/lib/Validators";
 import { CardFlattener } from "./CardFlattener";
 
 export class CarouselValidators {
@@ -127,6 +128,25 @@ export class CarouselValidators {
           );
         }
       }
+      this.validateCtaFrame(cta.Frame, index, i);
+    }
+  }
+
+  private static validateCtaFrame(
+    frame: ButtonFrame | null,
+    cardIndex: number,
+    buttonIndex: number
+  ): void {
+    if (frame == null) {
+      return;
+    }
+    try {
+      Validators.validateFrame(frame);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Card ${cardIndex + 1}, button ${buttonIndex + 1}: ${message}`
+      );
     }
   }
 

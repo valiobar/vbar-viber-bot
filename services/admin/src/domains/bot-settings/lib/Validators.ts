@@ -5,6 +5,8 @@
  * All validation logic is extracted here for better code organization and reusability.
  */
 
+import type { ButtonFrame } from "@vbar/shared";
+import { Validators as KeyboardValidators } from "../../keyboard/lib/Validators";
 import { BotStatus } from "../types";
 
 /**
@@ -102,6 +104,17 @@ export class Validators {
     }
 
     return trimmedColor;
+  }
+
+  /**
+   * Validates the Appearance default button frame.
+   * Delegates range/hex rules to keyboard Validators.validateFrame.
+   * Null / undefined means "no frame default".
+   */
+  static validateButtonsFrame(
+    frame: ButtonFrame | null | undefined
+  ): ButtonFrame | null {
+    return KeyboardValidators.validateFrame(frame);
   }
 
   /**

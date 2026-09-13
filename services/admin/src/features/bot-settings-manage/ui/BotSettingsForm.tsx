@@ -8,12 +8,33 @@
  */
 
 import { useState, useEffect } from "react";
-import type {
-  BotSettingsDTO,
-  BotStatus,
-  UpdateBotSettingsInput,
+import {
+  FALLBACK_BUTTON_FRAME,
+  type BotSettingsDTO,
+  type BotStatus,
+  type UpdateBotSettingsInput,
 } from "@/entities/bot-settings";
+import { ButtonFrameFields, type ButtonFrame } from "@/entities/keyboard";
 import { listSteps, type StepDTO } from "@/entities/step";
+
+const FRAME_BORDER_COLOR_PATTERN = /^#([0-9A-F]{6}|[0-9A-F]{8})$/i;
+
+const isFrameRange = (value: number): boolean =>
+  Number.isInteger(value) && value >= 0 && value <= 10;
+
+const validateButtonsFrame = (frame: ButtonFrame | null): string | null => {
+  if (!frame) return null;
+  if (!isFrameRange(frame.BorderWidth)) {
+    return "Border width must be an integer between 0 and 10";
+  }
+  if (!isFrameRange(frame.CornerRadius)) {
+    return "Corner radius must be an integer between 0 and 10";
+  }
+  if (!FRAME_BORDER_COLOR_PATTERN.test(frame.BorderColor)) {
+    return "Valid hex color is required (e.g., #000000 or #000000FF)";
+  }
+  return null;
+};
 
 interface BotSettingsFormProps {
   /**
@@ -46,6 +67,7 @@ export const BotSettingsForm = ({
     null
   );
   const [buttonsTextColor, setButtonsTextColor] = useState<string | null>(null);
+  const [buttonsFrame, setButtonsFrame] = useState<ButtonFrame | null>(null);
   const [buttonsPrefix, setButtonsPrefix] = useState<string | null>(null);
   const [welcomeStepId, setWelcomeStepId] = useState<string | null>(null);
   const [GAKey, setGAKey] = useState<string | null>(null);
@@ -85,6 +107,7 @@ export const BotSettingsForm = ({
       setStatus(initialData.status);
       setButtonsBackground(initialData.buttonsBackground);
       setButtonsTextColor(initialData.buttonsTextColor);
+      setButtonsFrame(initialData.buttonsFrame ?? null);
       setButtonsPrefix(initialData.buttonsPrefix);
       setWelcomeStepId(initialData.welcomeStepId);
       setGAKey(initialData.GAKey);
@@ -129,6 +152,11 @@ export const BotSettingsForm = ({
       }
     }
 
+    const frameError = validateButtonsFrame(buttonsFrame);
+    if (frameError) {
+      newErrors.buttonsFrame = frameError;
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -151,6 +179,7 @@ export const BotSettingsForm = ({
       status,
       buttonsBackground: buttonsBackground?.trim() || null,
       buttonsTextColor: buttonsTextColor?.trim() || null,
+      buttonsFrame,
       buttonsPrefix: buttonsPrefix?.trim() || null,
       welcomeStepId: welcomeStepId || null,
       GAKey: GAKey?.trim() || null,
@@ -341,6 +370,18 @@ export const BotSettingsForm = ({
               </p>
             )}
           </div>
+
+          <ButtonFrameFields
+            idPrefix="bot-settings"
+            frame={buttonsFrame}
+            defaultFrame={FALLBACK_BUTTON_FRAME}
+            onChange={setButtonsFrame}
+          />
+          {errors.buttonsFrame && (
+            <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+              {errors.buttonsFrame}
+            </p>
+          )}
 
           {/* Buttons Prefix */}
           <div>

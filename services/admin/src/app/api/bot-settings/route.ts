@@ -120,6 +120,9 @@ export async function PUT(
       input.buttonsTextColor =
         body.buttonsTextColor === null ? null : body.buttonsTextColor.trim();
     }
+    if (body.buttonsFrame !== undefined) {
+      input.buttonsFrame = body.buttonsFrame === null ? null : body.buttonsFrame;
+    }
     if (body.buttonsPrefix !== undefined) {
       input.buttonsPrefix =
         body.buttonsPrefix === null ? null : body.buttonsPrefix.trim();

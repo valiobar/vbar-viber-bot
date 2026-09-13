@@ -6,6 +6,7 @@
  * between the service layer and external interfaces (API routes).
  */
 
+import type { ButtonFrame } from "@vbar/shared";
 import { BotSettings } from "./BotSettings";
 import { BotStatus } from "./types";
 
@@ -24,6 +25,7 @@ export class BotSettingsDTO {
   public readonly status: BotStatus;
   public readonly buttonsBackground: string | null;
   public readonly buttonsTextColor: string | null;
+  public readonly buttonsFrame: ButtonFrame | null;
   public readonly buttonsPrefix: string | null;
   public readonly welcomeStepId: string | null;
   public readonly GAKey: string | null;
@@ -38,6 +40,7 @@ export class BotSettingsDTO {
     status: BotStatus;
     buttonsBackground: string | null;
     buttonsTextColor: string | null;
+    buttonsFrame: ButtonFrame | null;
     buttonsPrefix: string | null;
     welcomeStepId: string | null;
     GAKey: string | null;
@@ -51,6 +54,7 @@ export class BotSettingsDTO {
     this.status = data.status;
     this.buttonsBackground = data.buttonsBackground;
     this.buttonsTextColor = data.buttonsTextColor;
+    this.buttonsFrame = data.buttonsFrame;
     this.buttonsPrefix = data.buttonsPrefix;
     this.welcomeStepId = data.welcomeStepId;
     this.GAKey = data.GAKey;
@@ -73,6 +77,7 @@ export class BotSettingsDTO {
       status: settings.status,
       buttonsBackground: settings.buttonsBackground,
       buttonsTextColor: settings.buttonsTextColor,
+      buttonsFrame: settings.buttonsFrame,
       buttonsPrefix: settings.buttonsPrefix,
       welcomeStepId: settings.welcomeStepId,
       GAKey: settings.GAKey,
@@ -99,6 +104,7 @@ export class BotSettingsDTO {
       status: dto.status,
       buttonsBackground: dto.buttonsBackground,
       buttonsTextColor: dto.buttonsTextColor,
+      buttonsFrame: dto.buttonsFrame,
       buttonsPrefix: dto.buttonsPrefix,
       welcomeStepId: dto.welcomeStepId,
       GAKey: dto.GAKey,

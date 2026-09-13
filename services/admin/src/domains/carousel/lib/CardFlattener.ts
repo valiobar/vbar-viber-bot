@@ -28,6 +28,7 @@ const baseButton = (overrides: Partial<ButtonFields>): ButtonFields => ({
   TextSize: "regular",
   Silent: true,
   isJson: false,
+  Frame: null,
   ...overrides,
 });
 
@@ -115,6 +116,7 @@ export class CardFlattener {
       OpenURLType: cta.openURLType,
       Silent: cta.silent,
       TextSize: "large",
+      Frame: cta.Frame ?? null,
     });
   }
 

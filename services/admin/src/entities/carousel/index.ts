@@ -10,6 +10,7 @@ export type {
   TextSize,
   TextVAlign,
   TextHAlign,
+  ButtonFrame,
   CreateCarouselInput,
   UpdateCarouselInput,
   ListCarouselsResult,
