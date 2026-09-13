@@ -240,13 +240,14 @@ export class StepSender {
         return;
       }
 
-      // Send messages via bot
+      // Send messages via bot. viber-bot mutates the array (pop), so count first.
+      const messageCount = viberMessages.length;
       try {
         await bot.sendMessage(userProfile, viberMessages);
         this.logger.info("Step messages sent successfully", {
           stepId,
           userId: userProfile.id,
-          messageCount: viberMessages.length,
+          messageCount,
           hasKeyboard: keyboard !== undefined,
         });
 

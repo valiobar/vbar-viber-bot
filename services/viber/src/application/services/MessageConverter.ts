@@ -225,10 +225,14 @@ export class MessageConverter {
             );
           }
           const richMediaApiVersion = Math.max(apiVersionParam, 7);
-          // Message.RichMedia(richMedia, keyboard, trackingData, timestamp, token, minApiVersion)
+          // viber-bot: RichMedia(richMedia, keyboard, trackingData, timestamp, token, altText, minApiVersion)
+          // The 6th argument is altText. Passing minApiVersion there leaves it
+          // undefined, toJson() falls back to min_api_version 2, and Viber
+          // ignores InputFieldState (API level 4).
           message = new (Message.RichMedia as any)(
             richMedia,
             keyboard,
+            null,
             null,
             null,
             null,
