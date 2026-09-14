@@ -37,7 +37,7 @@ It exposes two inbound surfaces:
 
 The service does **not** connect to RabbitMQ, has no REST message-processing endpoint, and does not read admin content (steps, messages, keyboards). It only receives what viber puts in the gRPC request.
 
-Stack: Node 20, Express, `@grpc/grpc-js`, LangChain (`langchain` + `@langchain/*`), MongoDB via `@vbar/shared/infra`, optional Chroma for vectors, optional LangSmith tracing.
+Stack: Node 20, Express, `@grpc/grpc-js`, LangChain (`langchain` + `@langchain/*`), MongoDB via `@vbar/shared/infra`, Chroma for vectors, optional LangSmith tracing.
 
 ## Process layout
 
@@ -178,7 +178,7 @@ Ingest is an inbound HTTP adapter (`routes/knowledgeBase.ts`) over `IngestKnowle
 
 Processing is synchronous on the request: extract → chunk → embed → write. `DocumentProcessor` handles PDF (`pdf-parse`), Markdown, plain text, HTML-at-URL (`cheerio`, stripping `script/style/nav/footer/noscript/svg`), and Excel `.xlsx` (exceljs). Free-text files and URLs use `RecursiveCharacterTextSplitter` with `RAG_CHUNK_SIZE` / `RAG_CHUNK_OVERLAP`. Spreadsheets bypass the splitter: one data row = one chunk with headers inlined; address-like columns get a precomputed Google Maps directions URL. URLs are fetched three at a time; a per-item failure is reported in the result and never aborts the batch.
 
-Every chunk carries `{ sourceId, source, sourceType, fileType, chunkIndex, ingestedAt }`, which is how `listSources` groups and how per-source delete works. Two implementations sit behind `VectorStorePort`: `ChromaVectorStore` (persistent, Compose profile `rag`) and `MemoryVectorStoreAdapter` (ephemeral, tests). Chroma delete takes a metadata `where` filter, not Mongo `deleteMany` semantics.
+Every chunk carries `{ sourceId, source, sourceType, fileType, chunkIndex, ingestedAt }`, which is how `listSources` groups and how per-source delete works. Two implementations sit behind `VectorStorePort`: `ChromaVectorStore` (persistent, Compose service `chromadb`) and `MemoryVectorStoreAdapter` (ephemeral, tests). Chroma delete takes a metadata `where` filter, not Mongo `deleteMany` semantics.
 
 Full limits, chunk metadata, and enablement recipes: [rag.md](./rag.md).
 
@@ -369,13 +369,13 @@ Degradation is layered — history failures warn and continue, RAG failures fall
 Compose service `ai` (container `vbar-ai`, image `ghcr.io/valiobar/vbar-ai`):
 
 - Publishes `127.0.0.1:3002` only. **gRPC 50051 is not published** — it is reachable only on `vbar-network`, which is why viber must run in Compose to talk to it.
-- `depends_on: mongodb (service_healthy)`. It deliberately does not depend on `chromadb`, because a profiled dependency would break the default `docker compose up`.
+- `depends_on: mongodb (service_healthy)` and `chromadb (service_healthy)`.
 - Healthcheck fetches `http://127.0.0.1:3002/api/health` every 30 s.
-- Env comes from the root `.env` file plus explicit overrides (Mongo URI, `CHROMA_URL=http://chromadb:8000`, provider settings, ingest limits).
+- Env comes from the root `.env` file plus explicit overrides (Mongo URI, hardcoded `CHROMA_URL=http://chromadb:8000`, provider settings, ingest limits).
 
 The Dockerfile is a three-stage Node 20 Alpine build that also builds `packages/shared` and copies `packages/shared/proto` into the runner — the proto must exist at runtime because it is loaded dynamically. The process runs as a non-root `ai` user.
 
-Local development: `npm run dev:ai` (tsx watch). Start Chroma separately with `--profile rag` if you want retrieval.
+Local development: `npm run dev:ai` (tsx watch). Start Chroma with `docker compose ... up -d chromadb` if you want retrieval (`CHROMA_URL=http://localhost:8000`).
 
 ## Security notes
 

@@ -24,7 +24,7 @@ RAG is an optional chain type on the AI service. On a matching request the execu
 
 Persistent vectors live in **self-hosted Chroma**, not in Mongo. The `ai` Mongo database stays conversation history and prompt templates only. An in-memory store is available for tests.
 
-Default Compose does **not** start Chroma. Use profile `rag`.
+Default Compose always starts Chroma (`vbar-chromadb`).
 
 ## When RAG runs
 
@@ -84,7 +84,7 @@ AI already uses Ports & Adapters for the LLM and the vector store. `VectorStoreP
 
 Dependency direction: HTTP / gRPC adapters → factory → `VectorStorePort` → Chroma or memory. No Chroma helper in `@vbar/shared/infra` (that package is Mongo + RabbitMQ only).
 
-Chroma `deleteDocuments` accepts a metadata `where` filter, not Mongo `deleteMany`. Empty filters throw; use `clear()` to wipe the collection. Connection refused logs `CHROMA_URL` and that Compose `--profile rag` is required.
+Chroma `deleteDocuments` accepts a metadata `where` filter, not Mongo `deleteMany`. Empty filters throw; use `clear()` to wipe the collection. Connection refused logs `CHROMA_URL` and that the `chromadb` service must be running.
 
 ## Knowledge base ingest
 
@@ -178,8 +178,8 @@ All paths under `/api/knowledge-base` require `X-Service-Token` (`AI_SERVICE_TOK
 ### Compose (recommended)
 
 ```bash
-# Start the default 5 containers plus Chroma
-docker compose --env-file .env -f infrastructure/docker-compose.yml --profile rag up -d
+# Start the default stack (includes Chroma)
+docker compose --env-file .env -f infrastructure/docker-compose.yml up -d
 ```
 
 In root `.env`:
@@ -192,13 +192,13 @@ RAG_EMBEDDING_PROVIDER=openai
 # OPENAI_API_KEY must be set for OpenAI embeddings
 ```
 
-Compose injects `CHROMA_URL=http://chromadb:8000` on the `ai` service. Do not add `depends_on: chromadb` on `ai` (profiled services break default `up`).
+Compose hardcodes `CHROMA_URL=http://chromadb:8000` on the `ai` service. `ai` waits for `chromadb` to be healthy.
 
 Heartbeat (pinned image `chromadb/chroma:0.6.3`): `http://localhost:8000/api/v1/heartbeat`.
 
 ### Host npm (`npm run dev:ai`)
 
-Start Chroma first (`--profile rag`), then:
+Start Chroma first (`docker compose ... up -d chromadb`), then:
 
 ```env
 CHROMA_URL=http://localhost:8000
@@ -238,7 +238,7 @@ Trigger RAG from a Viber step with `isAi=true` after the env is set, or call gRP
 | `INGEST_URL_TIMEOUT_MS` | `15000` | Per-URL fetch timeout |
 | `AI_SERVICE_TOKEN` | — | Must match on admin (outbound) and ai (inbound) |
 
-`ai` does not `depends_on` Chroma. Default `docker compose up` stays 5 containers.
+`ai` `depends_on` Chroma (`service_healthy`). Default `docker compose up` starts 6 containers including `chromadb`.
 
 ## What is not implemented
 
@@ -253,7 +253,7 @@ Trigger RAG from a Viber step with `isAi=true` after the env is set, or call gRP
 
 - [Architecture](./architecture.md) — RAG vs `AI_TASK_TYPE` precedence; Admin→AI REST
 - [Databases](./databases.md) — `ai` Mongo collections + Chroma chunk metadata
-- [Setup](./setup.md) — local `--profile rag` and try ingest
+- [Setup](./setup.md) — local Compose / host npm and try ingest
 - [Deployment](./deployment.md) — Compose topology and env
 - [API](./api.md) — gRPC `ProcessMessage` and `/api/knowledge-base/*`
 - [AI service](./ai.md) — AI architecture, chains, consumers, contracts

@@ -28,7 +28,7 @@ Env template: `.env.example`
 
 ## Default Topology
 
-Default profile starts **5 containers**:
+Default profile starts **6 containers**:
 
 | Service   | Container      | Host port                         | Role                                      |
 |-----------|----------------|-----------------------------------|-------------------------------------------|
@@ -37,21 +37,21 @@ Default profile starts **5 containers**:
 | ai        | `vbar-ai`      | `127.0.0.1:3002:3002`             | AI / LLM (localhost only)                 |
 | mongodb   | `vbar-mongodb` | `127.0.0.1:27017:27017`           | Shared MongoDB (`admin_service`, `bot`, `ai`) |
 | rabbitmq  | `vbar-rabbitmq`| `127.0.0.1:5672`, `127.0.0.1:15672` | Cache-refresh events (localhost only)   |
+| chromadb  | `vbar-chromadb`| `127.0.0.1:8000:8000`             | RAG vector store (localhost only)         |
 
-**Opt-in profiles** (not started by default). Default stack is still **5 containers**:
+**Opt-in profiles** (not started by default):
 
 | Profile       | Extra containers              | Purpose                          |
 |---------------|-------------------------------|----------------------------------|
 | `local-llm`   | `ollama` (`127.0.0.1:11434`)  | Self-hosted LLM for the AI service |
-| `rag`         | `chromadb` (`127.0.0.1:8000`) | Persistent RAG vector store      |
 
 **Removed / not deployed:** extra app services, per-service Mongo containers, `docker-compose.infrastructure.yml`, extra Dockerfiles under `infrastructure/docker/`, cluster manifests.
 
 ### Port binding security
 
 - **Public (host reverse proxy):** admin `:3000`, viber `:3001`
-- **Localhost only:** ai `:3002`, MongoDB `:27017`, RabbitMQ `:5672` / management `:15672`, Ollama `:11434`
-- Inside the Compose network, services use DNS names (`admin`, `viber`, `ai`, `mongodb`, `rabbitmq`) regardless of host binds.
+- **Localhost only:** ai `:3002`, MongoDB `:27017`, RabbitMQ `:5672` / management `:15672`, Chroma `:8000`, Ollama `:11434`
+- Inside the Compose network, services use DNS names (`admin`, `viber`, `ai`, `mongodb`, `rabbitmq`, `chromadb`) regardless of host binds.
 
 ### Service communication (Docker)
 
@@ -119,7 +119,7 @@ Use the root `.env` (copy from `.env.example`). Compose and `deploy.sh` read thi
 | `NEXT_PUBLIC_APP_URL` | Admin public URL |
 | `RAG_ENABLED` / `AI_TASK_TYPE` | RAG stays off unless enabled; explicit `AI_TASK_TYPE` wins. See [rag.md](./rag.md) |
 | `RAG_VECTOR_STORE_TYPE` | `chroma` (default) or `memory`. `mongodb` is rejected |
-| `CHROMA_URL` | Host: `http://localhost:8000`. Compose sets `http://chromadb:8000` on `ai` |
+| `CHROMA_URL` | Host npm: `http://localhost:8000`. Compose hardcodes `http://chromadb:8000` on `ai` |
 | `RAG_VECTOR_STORE_COLLECTION` | Chroma collection name (default `embeddings`) |
 | `RAG_RETRIEVER_K` / `RAG_SIMILARITY_THRESHOLD` | Retriever count and score filter (defaults 4 / 0.7) |
 | `AI_SERVICE_URL` | Admin → AI HTTP base. Host npm: `http://localhost:3002`. Compose sets `http://ai:3002` on `admin` |
@@ -135,7 +135,7 @@ See `.env.example` for the full template (including optional LangSmith vars).
 cp .env.example .env
 # Edit .env — set strong passwords, tokens, and Viber webhook if testing webhooks
 
-# Build and start the default 5-container stack
+# Build and start the default 6-container stack
 docker compose --env-file .env -f infrastructure/docker-compose.yml up -d --build
 # or: npm run docker:up (after docker:build)
 
@@ -187,8 +187,8 @@ IMAGE_TAG=<sha-or-latest> bash deploy.sh
 `deploy.sh`:
 
 1. Validates `.env` and required variables
-2. `docker compose --profile rag pull`
-3. `docker compose --profile rag up -d` (no build; starts Chroma with the stack)
+2. `docker compose pull`
+3. `docker compose up -d` (no build; Chroma is in the default stack)
 4. Checks admin, viber, and Chroma health endpoints
 
 ### Reverse proxy (Caddy example)
@@ -279,14 +279,11 @@ Do not automate this blindly on production without a backup.
 ```bash
 # Local Ollama
 docker compose --env-file .env -f infrastructure/docker-compose.yml --profile local-llm up -d
-
-# RAG / Chroma (local / manual). Production deploy.sh always passes --profile rag.
-docker compose --env-file .env -f infrastructure/docker-compose.yml --profile rag up -d
 ```
 
 Cloud LLM providers do not need the `local-llm` profile; set `AI_MODEL_PROVIDER` and the matching API key in `.env`.
 
-A default `docker compose up` still does not start Chroma. `deploy.sh` (and therefore the GitHub Action) always enables `--profile rag`. The `ai` service does not `depends_on` Chroma. If RAG is on and Chroma is down, AI logs `CHROMA_URL` and that `--profile rag` is required, then falls back to the simple chain. See [rag.md](./rag.md).
+Chroma is part of the default stack. `ai` waits for `chromadb` to be healthy. Compose hardcodes `CHROMA_URL=http://chromadb:8000` on `ai` so a host `.env` value of `http://localhost:8000` cannot break ingest. If Chroma is down, AI logs `CHROMA_URL` and knowledge-base ingest fails; chat RAG falls back to the simple chain. See [rag.md](./rag.md).
 
 ## Related Documentation
 

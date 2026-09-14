@@ -15,7 +15,7 @@ import type { Where } from "chromadb";
  * Chroma vector store implementation
  *
  * Uses LangChain's Chroma wrapper for persistent vector storage.
- * Requires Chroma running (Compose `--profile rag`).
+ * Requires Chroma running (Compose service `chromadb`).
  */
 export class ChromaVectorStore implements VectorStorePort {
   private vectorStore: Chroma | null = null;
@@ -373,7 +373,7 @@ export class ChromaVectorStore implements VectorStorePort {
         : new Error(typeof error === "string" ? error : "Unknown Chroma error");
     if (this.isConnectionRefused(error)) {
       this.logger.error(
-        `${context}: Chroma connection refused at CHROMA_URL=${this.chromaUrl}. Compose --profile rag is required to start Chroma.`,
+        `${context}: Chroma connection refused at CHROMA_URL=${this.chromaUrl}. Ensure the chromadb service is running.`,
         err
       );
     } else {

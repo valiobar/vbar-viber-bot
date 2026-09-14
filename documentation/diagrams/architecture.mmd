@@ -24,7 +24,7 @@ flowchart TB
         AIIn[gRPC ProcessMessage]
         AIHttp[HTTP /api/knowledge-base]
         AIApp[LangChain / providers]
-        AIOut[Mongo + optional Chroma + LLM]
+        AIOut[Mongo + Chroma + LLM]
         AIIn --> AIApp --> AIOut
         AIHttp --> AIApp
     end
@@ -39,7 +39,7 @@ flowchart TB
     AdminOut -->|Read/Write| Mongo
     ViberOut -->|Read/Write| Mongo
     AIOut -->|Read/Write| Mongo
-    AIOut -.->|optional RAG| Chroma
+    AIOut -->|RAG vectors| Chroma
 
     AdminOut -->|publish viber.refresh| RabbitMQ
     RabbitMQ -->|consume| ViberOut

@@ -14,8 +14,7 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 COMPOSE_FILE="infrastructure/docker-compose.yml"
-# rag profile starts chromadb (not in the default compose stack)
-COMPOSE=(docker compose --env-file .env -f "$COMPOSE_FILE" --profile rag)
+COMPOSE=(docker compose --env-file .env -f "$COMPOSE_FILE")
 
 # Required variables in root .env (must be set; no insecure defaults)
 REQUIRED_VARS=(

@@ -235,12 +235,12 @@ RAG vectors are **not** stored in Mongo. When RAG is enabled, the AI service use
 
 | Setting | Value |
 |---------|--------|
-| Compose profile | `rag` — not started by default |
+| Compose service | `chromadb` — always started with the default stack |
 | Host bind | `127.0.0.1:8000` |
 | Volume | `vbar-chromadb-data` |
 | Collection name | `RAG_VECTOR_STORE_COLLECTION` (default `embeddings`) |
 | URL (host / `npm run dev:ai`) | `CHROMA_URL=http://localhost:8000` |
-| URL (Compose `ai` service) | `CHROMA_URL=http://chromadb:8000` (set automatically) |
+| URL (Compose `ai` service) | `CHROMA_URL=http://chromadb:8000` (hardcoded; ignores host `.env`) |
 
 Allowed `RAG_VECTOR_STORE_TYPE`: `chroma` (default) or `memory` (tests). `mongodb` is rejected.
 
@@ -273,7 +273,7 @@ See [setup.md](./setup.md) and [deployment.md](./deployment.md) for env names an
 ## What is not stored
 
 - **No second Mongo per service.** One container, three databases.
-- **No RAG embeddings in Mongo.** Vectors live in Chroma (profile `rag`) or in-memory. See [rag.md](./rag.md).
+- **No RAG embeddings in Mongo.** Vectors live in Chroma (`vbar-chromadb`) or in-memory. See [rag.md](./rag.md).
 - **No admin content in `bot` or `ai`.** Viber caches steps/messages/keyboards/carousels/settings in memory and refreshes on RabbitMQ `viber.refresh`.
 - **No multi-bot / `botId` tenancy.** One bot per deployment.
 - **No message-queue persistence of CMS data.** RabbitMQ carries `RefreshEvent` (cache invalidation) and `StepUsageEvent` (analytics). CMS content itself is not stored on the queue.
