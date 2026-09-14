@@ -153,7 +153,7 @@ There are no REST process / intent / training endpoints. Viber calls **gRPC** on
 
 ## Database
 
-MongoDB database `ai`: per-user conversation history and prompt templates only. RAG vectors live in Chroma when RAG is on (`--profile rag`). See [rag.md](../../documentation/rag.md).
+MongoDB database `ai`: per-user conversation history and prompt templates only. RAG vectors live in Chroma (Compose service `chromadb`). See [rag.md](../../documentation/rag.md).
 
 ## LangChain Integration
 

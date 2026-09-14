@@ -109,7 +109,9 @@ services:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-flash}
       - RAG_VECTOR_STORE_TYPE=${RAG_VECTOR_STORE_TYPE:-chroma}
-      - CHROMA_URL=${CHROMA_URL:-http://chromadb:8000}
+      # Always the Compose DNS name. Do not interpolate CHROMA_URL from .env —
+      # host npm uses localhost:8000, which is unreachable from inside this container.
+      - CHROMA_URL=http://chromadb:8000
       - RAG_VECTOR_STORE_COLLECTION=${RAG_VECTOR_STORE_COLLECTION:-embeddings}
       - AI_SERVICE_TOKEN=${AI_SERVICE_TOKEN}
       - RAG_CHUNK_SIZE=${RAG_CHUNK_SIZE:-1000}
@@ -118,6 +120,8 @@ services:
       - INGEST_MAX_FILE_SIZE_MB=${INGEST_MAX_FILE_SIZE_MB:-10}
     depends_on:
       mongodb:
+        condition: service_healthy
+      chromadb:
         condition: service_healthy
     restart: unless-stopped
     networks:
@@ -196,10 +200,8 @@ services:
     #           count: 1
     #           capabilities: [gpu]
 
-  # ChromaDB (RAG vector store) — opt-in only
-  # Enable with: docker compose --profile rag up -d
+  # ChromaDB (RAG vector store) — always on with the default stack
   chromadb:
-    profiles: ["rag"]
     image: chromadb/chroma:0.6.3
     container_name: vbar-chromadb
     ports:

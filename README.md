@@ -101,7 +101,7 @@ Comprehensive documentation is available in the `documentation/` directory:
 
 Visual representations of the system:
 
-- [Architecture Diagram](./documentation/diagrams/architecture.mmd) - Service architecture (5-container topology)
+- [Architecture Diagram](./documentation/diagrams/architecture.mmd) - Service architecture (6-container topology)
 - [Data Flow Diagram](./documentation/diagrams/data-flow.mmd) - Request/response flows and event processing
 - [Deployment Diagram](./documentation/diagrams/deployment.mmd) - Compose-on-VPS deployment architecture
 
@@ -254,7 +254,7 @@ Before contributing, ensure you have:
 
 This project is in active development. Current status:
 
-- ✅ Three core services (admin, viber, ai) on a 5-container Compose stack
+- ✅ Three core services (admin, viber, ai) on a 6-container Compose stack
 - ✅ Docker Compose stack (5 default containers) + GHCR deploy workflow
 - ✅ Shared package with common types and utilities
 - 🚧 Feature implementation (in progress)

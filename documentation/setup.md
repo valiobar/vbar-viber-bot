@@ -117,6 +117,7 @@ docker compose --env-file .env -f infrastructure/docker-compose.yml down
 | AI | http://localhost:3002 (localhost-only bind) |
 | MongoDB | `127.0.0.1:27017` |
 | RabbitMQ AMQP / UI | `127.0.0.1:5672` / http://127.0.0.1:15672 |
+| Chroma | `127.0.0.1:8000` (localhost-only bind) |
 
 **Profiles:**
 
@@ -124,16 +125,13 @@ docker compose --env-file .env -f infrastructure/docker-compose.yml down
 # Ollama for local LLM
 docker compose --env-file .env -f infrastructure/docker-compose.yml --profile local-llm up -d --build
 docker exec -it vbar-ollama ollama pull qwen2.5:7b
-
-# Chroma for RAG (optional; default stack stays 5 containers)
-docker compose --env-file .env -f infrastructure/docker-compose.yml --profile rag up -d
 ```
 
-Local RAG: set `RAG_ENABLED=true` and `AI_TASK_TYPE=rag` (or unset `AI_TASK_TYPE` so `RAG_ENABLED` selects the RAG chain). Host npm uses `CHROMA_URL=http://localhost:8000`; Compose sets `http://chromadb:8000` on the `ai` service. See [rag.md](./rag.md).
+Local RAG: set `RAG_ENABLED=true` and `AI_TASK_TYPE=rag` (or unset `AI_TASK_TYPE` so `RAG_ENABLED` selects the RAG chain). Host npm uses `CHROMA_URL=http://localhost:8000`; Compose hardcodes `http://chromadb:8000` on the `ai` service. See [rag.md](./rag.md).
 
 ### Try ingest locally
 
-1. Start Chroma: `docker compose --env-file .env -f infrastructure/docker-compose.yml --profile rag up -d`
+1. Start the default stack (includes Chroma): `docker compose --env-file .env -f infrastructure/docker-compose.yml up -d`
 2. In `.env` set `RAG_ENABLED=true`, an embedding provider (`RAG_EMBEDDING_PROVIDER=openai` + `OPENAI_API_KEY`, or Ollama), and the same `AI_SERVICE_TOKEN` on both admin and ai
 3. Restart `ai` (and `admin` if tokens changed)
 4. Open http://localhost:3000/knowledge-base (log in)
@@ -154,8 +152,8 @@ docker compose --env-file .env -f infrastructure/docker-compose.yml up -d mongod
 # Optional local LLM
 docker compose --env-file .env -f infrastructure/docker-compose.yml --profile local-llm up -d ollama
 
-# Optional Chroma for RAG
-docker compose --env-file .env -f infrastructure/docker-compose.yml --profile rag up -d chromadb
+# Chroma for RAG (host npm talks to localhost:8000)
+docker compose --env-file .env -f infrastructure/docker-compose.yml up -d chromadb
 ```
 
 In separate terminals:
@@ -256,7 +254,7 @@ Full service guide: [viber.md](./viber.md).
 - Does **not** connect to RabbitMQ
 - Providers via `AI_MODEL_PROVIDER` (`ollama` / `openai` / `anthropic` / `google` / `deepseek`); Ollama vars are `OLLAMA_BASE_URL` / `OLLAMA_MODEL`; DeepSeek vars are `DEEPSEEK_API_KEY` / `DEEPSEEK_MODEL`
 - RAG: explicit `AI_TASK_TYPE` wins over `RAG_ENABLED` (see [rag.md](./rag.md))
-- Persistent RAG store is Chroma (`RAG_VECTOR_STORE_TYPE=chroma`); start with `--profile rag`
+- Persistent RAG store is Chroma (`RAG_VECTOR_STORE_TYPE=chroma`); Compose always starts `chromadb`
 - Knowledge-base ingest: HTTP `/api/knowledge-base/*` (`X-Service-Token` = `AI_SERVICE_TOKEN`)
 - DB name: `ai` (conversations + prompt templates only)
 

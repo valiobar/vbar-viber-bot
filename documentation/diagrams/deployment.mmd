@@ -8,16 +8,16 @@ flowchart TB
         Deploy[deploy.sh<br/>compose pull + up]
         Proxy[Reverse proxy<br/>Caddy / TLS]
 
-        subgraph Default["Default profile — 5 containers"]
+        subgraph Default["Default profile — 6 containers"]
             Admin[vbar-admin :3000]
             Viber[vbar-viber :3001]
             AI[vbar-ai<br/>127.0.0.1:3002<br/>gRPC 50051 internal]
             Mongo[(mongodb<br/>127.0.0.1:27017)]
             Rabbit[rabbitmq<br/>127.0.0.1:5672 / 15672]
+            Chroma[chromadb<br/>127.0.0.1:8000]
         end
 
         Ollama[ollama<br/>profile: local-llm]
-        Chroma[chromadb<br/>profile: rag]
     end
 
     GHA -->|build + push| GHCR

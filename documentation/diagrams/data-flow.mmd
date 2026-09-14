@@ -16,7 +16,7 @@ flowchart TB
     subgraph Stores["Stores"]
         Mongo[(MongoDB<br/>admin_service / bot / ai)]
         RabbitMQ[RabbitMQ<br/>viber.refresh]
-        Chroma[(Chroma optional RAG)]
+        Chroma[(Chroma RAG)]
     end
 
     User -->|1 send message| ViberAPI

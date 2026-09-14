@@ -31,7 +31,7 @@ RabbitMQ
                              AI (Express :3002 + gRPC :50051)
 ```
 
-Default Compose stack is **5 containers**: `admin`, `viber`, `ai`, `mongodb`, `rabbitmq`. Optional profile `local-llm` adds Ollama. Optional profile `rag` adds Chroma for RAG vectors.
+Default Compose stack is **6 containers**: `admin`, `viber`, `ai`, `mongodb`, `rabbitmq`, `chromadb`. Optional profile `local-llm` adds Ollama.
 
 Principles:
 
@@ -83,7 +83,7 @@ Express + gRPC, MongoDB (`ai`). **Does not use RabbitMQ.**
 - gRPC `AIProcessingService.ProcessMessage` on `:50051` (Compose network only)
 - LangChain providers: Ollama, OpenAI, Anthropic, Google
 - Per-user conversation history and prompt templates in Mongo (no process-wide shared memory)
-- Optional RAG: embeddings live in **Chroma** (Compose profile `rag`), not in the `ai` Mongo database. `memory` is available for tests. Ingest writes chunks into that store.
+- Optional RAG: embeddings live in **Chroma** (`vbar-chromadb`, always started), not in the `ai` Mongo database. `memory` is available for tests. Ingest writes chunks into that store.
 
 **RAG precedence:** an explicit `AI_TASK_TYPE` (`simple` / `rag` / `custom`) wins. If `AI_TASK_TYPE` is unset, `RAG_ENABLED=true` selects the RAG chain. `.env.example` still sets `AI_TASK_TYPE=simple`, so `RAG_ENABLED=true` alone will not engage RAG until that var is unset or set to `rag`. The vector store is created only when `RAG_ENABLED=true`; RAG failures fall back to the simple chain. Full flow: [rag.md](./rag.md).
 
@@ -231,10 +231,11 @@ Compose file: `infrastructure/docker-compose.yml`. Images built in GitHub Action
 | `vbar-ai` | `127.0.0.1:3002` | HTTP health; gRPC 50051 internal |
 | `vbar-mongodb` | `127.0.0.1:27017` | Shared Mongo |
 | `vbar-rabbitmq` | `127.0.0.1:5672` / `:15672` | Refresh events and step-usage analytics |
+| `vbar-chromadb` | `127.0.0.1:8000` | RAG vector store |
 
 Profile `local-llm` adds Ollama on `127.0.0.1:11434`. Set `AI_MODEL_PROVIDER=ollama` and `OLLAMA_BASE_URL=http://ollama:11434` inside Compose.
 
-Profile `rag` adds Chroma on `127.0.0.1:8000`. Compose sets `CHROMA_URL=http://chromadb:8000` on the `ai` service. Default `docker compose up` does not start Chroma. See [rag.md](./rag.md).
+Compose sets `CHROMA_URL=http://chromadb:8000` on the `ai` service (not the host `.env` value). See [rag.md](./rag.md).
 
 ## Diagrams
 
