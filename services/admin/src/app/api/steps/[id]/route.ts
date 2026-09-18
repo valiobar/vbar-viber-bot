@@ -75,6 +75,9 @@ export async function PUT(request: Request, { params }: IdParams) {
     if (body.customHandler !== undefined) {
       input.customHandler = body.customHandler;
     }
+    if (body.responseHandler !== undefined) {
+      input.responseHandler = body.responseHandler;
+    }
 
     const stepDTO = await createStepService().update(params.id, input);
     notifyRefresh("steps");

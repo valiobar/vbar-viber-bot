@@ -94,6 +94,7 @@ export async function POST(request: Request) {
         isAi: body.isAi ?? false,
         aiPromptName: body.aiPromptName || null,
         customHandler: body.customHandler ?? null,
+        responseHandler: body.responseHandler ?? null,
       };
 
       const stepDTO = await createStepService().create(input);

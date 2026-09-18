@@ -10,7 +10,7 @@
 import { useState, useEffect } from "react";
 // Import from the browser-safe types subpath — the main @vbar/shared barrel
 // pulls in Node-only modules (fs) and cannot be bundled into client components
-import { CUSTOM_STEP_HANDLER_NAMES } from "@vbar/shared/types";
+import { CUSTOM_STEP_HANDLER_NAMES, CUSTOM_RESPONSE_HANDLER_NAMES } from "@vbar/shared/types";
 import type {
   CreateStepInput,
   StepDTO,
@@ -58,6 +58,7 @@ export const StepForm = ({
   const [isAi, setIsAi] = useState(false);
   const [aiPromptName, setAiPromptName] = useState<string | null>(null);
   const [customHandler, setCustomHandler] = useState<string | null>(null);
+  const [responseHandler, setResponseHandler] = useState<string | null>(null);
   const [selectedMessageId, setSelectedMessageId] = useState<string>("");
 
   // UI state
@@ -149,6 +150,7 @@ export const StepForm = ({
       setIsAi(initialData.isAi);
       setAiPromptName(initialData.aiPromptName);
       setCustomHandler(initialData.customHandler);
+      setResponseHandler(initialData.responseHandler);
     }
   }, [initialData]);
 
@@ -266,6 +268,7 @@ export const StepForm = ({
         isAi,
         aiPromptName: isAi ? aiPromptName : null,
         customHandler: customHandler || null,
+        responseHandler: responseHandler || null,
       };
       await onSubmit(updateData);
     } else {
@@ -279,6 +282,7 @@ export const StepForm = ({
         isAi,
         aiPromptName: isAi ? aiPromptName : null,
         customHandler: customHandler || null,
+        responseHandler: responseHandler || null,
       };
       await onSubmit(createData);
     }
@@ -417,6 +421,37 @@ export const StepForm = ({
               <p className="mt-1 text-sm text-amber-600 dark:text-amber-400">
                 The custom function replaces normal sending — messages and
                 keyboard below will be ignored when this step runs.
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label
+              htmlFor="responseHandler"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >
+              Custom Response Function (Optional)
+            </label>
+            <select
+              id="responseHandler"
+              value={responseHandler || ""}
+              onChange={(e) => setResponseHandler(e.target.value || null)}
+              aria-label="Custom response function"
+              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+            >
+              <option value="">None</option>
+              {CUSTOM_RESPONSE_HANDLER_NAMES.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+            {responseHandler && (
+              <p className="mt-1 text-sm text-amber-600 dark:text-amber-400">
+                While the user is on this step, every reply (text, location, contact,
+                picture, video, file, sticker, url) is handled by this function.
+                Keyboard button taps with the bot prefix still navigate normally.
+                This takes precedence over AI handling.
               </p>
             )}
           </div>

@@ -6,7 +6,10 @@
  */
 
 import mongoose, { Schema, Model } from "mongoose";
-import { CUSTOM_STEP_HANDLER_NAMES } from "@vbar/shared";
+import {
+  CUSTOM_STEP_HANDLER_NAMES,
+  CUSTOM_RESPONSE_HANDLER_NAMES,
+} from "@vbar/shared";
 
 /**
  * Step document interface (MongoDB document structure)
@@ -20,6 +23,7 @@ export interface IStepDocument extends mongoose.Document {
   isAi: boolean;
   aiPromptName?: string | null; // Optional AI prompt name (AI service prompt_templates.name)
   customHandler?: string | null; // Optional custom step handler name (replaces normal sending)
+  responseHandler?: string | null; // Optional custom response handler name (inbound replies)
   createdAt: Date;
   updatedAt: Date;
 }
@@ -132,6 +136,22 @@ const stepSchema = new Schema<IStepDocument>(
           );
         },
         message: `Custom handler must be one of: ${CUSTOM_STEP_HANDLER_NAMES.join(", ")}`,
+      },
+    },
+    responseHandler: {
+      type: String,
+      required: false,
+      default: null,
+      validate: {
+        validator: function (value: string | null) {
+          if (value === null || value === undefined) {
+            return true;
+          }
+          return (CUSTOM_RESPONSE_HANDLER_NAMES as readonly string[]).includes(
+            value
+          );
+        },
+        message: `Response handler must be one of: ${CUSTOM_RESPONSE_HANDLER_NAMES.join(", ")}`,
       },
     },
     createdAt: {

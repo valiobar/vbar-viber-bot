@@ -23,6 +23,7 @@ export interface CreateStepInput {
   isAi?: boolean;
   aiPromptName?: string | null;
   customHandler?: string | null;
+  responseHandler?: string | null;
 }
 
 export interface UpdateStepInput {
@@ -34,6 +35,7 @@ export interface UpdateStepInput {
   isAi?: boolean;
   aiPromptName?: string | null;
   customHandler?: string | null;
+  responseHandler?: string | null;
 }
 
 export interface ListStepsFilters {
@@ -102,6 +104,7 @@ export class StepService {
       isAi: input.isAi ?? false,
       aiPromptName: input.aiPromptName ?? null,
       customHandler: input.customHandler ?? null,
+      responseHandler: input.responseHandler ?? null,
     });
 
     const saved = await this.stepRepository.create(step);
@@ -141,6 +144,10 @@ export class StepService {
         input.customHandler !== undefined
           ? input.customHandler
           : existing.customHandler,
+      responseHandler:
+        input.responseHandler !== undefined
+          ? input.responseHandler
+          : existing.responseHandler,
       createdAt: existing.createdAt,
       updatedAt: new Date().toISOString(),
     });
