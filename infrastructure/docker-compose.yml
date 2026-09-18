@@ -7,6 +7,8 @@ services:
     build:
       context: ..
       dockerfile: services/admin/Dockerfile
+      args:
+        NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}
     container_name: vbar-admin
     env_file:
       - ../.env

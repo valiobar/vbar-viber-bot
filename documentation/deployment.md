@@ -117,6 +117,7 @@ Use the root `.env` (copy from `.env.example`). Compose and `deploy.sh` read thi
 | `AI_THINKING_GIF_URL` | Optional. Public HTTPS GIF (or JPEG/PNG as Viber picture, max 500 KB) for the AI thinking keyboard. SVG is not supported. Unset/empty = no thinking indicator |
 | `JWT_EXPIRES_IN`, `JWT_REFRESH_EXPIRES_IN` | Optional JWT TTLs |
 | `NEXT_PUBLIC_APP_URL` | Admin public URL |
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Inlined into the admin image at build. Local Compose build reads `.env`. Production must set the **GitHub repo secret** of the same name — the VPS `.env` value is ignored |
 | `RAG_ENABLED` / `AI_TASK_TYPE` | RAG stays off unless enabled; explicit `AI_TASK_TYPE` wins. See [rag.md](./rag.md) |
 | `RAG_VECTOR_STORE_TYPE` | `chroma` (default) or `memory`. `mongodb` is rejected |
 | `CHROMA_URL` | Host npm: `http://localhost:8000`. Compose hardcodes `http://chromadb:8000` on `ai` |
@@ -237,8 +238,9 @@ On push to `main` (or `workflow_dispatch`):
 | `DEPLOY_USER`    | SSH user                                     |
 | `DEPLOY_SSH_KEY` | Private key for SSH                          |
 | `DEPLOY_PATH`    | Optional path to the repo on the VPS         |
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Admin Maps JS key. Passed as a Docker build-arg and inlined by `next build` |
 
-The application `.env` is **not** stored in CI; it lives only on the server.
+The application `.env` is **not** stored in CI; it lives only on the server. The Maps key is the exception: it must be a repo secret because Next.js bakes `NEXT_PUBLIC_*` into the admin image.
 
 ## Database
 

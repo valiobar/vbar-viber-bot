@@ -27,8 +27,13 @@ COPY services/admin ./services/admin
 WORKDIR /app/packages/shared
 RUN npm run build
 
-# Build admin service
+# Build admin service. NEXT_PUBLIC_* is inlined by `next build`;
+# the runner stage does not read this variable from the VPS .env.
 WORKDIR /app/services/admin
+ARG NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+RUN test -n "$NEXT_PUBLIC_GOOGLE_MAPS_API_KEY" || \
+  (echo "NEXT_PUBLIC_GOOGLE_MAPS_API_KEY build-arg is required" && exit 1)
+ENV NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=$NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
 RUN npm run build
 
 # Stage 3: Runner
