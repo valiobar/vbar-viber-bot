@@ -39,12 +39,24 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Require Maps key for admin build
+        if: matrix.service == 'admin'
+        env:
+          NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${{ secrets.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY }}
+        run: |
+          if [ -z "$NEXT_PUBLIC_GOOGLE_MAPS_API_KEY" ]; then
+            echo "Add repo secret NEXT_PUBLIC_GOOGLE_MAPS_API_KEY (inlined at next build)."
+            exit 1
+          fi
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ${{ matrix.dockerfile }}
           push: true
+          build-args: |
+            NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=${{ matrix.service == 'admin' && secrets.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '' }}
           tags: |
             ${{ env.REGISTRY }}/${{ github.repository_owner }}/vbar-${{ matrix.service }}:${{ github.sha }}
             ${{ env.REGISTRY }}/${{ github.repository_owner }}/vbar-${{ matrix.service }}:latest
