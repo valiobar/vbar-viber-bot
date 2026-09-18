@@ -212,6 +212,7 @@ export class StepRepository {
       isAi: doc.isAi,
       aiPromptName: doc.aiPromptName ?? null,
       customHandler: doc.customHandler ?? null,
+      responseHandler: doc.responseHandler ?? null,
       createdAt: doc.createdAt,
       updatedAt: doc.updatedAt,
     });
@@ -242,6 +243,7 @@ export class StepRepository {
       isAi: step.isAi,
       aiPromptName: step.aiPromptName,
       customHandler: step.customHandler,
+      responseHandler: step.responseHandler,
       createdAt: new Date(step.createdAt),
       updatedAt: new Date(step.updatedAt),
     };

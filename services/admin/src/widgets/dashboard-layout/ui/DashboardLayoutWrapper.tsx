@@ -16,7 +16,7 @@ interface DashboardLayoutWrapperProps {
 }
 
 // Public routes that should not have DashboardLayout
-const PUBLIC_ROUTES = ["/login"];
+const PUBLIC_ROUTES = ["/login", "/locations"];
 
 export const DashboardLayoutWrapper = ({
   children,

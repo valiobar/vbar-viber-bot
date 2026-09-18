@@ -26,6 +26,10 @@ import { StepSender } from "../services/StepSender";
 import { ViberAiService } from "../services/ViberAiService";
 import { KeyboardConverter } from "../services/KeyboardConverter";
 import { IAiServiceClient } from "../../ports/out/IAiServiceClient";
+import {
+  getCustomResponseHandler,
+  InboundMessageType,
+} from "../custom-responses";
 
 export class MessageHandler implements IEventHandler {
   private logger: Logger;
@@ -205,6 +209,48 @@ export class MessageHandler implements IEventHandler {
 
             const botDataService = this.viberBotService.getBotDataService();
             const step = botDataService.getStepById(user.currentStepId);
+
+            // Custom response handler: takes precedence over AI, receives every
+            // message type except prefixed keyboard taps (those keep trigger navigation)
+            if (step && step.responseHandler && !isMessageContainsPrefix) {
+              const responseHandler = getCustomResponseHandler(
+                step.responseHandler
+              );
+              if (responseHandler) {
+                const bot = this.viberBotService.getBot();
+                const messageType = this.getMessageType(
+                  message
+                ) as InboundMessageType;
+                await responseHandler({
+                  message,
+                  messageType,
+                  step,
+                  bot,
+                  userProfile,
+                  botDataService,
+                  userRepository: this.userRepository,
+                  stepSender: this.stepSender,
+                  buttonPrefix: buttonsPrefix,
+                  logger: this.logger,
+                });
+                this.logger.info("Custom response handler executed", {
+                  userId,
+                  stepId: user.currentStepId,
+                  responseHandler: step.responseHandler,
+                  messageType,
+                });
+                return; // handled — skip AI and per-type routing
+              }
+              this.logger.warn(
+                "Custom response handler not registered, falling through to normal routing",
+                {
+                  userId,
+                  stepId: user.currentStepId,
+                  responseHandler: step.responseHandler,
+                }
+              );
+            }
+
             if (!step || step.isAi !== true || isMessageContainsPrefix) {
               this.logger.debug("Skipping AI processing", {
                 userId,

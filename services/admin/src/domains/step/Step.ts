@@ -24,6 +24,7 @@ export class Step {
   public readonly isAi: boolean;
   public readonly aiPromptName: string | null; // Optional AI prompt name (null = use the active prompt)
   public readonly customHandler: string | null; // Optional custom handler name (replaces normal sending)
+  public readonly responseHandler: string | null; // Optional custom response handler name (inbound replies)
   public readonly createdAt: string;
   public readonly updatedAt: string;
 
@@ -43,6 +44,7 @@ export class Step {
     isAi?: boolean;
     aiPromptName?: string | null;
     customHandler?: string | null;
+    responseHandler?: string | null;
     createdAt: string;
     updatedAt: string;
   }) {
@@ -53,6 +55,7 @@ export class Step {
     );
     this.trigger = this.validateTrigger(params.trigger);
     this.customHandler = params.customHandler ?? null;
+    this.responseHandler = params.responseHandler ?? null;
     // Steps with a custom handler don't need messages (handler replaces sending)
     this.content = this.validateContent(
       params.content,
@@ -217,6 +220,7 @@ export class Step {
     isAi?: boolean;
     aiPromptName?: string | null;
     customHandler?: string | null;
+    responseHandler?: string | null;
     createdAt: Date | string;
     updatedAt: Date | string;
   }): Step {
@@ -257,6 +261,7 @@ export class Step {
       isAi: doc.isAi,
       aiPromptName: doc.aiPromptName ?? null,
       customHandler: doc.customHandler ?? null,
+      responseHandler: doc.responseHandler ?? null,
       createdAt,
       updatedAt,
     });
@@ -277,6 +282,7 @@ export class Step {
     isAi?: boolean;
     aiPromptName?: string | null;
     customHandler?: string | null;
+    responseHandler?: string | null;
   }): Step {
     const now = new Date().toISOString();
 
@@ -293,6 +299,7 @@ export class Step {
       isAi: params.isAi ?? false,
       aiPromptName: params.aiPromptName ?? null,
       customHandler: params.customHandler ?? null,
+      responseHandler: params.responseHandler ?? null,
       createdAt: now,
       updatedAt: now,
     });

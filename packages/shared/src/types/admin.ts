@@ -121,6 +121,19 @@ export const CUSTOM_STEP_HANDLER_NAMES = ["example"] as const;
 export type CustomStepHandlerName = (typeof CUSTOM_STEP_HANDLER_NAMES)[number];
 
 /**
+ * Custom response handler names
+ *
+ * Source of truth for custom INBOUND response handlers implemented in the
+ * viber service (services/viber/src/application/custom-responses). A step
+ * with `responseHandler` set routes every user reply on that step (any
+ * message type, except prefixed button taps) to the named function.
+ */
+export const CUSTOM_RESPONSE_HANDLER_NAMES = ["example"] as const;
+
+export type CustomResponseHandlerName =
+  (typeof CUSTOM_RESPONSE_HANDLER_NAMES)[number];
+
+/**
  * Step DTO interface
  *
  * Data structure for transferring Step data between services.
@@ -134,6 +147,8 @@ export interface StepDTO extends BaseEntity {
   hidden: boolean;
   isAi: boolean;
   customHandler: string | null; // Optional custom step handler name (replaces normal sending)
+  /** Optional custom response handler name (handles the user's reply to this step, any message type) */
+  responseHandler: string | null;
   /** Optional AI prompt name (AI service prompt_templates.name); null = use the active prompt */
   aiPromptName: string | null;
 }

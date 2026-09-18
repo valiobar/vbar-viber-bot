@@ -18,7 +18,7 @@ interface AuthProviderProps {
 /**
  * Public routes that don't require authentication
  */
-const PUBLIC_ROUTES = ["/login"];
+const PUBLIC_ROUTES = ["/login", "/locations"];
 
 /**
  * Get auth state from localStorage

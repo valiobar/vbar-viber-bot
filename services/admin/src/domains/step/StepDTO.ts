@@ -27,6 +27,7 @@ export class StepDTO implements SharedStepDTO {
   public readonly isAi: boolean;
   public readonly aiPromptName: string | null;
   public readonly customHandler: string | null; // Optional custom handler name
+  public readonly responseHandler: string | null; // Optional custom response handler name (inbound replies)
   public readonly createdAt: string;
   public readonly updatedAt: string;
 
@@ -40,6 +41,7 @@ export class StepDTO implements SharedStepDTO {
     isAi: boolean;
     aiPromptName: string | null;
     customHandler: string | null;
+    responseHandler: string | null;
     createdAt: string;
     updatedAt: string;
   }) {
@@ -52,6 +54,7 @@ export class StepDTO implements SharedStepDTO {
     this.isAi = data.isAi;
     this.aiPromptName = data.aiPromptName;
     this.customHandler = data.customHandler;
+    this.responseHandler = data.responseHandler;
     this.createdAt = data.createdAt;
     this.updatedAt = data.updatedAt;
   }
@@ -73,6 +76,7 @@ export class StepDTO implements SharedStepDTO {
       isAi: step.isAi,
       aiPromptName: step.aiPromptName,
       customHandler: step.customHandler,
+      responseHandler: step.responseHandler,
       createdAt: step.createdAt,
       updatedAt: step.updatedAt,
     });
@@ -98,6 +102,7 @@ export class StepDTO implements SharedStepDTO {
       isAi: dto.isAi,
       aiPromptName: dto.aiPromptName,
       customHandler: dto.customHandler,
+      responseHandler: dto.responseHandler,
       createdAt: dto.createdAt,
       updatedAt: dto.updatedAt,
     });

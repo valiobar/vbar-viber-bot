@@ -230,7 +230,7 @@ const descriptionCell = (
   }
   return {
     Columns: CARD_COLUMNS,
-    Rows: 1,
+    Rows: 2,
     Text: `<font color="${DESCRIPTION_COLOR}">${escapeText(
       description
     )}</font>`,

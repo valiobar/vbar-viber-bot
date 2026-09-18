@@ -1,4 +1,4 @@
-export { Pagination, ErrorMessage } from "./ui";
+export { Pagination, ErrorMessage, DestinationIcon, CloseIcon, ListIcon } from "./ui";
 export {
   ThemeProvider,
   ThemeToggle,

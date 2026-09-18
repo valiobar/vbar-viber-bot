@@ -18,6 +18,7 @@ import { validateServiceToken } from "./lib/security/serviceTokens";
  *
  * These routes are accessible without authentication:
  * - `/login` - Login page (frontend route, excluded from auth checks)
+ * - `/locations` - Public Google Maps location locator
  * - `/api/auth/login` - Login API endpoint
  * - `/api/auth/refresh` - Token refresh endpoint
  * - `/api/health` - Health check endpoint
@@ -26,7 +27,8 @@ const PUBLIC_ROUTES = [
   "/api/auth/login",
   "/api/auth/refresh",
   "/api/health",
-  "/login", // Frontend login page - explicitly excluded from authentication
+  "/login",
+  "/locations",
 ];
 
 /**
