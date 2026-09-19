@@ -44,7 +44,10 @@ export interface CustomResponseContext {
   bot: Bot;
   /** Viber user profile of the sender */
   userProfile: any;
-  /** Bot data lookups (steps, messages, keyboards, carousels) */
+  /**
+   * Full in-memory bot catalog (steps, messages, keyboards, carousels).
+   * Look up by id (`getKeyboardById`) or admin name (`getKeyboardByName`).
+   */
   botDataService: BotDataService;
   /**
    * User persistence. Use `findByViberId` to read `user.state`,
