@@ -21,6 +21,7 @@ Admin (Next.js :3000)  --REST+JWT / service token-->  CMS APIs
         | publish RefreshEvent
         | consume analytics.step-usage  (instrumentation hook)
         | REST + X-Service-Token  /api/knowledge-base
+        | REST + X-Service-Token  POST /api/keyboard-builder/generate
         v
 RabbitMQ
   viber.refresh          --> Viber (Express :3001)  cache reload
@@ -53,7 +54,7 @@ Next.js 14 App Router, MongoDB (`admin_service`), RabbitMQ publisher **and** con
 - Service-token access so viber can pull content
 - Publishes `viber.refresh` on content mutations
 - Consumes `analytics.step-usage` via the Next.js instrumentation hook (`src/instrumentation.ts`, `experimental.instrumentationHook`) and persists events in `admin_service.stepusageevents`
-- Thin proxy to AI for knowledge-base ingest (`AI_SERVICE_URL` + `AI_SERVICE_TOKEN`)
+- Thin proxy to AI for knowledge-base ingest and keyboard-builder generate (`AI_SERVICE_URL` + `AI_SERVICE_TOKEN`)
 
 **Server** lives in `src/app/api/**`, `src/domains/**`, `src/lib/**`, `src/instrumentation.ts`, `src/middleware.ts`. Each domain is a flat folder (`Model` / `Repository` / `Service` / `DTO` / `types` / `index`). Repositories are concrete Mongo classes. Auth is `AuthService` (`login` / `logout` / `refresh`); bot settings is `BotSettingsService` (`get` / `update`). Analytics is `AnalyticsService` (`getStepUsageStats`).
 
@@ -80,6 +81,7 @@ Express + gRPC, MongoDB (`ai`). **Does not use RabbitMQ.**
 
 - HTTP `GET /api/health` — Mongo + provider (no message-queue component)
 - HTTP `/api/knowledge-base/*` — file / URL ingest and source management (`X-Service-Token`)
+- HTTP `POST /api/keyboard-builder/generate` — keyboard draft from a description (`X-Service-Token`)
 - gRPC `AIProcessingService.ProcessMessage` on `:50051` (Compose network only)
 - LangChain providers: Ollama, OpenAI, Anthropic, Google
 - Per-user conversation history and prompt templates in Mongo (no process-wide shared memory)
@@ -99,7 +101,7 @@ app/api/messages/route.ts
 
 Same shape for keyboards, carousels, steps, bot-settings, auth, and analytics. Routes use `withDb`, shared error codes, `parsePagination`, and `notifyRefresh` from `src/lib/api/`. Do not add `ports/in/`, `adapters/`, or `*UseCaseImpl`.
 
-**Deviation — knowledge-base proxy:** `app/api/knowledge-base/*` forwards to the AI service (`lib/aiService.ts` + `X-Service-Token`) and does not use `route → service → repository`. Admin owns no knowledge-base data (vectors live in Chroma behind AI), so there is no admin repository or domain service. Justified as a transport adapter, not a second CMS domain.
+**Deviation — AI proxies:** `app/api/knowledge-base/*` and `POST /api/ai/keyboard-builder` forward to the AI service (`lib/aiService.ts` + `X-Service-Token`) and do not use `route → service → repository`. Admin owns no knowledge-base data (vectors live in Chroma behind AI) and does not persist AI keyboard drafts, so there is no admin repository or domain service. Justified as transport adapters, not a second CMS domain.
 
 Per-domain folder (under `src/domains/<x>/`):
 
@@ -152,7 +154,7 @@ Current content / feature slices:
 | knowledge-base | `knowledge-base` | `knowledge-base-ingest` | `knowledge-base-sources` | `knowledge-base` |
 | analytics | `analytics` | — | `step-usage-stats` | `analytics` |
 
-Keyboard create/edit (`keyboard-manage` / `KeyboardForm`) can reorder embedded `Buttons` with drag-and-drop from the buttons list and the phone preview. Order is the array sent on POST/PUT; there is no separate order field.
+Keyboard create/edit (`keyboard-manage` / `KeyboardForm`) can reorder embedded `Buttons` with drag-and-drop from the buttons list and the phone preview. Order is the array sent on POST/PUT; there is no separate order field. Create mode (`/keyboards/new`) also has “Create with AI”: a right-side chat panel (`shared/ui/AiChatDrawer` + `shared/lib/useAiChat`, phases in `KeyboardAiChat`) that squeezes the form instead of overlaying it and hydrates the form from a draft. The draft is never auto-saved.
 
 Carousel create/edit (`carousel-manage` / `CarouselForm`) edits a list of cards (`structured` or `custom`). The client sends `Cards`; `CarouselService` flattens and validates them into stored `Buttons`. A `rich-media` message references a carousel by `{ carousel: { id } }` (same attachment pattern as keyboard-type messages).
 
@@ -181,7 +183,7 @@ Collection names, fields, and indexes: [databases.md](./databases.md).
 | Viber → Admin | REST + `X-Service-Token` | Content + bot-settings fetch |
 | Admin → Viber | RabbitMQ `viber.refresh` | Cache invalidation (`RefreshEvent`) |
 | Viber → Admin | RabbitMQ `analytics.step-usage` | Step usage events (`StepUsageEvent`); admin consumer started from `src/instrumentation.ts` |
-| Admin → AI | REST + `X-Service-Token` | Knowledge-base ingest / sources. `AI_SERVICE_TOKEN` must match on both services. |
+| Admin → AI | REST + `X-Service-Token` | Knowledge-base ingest / sources and keyboard-builder generate. `AI_SERVICE_TOKEN` must match on both services. |
 | Viber → AI | gRPC `:50051` | `ProcessMessage` only |
 
 `RefreshEvent` (`@vbar/shared`):
@@ -215,7 +217,7 @@ Admin persists consumed events in `admin_service.stepusageevents` (100-day TTL).
 
 `@vbar/shared` (root barrel) and `@vbar/shared/infra` (Mongo/RabbitMQ helpers — not on the root barrel so Edge middleware can import `ConfigHelper` without mongoose/amqplib).
 
-- **Types:** `common.ts` (`ApiResponse`, `PaginationParams`, `HealthCheckResponse`, `RefreshEvent`, `StepUsageEvent`, queue names) and `admin.ts` (content DTOs, `User`)
+- **Types:** `common.ts` (`ApiResponse`, `PaginationParams`, `HealthCheckResponse`, `RefreshEvent`, `StepUsageEvent`, queue names), `admin.ts` (content DTOs, `User`), and `ai.ts` (AI↔admin builder contract: `AiChatTurn`, `KeyboardDraft`, `GenerateKeyboardInput`, `GenerateKeyboardResult`, … — used by `services/ai` and `services/admin`, not mirrored per service)
 - **Utils:** `Logger` / `ConsoleLogger`, `PathUtils`
 - **Config:** `ConfigHelper`, `EnvironmentConfig`, `resolveRootEnvPath`
 - **Infra:** `createMongoConnection`, `createQueueChannel` — mandated for new connections in viber/ai. Admin `lib/mongodb.ts` stays Next.js-specific.

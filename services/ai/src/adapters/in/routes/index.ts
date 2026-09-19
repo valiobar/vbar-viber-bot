@@ -9,6 +9,7 @@ import { Logger } from "@vbar/shared";
 import healthRoutes from "./health";
 import { createKnowledgeBaseRouter } from "./knowledgeBase";
 import { createPromptsRouter } from "./prompts";
+import { createKeyboardBuilderRouter } from "./keyboardBuilder";
 import { VectorStorePort } from "../../../ports/out/VectorStorePort";
 
 export function createRoutes(
@@ -19,5 +20,6 @@ export function createRoutes(
   router.use("/api/health", healthRoutes);
   router.use("/api/knowledge-base", createKnowledgeBaseRouter(vectorStore, logger));
   router.use("/api/prompts", createPromptsRouter(logger));
+  router.use("/api/keyboard-builder", createKeyboardBuilderRouter(logger));
   return router;
 }

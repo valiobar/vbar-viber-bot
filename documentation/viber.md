@@ -111,9 +111,11 @@ Viber calls `POST /webhook/viber`. The raw body is preserved for HMAC signature 
 Scripted replies go through `TextMessageHandler` + `StepSender`.
 
 1. Bot settings supply `buttonsPrefix` (e.g. a hidden prefix on keyboard buttons).
-2. If the inbound text contains that prefix, the prefix is stripped and the remainder is matched against step `trigger` strings (case-insensitive).
-3. The first matching step is sent: resolve message IDs → optional carousel → optional keyboard → `bot.sendMessage`.
-4. On success, `user.currentStepId` is updated in Mongo and a `StepUsageEvent` is published (fire-and-forget).
+2. If the inbound text contains that prefix, the prefix is stripped.
+3. If the remainder is a JSON **object** (admin `isJson` reply buttons): `trigger` is matched against step `trigger` strings (case-insensitive). Every other key is merged into that user’s state (`userRepository.updateState`) **before** the step is sent. Example: `{"trigger":"welcome","click":"now"}` opens the welcome step and sets `click` to `"now"` on the user. A missing or empty `trigger` is logged and no step is sent; the state patch still applies.
+4. Otherwise the remainder is matched as a plain trigger string (case-insensitive).
+5. The first matching step is sent: resolve message IDs → optional carousel → optional keyboard → `bot.sendMessage`.
+6. On success, `user.currentStepId` is updated in Mongo and a `StepUsageEvent` is published (fire-and-forget).
 
 `StepSender` also runs a **custom handler** when `step.customHandler` is set (`application/custom-steps/`). That replaces the normal send path; a successful custom handler still publishes analytics (with `customHandler` set).
 
