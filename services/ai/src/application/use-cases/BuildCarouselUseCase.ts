@@ -2,21 +2,21 @@ import { Logger } from "@vbar/shared";
 import { AIProviderPort } from "../../ports/out/AIProviderPort";
 import { ConversationContext } from "../../domains/ai/entities";
 import {
-  BuildKeyboardUseCase,
-  GenerateKeyboardInput,
-  GenerateKeyboardResult,
+  BuildCarouselUseCase,
+  GenerateCarouselInput,
+  GenerateCarouselResult,
   AiChatTurn,
-} from "../../ports/in/BuildKeyboardUseCase";
+} from "../../ports/in/BuildCarouselUseCase";
 import {
-  KEYBOARD_BUILDER_SYSTEM_PROMPT,
-  buildKeyboardUserPrompt,
-  serializeDraftForHistory,
-  llmKeyboardOutputSchema,
-} from "./keyboardBuilderPrompt";
+  CAROUSEL_BUILDER_SYSTEM_PROMPT,
+  buildCarouselUserPrompt,
+  serializeCarouselDraftForHistory,
+  llmCarouselOutputSchema,
+} from "./carouselBuilderPrompt";
 import {
-  normalizeKeyboardDraft,
+  normalizeCarouselDraft,
   computeMissingFields,
-} from "./keyboardDraftNormalizer";
+} from "./carouselDraftNormalizer";
 
 const MAX_DESCRIPTION_LENGTH = 4000;
 const MAX_HISTORY_TURNS = 20; // hard cap; LangChainAdapter also clamps to CONVERSATION_MAX_HISTORY
@@ -38,18 +38,18 @@ function historyToContext(history?: AiChatTurn[]): ConversationContext | undefin
     return undefined;
   }
   return new ConversationContext(
-    "keyboard-builder", // synthetic id — required by the entity, never persisted
+    "carousel-builder", // synthetic id — required by the entity, never persisted
     valid.map((t) => ({ role: t.role, content: t.content, timestamp: new Date() }))
   );
 }
 
-export class BuildKeyboardUseCaseImpl implements BuildKeyboardUseCase {
+export class BuildCarouselUseCaseImpl implements BuildCarouselUseCase {
   constructor(
     private readonly aiProvider: AIProviderPort,
     private readonly logger: Logger
   ) {}
 
-  async generate(input: GenerateKeyboardInput): Promise<GenerateKeyboardResult> {
+  async generate(input: GenerateCarouselInput): Promise<GenerateCarouselResult> {
     const description = input.description?.trim();
     if (!description) {
       throw new Error("description is required");
@@ -60,34 +60,35 @@ export class BuildKeyboardUseCaseImpl implements BuildKeyboardUseCase {
 
     const context = historyToContext(input.history);
     // currentDraft (live form state, possibly manually edited) is the
-    // authoritative base when present; otherwise template buttons seed the
-    // first turn only — on refinement turns the previous draft is in history.
-    const userPrompt = buildKeyboardUserPrompt({
+    // authoritative base when present.
+    const userPrompt = buildCarouselUserPrompt({
       description,
       currentDraft: input.currentDraft,
-      templateButtons: context ? undefined : input.templateButtons,
+      ctaDefaults: input.ctaDefaults,
       buttonDefaults: input.buttonDefaults,
     });
 
-    // Native structured output with prompt-based fallback — handled inside
-    // generateStructured (Step 4); result is already zod-validated.
     const parsed = await this.aiProvider.generateStructured(
       userPrompt,
-      llmKeyboardOutputSchema,
+      llmCarouselOutputSchema,
       context,
-      KEYBOARD_BUILDER_SYSTEM_PROMPT
+      CAROUSEL_BUILDER_SYSTEM_PROMPT
     );
 
-    const existingButtons = input.currentDraft?.Buttons ?? input.templateButtons;
-    const draft = normalizeKeyboardDraft(parsed, input.buttonDefaults, existingButtons);
+    const draft = normalizeCarouselDraft(
+      parsed,
+      input.ctaDefaults,
+      input.currentDraft?.Cards,
+      input.buttonDefaults
+    );
     const missingFields = computeMissingFields(draft);
     const summary =
       typeof parsed.summary === "string" && parsed.summary.trim()
         ? parsed.summary.trim()
-        : `Draft keyboard with ${draft.Buttons.length} button(s) generated.`;
+        : `Draft carousel with ${draft.Cards.length} card(s) generated.`;
 
-    this.logger.info("Keyboard draft generated", {
-      buttons: draft.Buttons.length,
+    this.logger.info("Carousel draft generated", {
+      cards: draft.Cards.length,
       missingFields: missingFields.length,
       historyTurns: input.history?.length ?? 0,
     });
@@ -96,7 +97,7 @@ export class BuildKeyboardUseCaseImpl implements BuildKeyboardUseCase {
       draft,
       missingFields,
       summary,
-      assistantMessage: serializeDraftForHistory(draft, summary),
+      assistantMessage: serializeCarouselDraftForHistory(draft, summary),
     };
   }
 }

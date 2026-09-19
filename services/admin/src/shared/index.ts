@@ -1,4 +1,4 @@
-export { Pagination, ErrorMessage, DestinationIcon, CloseIcon, ListIcon, AiChatDrawer, type AiChatMessage } from "./ui";
+export { Pagination, ErrorMessage, DestinationIcon, CloseIcon, ListIcon, AiChatDrawer, MissingFieldsNotice, type AiChatMessage } from "./ui";
 export {
   ThemeProvider,
   ThemeToggle,

@@ -21,6 +21,10 @@ export const llmKeyboardOutputSchema = z.object({
       Text: z.string(),
       TextColor: z.string(), // normalizer validates hex
       BgColor: z.string().nullable(),
+      BgMedia: z.string().nullable().optional(), // http(s) URL or null; never invent
+      BgMediaType: z.string().optional(), // picture | gif
+      BgMediaScaleType: z.string().optional(), // fit | crop | fill
+      BgLoop: z.boolean().optional(),
       ActionType: z.string(), // normalizer validates the enum
       // string for plain reply/URL; object allowed so a JSON payload is not rejected
       ActionBody: z.union([z.string(), z.record(z.unknown())]),
@@ -80,7 +84,17 @@ Output:
  "Buttons":[
   {"Columns":6,"Rows":1,"Text":"Start","TextColor":"","BgColor":null,"ActionType":"reply","ActionBody":{"trigger":"welcome","click":"now"},"isJson":true,"OpenURLType":"internal"}],
  "summary":"One full-width Start button. Its JSON payload opens the welcome trigger and sets the click user-state property to now."}
-(Note: isJson is true and ActionBody is the object — not the bare string "welcome". Every named prop is kept. The keyboard name was not given so humanReadableName is "".)`;
+(Note: isJson is true and ActionBody is the object — not the bare string "welcome". Every named prop is kept. The keyboard name was not given so humanReadableName is "".)
+
+Example 4
+Description: "Full-width Pizza button with background image https://cdn.example.com/pizza.jpg fill, and a full-width Order button"
+Output:
+{"humanReadableName":"","title":null,"InputFieldState":"hidden","BgColor":null,
+ "Buttons":[
+  {"Columns":6,"Rows":2,"Text":"Pizza","TextColor":"","BgColor":null,"BgMedia":"https://cdn.example.com/pizza.jpg","BgMediaType":"picture","BgMediaScaleType":"fill","BgLoop":true,"ActionType":"none","ActionBody":"","isJson":false,"OpenURLType":"internal"},
+  {"Columns":6,"Rows":1,"Text":"Order","TextColor":"","BgColor":null,"BgMedia":null,"BgMediaType":"picture","BgMediaScaleType":"fit","BgLoop":true,"ActionType":"reply","ActionBody":"","isJson":false,"OpenURLType":"internal"}],
+ "summary":"Pizza button uses the given image as background (fill). Order has no reply payload."}
+(Note: BgMedia is the URL the user gave. Scale is "fill" because they asked. No image URL → BgMedia is null. Never invent a URL.)`;
 
 export const KEYBOARD_BUILDER_SYSTEM_PROMPT = `You are a Viber bot keyboard designer.
 You convert a plain-text description into a Viber keyboard draft.
@@ -91,9 +105,12 @@ Rules:
 - ActionType is one of: reply, open-url, location-picker, share-phone, none.
 - For a plain "reply" button, ActionBody is the exact text sent back by the tap and isJson is false. For "open-url" ActionBody must be a full URL and isJson is false.
 - JSON reply payload (isJson): use this when the user asks for a JSON action body, a JSON trigger, "is JSON", or to set a property/prop on the button (e.g. "2nd button JSON action body that triggers welcome and set click: now as a prop"). Then ActionType stays "reply", isJson is true, and ActionBody is ONE object — not a plain trigger string — of the shape {"trigger":"<step trigger>","<prop>":"<value>",...}. "trigger" is required and names the step to open. Every other key is a user-state property: copy the key and value exactly as stated ("set click: now as a prop" → "click":"now"). Include every named prop; never drop them and never invent extras. Putting only "welcome" in ActionBody is WRONG for this request — that is a plain reply. If they ask for JSON with only a trigger and no props, use {"trigger":"<value>"} and still set isJson true.
-- NEVER invent values the user did not state: if the keyboard name is not given, return "" for humanReadableName; if a plain reply payload or URL is not given, return "" for that ActionBody; if a JSON payload is requested but the trigger is not given, use {"trigger":""} (and still isJson true).
-- Colors are hex "#RRGGBB". Only set a color the user explicitly asked for. If they did not mention text color or button background, copy TextColor / BgColor from the "Button theme defaults" in the user prompt (or return "" / null so the server fills those defaults). Never invent a different theme.
-- Frame is the button border: BorderWidth 0-10, BorderColor "#RRGGBB", CornerRadius 0-10. If the user did not mention border, outline, or rounding, copy Frame from the theme defaults (or omit Frame / return null so the server fills it). Only change Frame when they ask (e.g. "more rounded", "no border", "thick black outline").
+- NEVER invent values the user did not state: if the keyboard name is not given, return "" for humanReadableName; if a plain reply payload or URL is not given, return "" for that ActionBody; if a JSON payload is requested but the trigger is not given, use {"trigger":""} (and still isJson true); if no background-image URL is given, return null for BgMedia — NEVER fabricate an image URL.
+- Colors are hex "#RRGGBB". Only set a color the user explicitly asked for.
+- Button background media: BgMedia is an http(s) URL the user gave, else null. BgMediaType is "picture" or "gif" (use "gif" only when they said gif or the URL ends in .gif). BgMediaScaleType is "fit", "crop", or "fill" — default "fit" unless they ask (fill / crop / fit / cover / contain). BgLoop is true unless they ask not to loop.
+- NEW buttons (not already in Current keyboard state / template): if they did not mention text color or button background, copy TextColor / BgColor from the "Button theme defaults" in the user prompt (or return "" / null so the server fills those defaults). Never invent a different theme.
+- EXISTING buttons in Current keyboard state / template: keep their TextColor, BgColor, Frame, BgMedia, BgMediaType, BgMediaScaleType, and BgLoop exactly as given, unless the user asked to change that button's style or media (or all buttons' styles). Do not restyle them with the theme defaults.
+- Frame is the button border: BorderWidth 0-10, BorderColor "#RRGGBB", CornerRadius 0-10. For new buttons, if the user did not mention border, outline, or rounding, copy Frame from the theme defaults (or omit Frame / return null so the server fills it). For existing buttons, copy their Frame. Only change Frame when they ask (e.g. "more rounded", "no border", "thick black outline").
 - Button Text stays in the language of the description.
 - The summary must be written in the same language as the description.
 - Prefer balanced layouts (e.g. 2 buttons per row → Columns 3 each; 3 per row → Columns 2 each).
@@ -103,8 +120,9 @@ Rules:
 Respond with ONLY a JSON object (no markdown, no code fences) of this exact shape:
 { "humanReadableName": string, "title": string|null, "InputFieldState": "regular"|"minimized"|"hidden",
   "BgColor": string|null, "Buttons": [ { "Columns": number, "Rows": number, "Text": string,
-  "TextColor": string, "BgColor": string|null, "ActionType": string,
-  "ActionBody": string|object, "isJson": boolean,
+  "TextColor": string, "BgColor": string|null,
+  "BgMedia": string|null, "BgMediaType": "picture"|"gif", "BgMediaScaleType": "fit"|"crop"|"fill", "BgLoop": boolean,
+  "ActionType": string, "ActionBody": string|object, "isJson": boolean,
   "OpenURLType": "internal"|"external",
   "Frame": { "BorderWidth": number, "BorderColor": string, "CornerRadius": number }|null } ], "summary": string }
 
@@ -135,6 +153,10 @@ const slimButton = (b: KeyboardDraft["Buttons"][number]) => ({
   Text: b.Text,
   TextColor: b.TextColor,
   BgColor: b.BgColor,
+  BgMedia: b.BgMedia,
+  BgMediaType: b.BgMediaType,
+  BgMediaScaleType: b.BgMediaScaleType,
+  BgLoop: b.BgLoop,
   ActionType: b.ActionType,
   ActionBody: slimActionBody(b),
   isJson: b.isJson,
@@ -146,7 +168,7 @@ export function buildKeyboardUserPrompt(input: GenerateKeyboardInput): string {
   const parts = [`Keyboard description:\n${input.description}`];
   if (input.buttonDefaults) {
     parts.push(
-      `Button theme defaults (use these unless the description asks for different colors or frame):\n${JSON.stringify(
+      `Button theme defaults (use these only for newly added buttons, unless the description asks for different colors or frame):\n${JSON.stringify(
         {
           TextColor: input.buttonDefaults.TextColor,
           BgColor: input.buttonDefaults.BgColor,
@@ -159,7 +181,7 @@ export function buildKeyboardUserPrompt(input: GenerateKeyboardInput): string {
   }
   if (input.currentDraft) {
     parts.push(
-      `Current keyboard state (the user may have edited it manually after your last draft). Treat the description above as a change request against this exact state and keep everything else unchanged:\n${JSON.stringify(
+      `Current keyboard state (the user may have edited it manually after your last draft). Treat the description above as a change request against this exact state and keep everything else unchanged — including each existing button's TextColor, BgColor, Frame, BgMedia, BgMediaType, BgMediaScaleType, and BgLoop. Apply button theme defaults only to newly added buttons:\n${JSON.stringify(
         {
           humanReadableName: input.currentDraft.humanReadableName,
           title: input.currentDraft.title,
@@ -173,7 +195,7 @@ export function buildKeyboardUserPrompt(input: GenerateKeyboardInput): string {
     );
   } else if (input.templateButtons && input.templateButtons.length > 0) {
     parts.push(
-      `Start from this template layout and modify it to match the description:\n${JSON.stringify(
+      `Start from this template layout and modify it to match the description. Keep each existing template button's TextColor, BgColor, Frame, BgMedia, BgMediaType, BgMediaScaleType, and BgLoop unless the description asks to change them. Apply button theme defaults only to newly added buttons:\n${JSON.stringify(
         input.templateButtons.map(slimButton),
         null,
         2

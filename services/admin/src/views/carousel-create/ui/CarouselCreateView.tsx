@@ -37,17 +37,18 @@ export const CarouselCreateView = () => {
   };
 
   return (
-    <main className="container mx-auto px-4 py-6">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-          Create Carousel
-        </h1>
-        <p className="mt-2 text-base text-gray-600 dark:text-gray-400">
-          Create a new rich media carousel
-        </p>
-      </div>
-
-      <CarouselForm onSubmit={handleSubmit} />
-    </main>
+    <CarouselForm
+      heading={
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+            Create Carousel
+          </h1>
+          <p className="mt-2 text-base text-gray-600 dark:text-gray-400">
+            Create a new rich media carousel
+          </p>
+        </div>
+      }
+      onSubmit={handleSubmit}
+    />
   );
 };

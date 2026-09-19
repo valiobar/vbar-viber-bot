@@ -24,7 +24,7 @@ Only endpoints and queues that exist in the working tree are documented.
 | Viber platform → Viber | HTTPS webhook | `POST/GET /webhook/viber` |
 | Admin → Viber | RabbitMQ | `viber.refresh` cache invalidation |
 | Viber → Admin | RabbitMQ | `analytics.step-usage` (`StepUsageEvent`) |
-| Admin → AI | REST + `X-Service-Token` | Knowledge-base ingest / sources and keyboard-builder generate (`AI_SERVICE_TOKEN`) |
+| Admin → AI | REST + `X-Service-Token` | Knowledge-base ingest / sources, keyboard-builder generate, and carousel-builder generate (`AI_SERVICE_TOKEN`) |
 | Viber → AI | gRPC | `AIProcessingService.ProcessMessage` |
 | Viber → Admin | REST | Content fetch with service token |
 
@@ -56,7 +56,7 @@ X-Service-Token: <token>
 
 Configured via `SERVICE_TOKEN`, `ADMIN_SERVICE_TOKEN`, `VIBER_SERVICE_TOKEN`, and `AI_SERVICE_TOKEN` (see `.env.example`).
 
-`AI_SERVICE_TOKEN` must be the same value on admin (outbound proxy) and ai (inbound ingest and keyboard-builder). A mismatch returns `401 UNAUTHORIZED` from AI; an unset token on either side returns `503`.
+`AI_SERVICE_TOKEN` must be the same value on admin (outbound proxy) and ai (inbound ingest, keyboard-builder, and carousel-builder). A mismatch returns `401 UNAUTHORIZED` from AI; an unset token on either side returns `503`.
 
 ### Response envelope
 
@@ -174,7 +174,7 @@ Proxy-only error codes (admin, before the call reaches AI): `AI_SERVICE_NOT_CONF
 
 **Request:** `{ description: string, history?: AiChatTurn[], templateButtons?: KeyboardDraftButton[], buttonDefaults?: { TextColor, BgColor, Frame }, currentDraft?: KeyboardDraft }`
 
-**Response:** `{ data: { draft, missingFields, summary, assistantMessage } }` — `draft` matches `CreateKeyboardInput` (without `DefaultHeight`); blank required values are listed in `missingFields`. Assistant turns in `history` must be the previous `assistantMessage`. `buttonDefaults` is the current Bot Settings button theme (`resolveButtonColors` / `resolveButtonFrame`); unspecified colors/frame in the draft use that theme. `currentDraft` is the live form state (may include manual user edits) — when present it is the authoritative base the newest turn refines, taking precedence over drafts in `history` and over `templateButtons`. The admin client sends it whenever the form has a name or at least one button.
+**Response:** `{ data: { draft, missingFields, summary, assistantMessage } }` — `draft` matches `CreateKeyboardInput` (without `DefaultHeight`); blank required values are listed in `missingFields`. Assistant turns in `history` must be the previous `assistantMessage`. `buttonDefaults` is the current Bot Settings button theme (`resolveButtonColors` / `resolveButtonFrame`); unspecified colors/frame on **newly added** buttons use that theme. Buttons already in `currentDraft` / `templateButtons` keep their own colors, frame, and `BgMedia`. A requested background image is `BgMedia` plus `BgMediaType` / `BgMediaScaleType` / `BgLoop`. `currentDraft` is the live form state (may include manual user edits) — when present it is the authoritative base the newest turn refines, taking precedence over drafts in `history` and over `templateButtons`. The admin client sends it whenever the form has a name or at least one button.
 
 Same proxy-only error codes as knowledge-base (`AI_SERVICE_NOT_CONFIGURED` / `AI_SERVICE_UNAVAILABLE`). AI error codes are passed through unchanged.
 
@@ -265,7 +265,7 @@ Viber events. Requires a public HTTPS URL (`VIBER_BOT_WEBHOOK_URL`).
 
 ## AI Service API
 
-HTTP port **3002** (Compose: localhost-only). Viber message processing is **gRPC**. Knowledge-base ingest (`/api/knowledge-base/*`) and keyboard generation (`POST /api/keyboard-builder/generate`) are **REST**.
+HTTP port **3002** (Compose: localhost-only). Viber message processing is **gRPC**. Knowledge-base ingest (`/api/knowledge-base/*`), keyboard generation (`POST /api/keyboard-builder/generate`), and carousel generation (`POST /api/carousel-builder/generate`) are **REST**.
 
 ### Health
 
@@ -393,9 +393,119 @@ Admin proxy: `POST /api/ai/keyboard-builder` (JWT). See [AI keyboard builder (th
 }
 ```
 
-`draft` matches admin `CreateKeyboardInput` (admin adds `DefaultHeight`). Unknown required values (`humanReadableName`, reply / open-url `ActionBody`) are `""` and listed in `missingFields`. JSON reply buttons set `isJson: true` and `ActionBody` to `{"trigger":"...","<prop>":"..."}`; a missing `trigger` is listed as `JSON trigger (ActionBody.trigger)`. Append `assistantMessage` as the next `history` assistant turn.
+`draft` matches admin `CreateKeyboardInput` (admin adds `DefaultHeight`). Unknown required values (`humanReadableName`, reply / open-url `ActionBody`) are `""` and listed in `missingFields`. JSON reply buttons set `isJson: true` and `ActionBody` to `{"trigger":"...","<prop>":"..."}`; a missing `trigger` is listed as `JSON trigger (ActionBody.trigger)`. A button background image is `BgMedia` (`BgMediaType` `picture` | `gif`, `BgMediaScaleType` `fit` | `crop` | `fill`, `BgLoop`) — URLs are never invented. Unspecified colors/frame on new buttons use `buttonDefaults`; existing `currentDraft` / `templateButtons` buttons keep their own styles and media. Append `assistantMessage` as the next `history` assistant turn.
 
 Error codes: `KEYBOARD_BUILDER_VALIDATION` (400), `UNAUTHORIZED` (401), `KEYBOARD_BUILDER_BAD_AI_OUTPUT` (502), `KEYBOARD_BUILDER_NOT_CONFIGURED` (503), `KEYBOARD_BUILDER_FAILED` (500).
+
+### Carousel builder (AI service, REST)
+
+`POST /api/carousel-builder/generate`. Requires `X-Service-Token` (`AI_SERVICE_TOKEN`). Responses are `ApiResponse<GenerateCarouselResult>`. The service is stateless: the client holds `history` and sends it on every turn. Architecture and normalization rules: [ai.md](./ai.md#carousel-builder).
+
+The admin proxy is documented in the admin carousel-builder plan (Part 2).
+
+#### `POST /api/carousel-builder/generate`
+
+**Request body:**
+
+```json
+{
+  "description": "Карусел с карти Пица и Паста, всяка с бутон Поръчай",
+  "history": [
+    { "role": "user", "content": "previous description" },
+    { "role": "assistant", "content": "<assistantMessage from the previous response>" }
+  ],
+  "currentDraft": {
+    "humanReadableName": "Food menu (AI)",
+    "BgColor": null,
+    "ButtonsGroupColumns": 6,
+    "ButtonsGroupRows": 7,
+    "Cards": []
+  },
+  "ctaDefaults": {
+    "textColor": "#FFFFFF",
+    "bgColor": "#7360F2",
+    "Frame": null
+  },
+  "buttonDefaults": {
+    "TextColor": "#000000",
+    "BgColor": null,
+    "Frame": null
+  }
+}
+```
+
+| Field | Required | Notes |
+|-------|----------|--------|
+| `description` | yes | Newest user message: full description (first turn) or a refinement. Max 4000 characters. |
+| `history` | no | Prior turns, client-held. Assistant `content` must be the previous `assistantMessage`. |
+| `currentDraft` | no | Live form state (may include manual user edits). Authoritative base for the newest turn — takes precedence over drafts in `history`. |
+| `ctaDefaults` | no | Admin-resolved bot-settings CTA theme (`textColor`, `bgColor`, `Frame` via `resolveCtaColors` / `resolveButtonFrame`). Applied only to newly added structured CTAs. |
+| `buttonDefaults` | no | Admin-resolved keyboard button theme (`TextColor`, `BgColor`, `Frame` via `resolveButtonColors` / `resolveButtonFrame`). Applied only to newly added custom Buttons. |
+
+**Success `200`:**
+
+```json
+{
+  "data": {
+    "draft": {
+      "humanReadableName": "",
+      "BgColor": null,
+      "ButtonsGroupColumns": 6,
+      "ButtonsGroupRows": 7,
+      "Cards": [
+        {
+          "mode": "custom",
+          "image": null,
+          "title": "",
+          "titleColor": "#323232",
+          "description": "",
+          "descriptionColor": "#777777",
+          "textRows": 2,
+          "ctaButtons": [],
+          "Buttons": [
+            {
+              "Columns": 6,
+              "Rows": 6,
+              "Text": "Пица",
+              "TextColor": "#000000",
+              "BgColor": null,
+              "ActionType": "none",
+              "ActionBody": "",
+              "OpenURLType": "internal",
+              "Silent": true,
+              "isJson": false,
+              "Frame": null
+            },
+            {
+              "Columns": 6,
+              "Rows": 1,
+              "Text": "Поръчай",
+              "TextColor": "#000000",
+              "BgColor": null,
+              "ActionType": "reply",
+              "ActionBody": "",
+              "OpenURLType": "internal",
+              "Silent": true,
+              "isJson": false,
+              "Frame": null
+            }
+          ]
+        }
+      ]
+    },
+    "missingFields": [
+      "Carousel name (required)",
+      "Card \"Пица\", button \"Поръчай\": reply text (ActionBody)"
+    ],
+    "summary": "Карусел с 2 карти…",
+    "assistantMessage": "{\"humanReadableName\":\"\",\"BgColor\":null,…}"
+  }
+}
+```
+
+`draft` matches admin `CarouselForm` state. New cards default to `mode: "custom"` with a `Buttons[]` grid that must fill `ButtonsGroupRows` exactly. Structured cards (`image` / title / description / `ctaButtons`) are used when the user asks for that layout, or when an existing `currentDraft` card is already structured. A custom-card background image is `Buttons[].BgMedia` (`BgMediaType` `picture` | `gif`, `BgMediaScaleType` `fit` | `crop` | `fill`, `BgLoop`) — not card-level `image`. Unknown required values (`humanReadableName`, reply / open-url bodies) are `""`, unknown images / `BgMedia` are `null`, and all are listed in `missingFields`. Image URLs are never invented. Unspecified colors/frame on **newly added custom Buttons** use `buttonDefaults`, then `#000000` / `null`. Unspecified colors/frame on **newly added structured CTAs** use `ctaDefaults`, then `#FFFFFF` / `#7360F2` / `null`. Existing `currentDraft` cards (matched by title, first button text, or image) keep their mode, colors, frame, media, and custom `Columns` / `Rows`. Flattening `Cards` → `Buttons` stays on the admin server (`CardFlattener`) at save time. Append `assistantMessage` as the next `history` assistant turn.
+
+Error codes: `CAROUSEL_BUILDER_VALIDATION` (400), `UNAUTHORIZED` (401), `CAROUSEL_BUILDER_BAD_AI_OUTPUT` (502), `CAROUSEL_BUILDER_NOT_CONFIGURED` (503), `CAROUSEL_BUILDER_FAILED` (500).
 
 ### Not implemented (REST)
 
@@ -489,7 +599,7 @@ Import from `@vbar/shared`:
 - `ApiResponse<T>`, `PaginationParams`, `HealthCheckResponse`
 - `RefreshEvent`, `MessageQueueName`, `MessageQueueEvent`
 - Admin content DTOs: `StepDTO`, `MessageDTO`, `KeyboardDTO`, `ButtonDTO`, `CarouselDTO`, `CarouselCardDTO`, `CarouselCtaDTO`, `User`
-- AI↔admin builder contracts (`types/ai.ts`): `AiChatTurn`, `KeyboardDraft`, `KeyboardDraftButton`, `KeyboardButtonDefaults`, `GenerateKeyboardInput`, `GenerateKeyboardResult` — implemented by AI, consumed by admin; not mirrored per service
+- AI↔admin builder contracts (`types/ai.ts`): `AiChatTurn`, `KeyboardDraft`, `KeyboardDraftButton`, `KeyboardButtonDefaults`, `GenerateKeyboardInput`, `GenerateKeyboardResult`, `CarouselDraft`, `CarouselDraftCard`, `CarouselCtaDefaults`, `GenerateCarouselInput`, `GenerateCarouselResult` — implemented by AI, consumed by admin; not mirrored per service
 
 Admin application input types (`CreateMessageInput`, etc.) live on the domain services and are re-exported to the client through `entities/*/model/types.ts`.
 
