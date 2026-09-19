@@ -261,7 +261,7 @@ export const KeyboardsList = ({ initialData }: KeyboardsListProps) => {
   };
 
   const renderKeyboardTable = () => {
-    if (isLoading) {
+    if (isLoading && sortedKeyboards.length === 0) {
       return (
         <div className="p-8 text-center text-gray-500 dark:text-gray-400">
           Loading...
@@ -278,7 +278,11 @@ export const KeyboardsList = ({ initialData }: KeyboardsListProps) => {
     }
 
     return (
-      <div className="overflow-x-auto">
+      <div
+        className={`overflow-x-auto transition-opacity ${
+          isLoading ? "pointer-events-none opacity-60" : ""
+        }`}
+      >
         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
           <thead className="bg-gray-50 dark:bg-gray-900">
             <tr>

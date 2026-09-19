@@ -546,11 +546,27 @@ export const CardEditor = ({
                     <select
                       id={`card-${index}-cta-${ctaIndex}-actionType`}
                       value={cta.actionType}
-                      onChange={(e) =>
-                        handleCtaUpdate(ctaIndex, {
-                          actionType: e.target.value as CarouselCtaActionType,
-                        })
-                      }
+                      onChange={(e) => {
+                        const actionType = e.target
+                          .value as CarouselCtaActionType;
+                        if (actionType === "none") {
+                          // Viber still requires an action body — auto-fill it
+                          handleCtaUpdate(ctaIndex, {
+                            actionType,
+                            actionBody: "none",
+                          });
+                        } else if (
+                          cta.actionType === "none" &&
+                          cta.actionBody === "none"
+                        ) {
+                          handleCtaUpdate(ctaIndex, {
+                            actionType,
+                            actionBody: "",
+                          });
+                        } else {
+                          handleCtaUpdate(ctaIndex, { actionType });
+                        }
+                      }}
                       className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
                     >
                       <option value="reply">Reply</option>
@@ -575,7 +591,8 @@ export const CardEditor = ({
                       onChange={(e) =>
                         handleCtaUpdate(ctaIndex, { actionBody: e.target.value })
                       }
-                      className={`mt-1 block w-full rounded-md border px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 dark:bg-gray-700 dark:text-white ${
+                      disabled={cta.actionType === "none"}
+                      className={`mt-1 block w-full rounded-md border px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-gray-700 dark:text-white ${
                         errors[`card-${index}-cta-${ctaIndex}-actionBody`]
                           ? "border-red-500"
                           : "border-gray-300 dark:border-gray-600"

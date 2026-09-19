@@ -24,7 +24,6 @@ export const KeyboardEditView = () => {
   const [keyboard, setKeyboard] = useState<KeyboardDTO | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isEditingButton, setIsEditingButton] = useState(false);
 
   useEffect(() => {
     const fetchKeyboard = async () => {
@@ -83,8 +82,8 @@ export const KeyboardEditView = () => {
   }
 
   return (
-    <main className="container mx-auto px-4 py-6">
-      {!isEditingButton && (
+    <KeyboardForm
+      heading={
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
             Edit Keyboard
@@ -93,13 +92,9 @@ export const KeyboardEditView = () => {
             Update keyboard settings and button layout
           </p>
         </div>
-      )}
-
-      <KeyboardForm
-        initialData={keyboard}
-        onSubmit={handleSubmit}
-        onButtonEditModeChange={setIsEditingButton}
-      />
-    </main>
+      }
+      initialData={keyboard}
+      onSubmit={handleSubmit}
+    />
   );
 };

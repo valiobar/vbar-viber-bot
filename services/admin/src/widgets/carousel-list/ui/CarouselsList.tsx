@@ -261,7 +261,7 @@ export const CarouselsList = ({ initialData }: CarouselsListProps) => {
   };
 
   const renderCarouselTable = () => {
-    if (isLoading) {
+    if (isLoading && sortedCarousels.length === 0) {
       return (
         <div className="p-8 text-center text-gray-500 dark:text-gray-400">
           Loading...
@@ -278,7 +278,11 @@ export const CarouselsList = ({ initialData }: CarouselsListProps) => {
     }
 
     return (
-      <div className="overflow-x-auto">
+      <div
+        className={`overflow-x-auto transition-opacity ${
+          isLoading ? "pointer-events-none opacity-60" : ""
+        }`}
+      >
         <table
           className="min-w-full divide-y divide-gray-200 dark:divide-gray-700"
           data-testid="carousels-table"

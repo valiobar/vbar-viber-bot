@@ -64,6 +64,10 @@ interface KeyboardFormProps {
   heading?: ReactNode;
 }
 
+/** ActionBody is mandatory only for these action types (auto-filled for "none"). */
+const requiresActionBody = (actionType: ButtonDTO["ActionType"]): boolean =>
+  actionType === "reply" || actionType === "open-url";
+
 /**
  * Default button data for new buttons
  */
@@ -258,8 +262,11 @@ export const KeyboardForm = ({
     if (button.Rows < 1 || button.Rows > 3) {
       buttonErrors[`button-${index}-rows`] = "Rows must be between 1 and 3";
     }
-    if (!button.ActionBody.trim()) {
-      buttonErrors[`button-${index}-actionBody`] = "Action body is required";
+    if (requiresActionBody(button.ActionType) && !button.ActionBody.trim()) {
+      buttonErrors[`button-${index}-actionBody`] =
+        button.ActionType === "open-url"
+          ? "URL is required"
+          : "Action body is required";
     } else if (button.isJson && button.ActionType === "reply") {
       try {
         const parsed = JSON.parse(button.ActionBody);
@@ -539,23 +546,12 @@ export const KeyboardForm = ({
   };
 
   const aiButtonColors = resolveButtonColors(settings);
-  const isCreateLayout = !initialData;
 
   return (
-    <div
-      className={
-        isCreateLayout
-          ? "-m-4 -mt-20 flex h-screen md:-m-8 md:-mt-8"
-          : undefined
-      }
-    >
+    <div className="-m-4 -mt-20 flex h-screen md:-m-8 md:-mt-8">
       <div
         ref={formColumnRef}
-        className={
-          isCreateLayout
-            ? "min-h-0 min-w-0 flex-1 overflow-y-auto p-4 pt-20 md:p-8 md:pt-8"
-            : "w-full"
-        }
+        className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 pt-20 md:p-8 md:pt-8"
       >
         {showButtonForm && editingButton ? (
       <div className="space-y-6">
@@ -706,6 +702,17 @@ export const KeyboardForm = ({
                     Create with AI
                   </button>
                 </div>
+              )}
+
+              {initialData && (
+                <button
+                  type="button"
+                  data-testid="ai-chat-open"
+                  onClick={() => setShowAiChat(true)}
+                  className="w-full rounded-md border border-blue-600 px-4 py-2 text-sm font-medium text-blue-600 transition-colors hover:bg-blue-50 dark:border-blue-500 dark:text-blue-400 dark:hover:bg-blue-900/20"
+                >
+                  Edit with AI
+                </button>
               )}
 
               {/* Human Readable Name */}
@@ -942,9 +949,9 @@ export const KeyboardForm = ({
         )}
       </div>
 
-      {isCreateLayout && (
       <KeyboardAiChat
         isOpen={showAiChat}
+        mode={initialData ? "edit" : "create"}
         sourceKeyboards={sourceKeyboards}
         buttonDefaults={{
           TextColor: aiButtonColors.TextColor,
@@ -955,7 +962,6 @@ export const KeyboardForm = ({
         onApply={hydrateFormFromDraft}
         onClose={() => setShowAiChat(false)}
       />
-      )}
     </div>
   );
 };

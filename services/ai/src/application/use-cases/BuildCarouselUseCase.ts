@@ -11,12 +11,12 @@ import {
   CAROUSEL_BUILDER_SYSTEM_PROMPT,
   buildCarouselUserPrompt,
   serializeCarouselDraftForHistory,
-  llmCarouselOutputSchema,
-} from "./carouselBuilderPrompt";
+} from "../prompts/carouselBuilderPrompt";
+import { llmCarouselOutputSchema } from "../../domains/builder/services/llmOutputSchemas";
 import {
   normalizeCarouselDraft,
   computeMissingFields,
-} from "./carouselDraftNormalizer";
+} from "../../domains/builder/services/carouselDraftNormalizer";
 
 const MAX_DESCRIPTION_LENGTH = 4000;
 const MAX_HISTORY_TURNS = 20; // hard cap; LangChainAdapter also clamps to CONVERSATION_MAX_HISTORY

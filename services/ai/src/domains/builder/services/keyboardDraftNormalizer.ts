@@ -1,10 +1,10 @@
-import type { AvailableStep } from "@vbar/shared";
 import type {
+  AvailableStep,
   KeyboardButtonDefaults,
   KeyboardDraft,
   KeyboardDraftButton,
-} from "../../ports/in/BuildKeyboardUseCase";
-import type { LlmKeyboardOutput } from "./keyboardBuilderPrompt";
+} from "@vbar/shared";
+import type { LlmKeyboardOutput } from "./llmOutputSchemas";
 import { resolveReplyActionBody } from "./stepTriggerResolver";
 import {
   extractJsonObject,
@@ -148,6 +148,10 @@ function normalizeButton(
       ActionBody: resolveReplyActionBody(action.ActionBody, action.isJson, availableSteps),
       isJson: action.isJson,
     };
+  }
+  if (actionType === "none" && !action.ActionBody.trim()) {
+    // Viber requires a non-empty ActionBody even for none-buttons
+    action = { ActionBody: "none", isJson: false };
   }
   const bgMedia = pickBgMedia(b.BgMedia, existing?.BgMedia);
   return {

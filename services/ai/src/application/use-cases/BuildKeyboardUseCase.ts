@@ -11,12 +11,12 @@ import {
   KEYBOARD_BUILDER_SYSTEM_PROMPT,
   buildKeyboardUserPrompt,
   serializeDraftForHistory,
-  llmKeyboardOutputSchema,
-} from "./keyboardBuilderPrompt";
+} from "../prompts/keyboardBuilderPrompt";
+import { llmKeyboardOutputSchema } from "../../domains/builder/services/llmOutputSchemas";
 import {
   normalizeKeyboardDraft,
   computeMissingFields,
-} from "./keyboardDraftNormalizer";
+} from "../../domains/builder/services/keyboardDraftNormalizer";
 
 const MAX_DESCRIPTION_LENGTH = 4000;
 const MAX_HISTORY_TURNS = 20; // hard cap; LangChainAdapter also clamps to CONVERSATION_MAX_HISTORY

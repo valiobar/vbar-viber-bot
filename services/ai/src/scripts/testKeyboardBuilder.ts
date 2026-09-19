@@ -15,13 +15,13 @@ import {
   parseLlmKeyboardJson,
   normalizeKeyboardDraft,
   computeMissingFields,
-} from "../application/use-cases/keyboardDraftNormalizer";
-import { buildKeyboardUserPrompt } from "../application/use-cases/keyboardBuilderPrompt";
-import { buildCarouselUserPrompt } from "../application/use-cases/carouselBuilderPrompt";
+} from "../domains/builder/services/keyboardDraftNormalizer";
+import { buildKeyboardUserPrompt } from "../application/prompts/keyboardBuilderPrompt";
+import { buildCarouselUserPrompt } from "../application/prompts/carouselBuilderPrompt";
 import {
   resolveTriggerValue,
   resolveReplyActionBody,
-} from "../application/use-cases/stepTriggerResolver";
+} from "../domains/builder/services/stepTriggerResolver";
 
 // --- Part A: normalizer assertions (offline) ---
 const fenced =
@@ -265,6 +265,7 @@ assert.equal(mediaDraft.Buttons[0].BgMedia, "https://cdn.example.com/pizza.jpg")
 assert.equal(mediaDraft.Buttons[0].BgMediaType, "picture");
 assert.equal(mediaDraft.Buttons[0].BgMediaScaleType, "fill");
 assert.equal(mediaDraft.Buttons[0].BgLoop, true);
+assert.equal(mediaDraft.Buttons[0].ActionBody, "none"); // none → auto "none", never ""
 const mediaMissing = computeMissingFields(mediaDraft);
 assert.ok(mediaMissing.some((m) => m.includes("Broken") && m.includes("BgMedia")));
 assert.ok(!mediaMissing.some((m) => m.includes("Pizza") && m.includes("BgMedia")));
