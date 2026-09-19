@@ -120,16 +120,28 @@ function matchExistingButton(
   const consumed = takeExistingButton(text, unused);
   if (consumed) return consumed;
   const needle = text.trim();
-  if (!needle) return undefined;
-  return all.find((b) => b.Text.trim() === needle);
+  if (needle) {
+    const duplicate = all.find((b) => b.Text.trim() === needle);
+    if (duplicate) return duplicate;
+  }
+  // Rename / reorder: leftover unused button in this slot is the same button.
+  return unused.shift();
 }
+
+const STYLE_REQUEST =
+  /#[0-9a-f]{3,8}\b|\b(?:colou?rs?|backgrounds?|bgcolor|textcolor|frames?|borders?|outlines?|rounded|rounding|radius|recolou?r|restyle|re-style|white|black|red|green|blue|yellow|orange|purple|pink|gre[ya]|violet)\b|цвят|цвета|цветове|фон(?:а|ът)?|рамк(?:а|ата|и)|границ(?:а|ата)|заоблен\w*|бял\w*|черн\w*|зелен\w*|син\w*|жълт\w*|лилав\w*|розов\w*|сив\w*/i;
+
+/** True when the user asked to change colors, frame, or other button visuals. */
+export const mentionsButtonStyle = (description?: string): boolean =>
+  Boolean(description && STYLE_REQUEST.test(description));
 
 /** Same visual defaults as admin getDefaultButton (KeyboardForm.tsx), using bot settings. */
 function normalizeButton(
   b: Partial<LlmKeyboardOutput["Buttons"][number]>,
   defaults: KeyboardButtonDefaults,
   existing?: KeyboardDraftButton,
-  availableSteps?: AvailableStep[]
+  availableSteps?: AvailableStep[],
+  allowRestyle = false
 ): KeyboardDraftButton {
   const actionType = ACTION_TYPES.includes(String(b.ActionType))
     ? (b.ActionType as KeyboardDraftButton["ActionType"])
@@ -153,6 +165,25 @@ function normalizeButton(
     // Viber requires a non-empty ActionBody even for none-buttons
     action = { ActionBody: "none", isJson: false };
   }
+  const openUrlType =
+    b.OpenURLType === "external" || b.OpenURLType === "internal"
+      ? b.OpenURLType
+      : (existing?.OpenURLType ?? "internal");
+
+  // Text / action refinements must not restyle existing buttons. Color requests
+  // still flow through pickHex so an explicit LLM hex wins.
+  if (existing && !allowRestyle) {
+    return {
+      ...existing,
+      Columns: pickClamped(b.Columns, 1, 6, existing.Columns, 6),
+      Rows: pickClamped(b.Rows, 1, 2, existing.Rows, 1),
+      Text: pickNonEmptyString(b.Text, existing.Text, ""),
+      ActionType: actionType,
+      ...action,
+      OpenURLType: openUrlType,
+    };
+  }
+
   const bgMedia = pickBgMedia(b.BgMedia, existing?.BgMedia);
   return {
     Columns: pickClamped(b.Columns, 1, 6, existing?.Columns, 6),
@@ -166,14 +197,11 @@ function normalizeButton(
     BgLoop: pickBgLoop(b.BgLoop, existing?.BgLoop),
     ActionType: actionType,
     ...action,
-    OpenURLType:
-      b.OpenURLType === "external" || b.OpenURLType === "internal"
-        ? b.OpenURLType
-        : (existing?.OpenURLType ?? "internal"),
-    InternalBrowser: { Mode: "fullscreen-portrait" },
-    TextVAlign: "middle",
-    TextHAlign: "center",
-    TextSize: "regular",
+    OpenURLType: openUrlType,
+    InternalBrowser: existing?.InternalBrowser ?? { Mode: "fullscreen-portrait" },
+    TextVAlign: existing?.TextVAlign ?? "middle",
+    TextHAlign: existing?.TextHAlign ?? "center",
+    TextSize: existing?.TextSize ?? "regular",
     Silent: existing?.Silent ?? true,
     Frame: pickFrame(b.Frame, existing?.Frame, defaults.Frame),
   };
@@ -183,11 +211,13 @@ export function normalizeKeyboardDraft(
   parsed: LlmKeyboardOutput,
   defaults?: KeyboardButtonDefaults,
   existingButtons?: KeyboardDraftButton[],
-  availableSteps?: AvailableStep[]
+  availableSteps?: AvailableStep[],
+  description?: string
 ): KeyboardDraft {
   const theme = resolveDefaults(defaults);
   const sourceButtons = existingButtons ?? [];
   const unusedExisting = [...sourceButtons];
+  const allowRestyle = mentionsButtonStyle(description);
   return {
     humanReadableName:
       typeof parsed.humanReadableName === "string"
@@ -211,7 +241,8 @@ export function normalizeKeyboardDraft(
               unusedExisting,
               sourceButtons
             ),
-            availableSteps
+            availableSteps,
+            allowRestyle
           )
         )
       : [],
