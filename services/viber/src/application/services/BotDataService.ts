@@ -99,10 +99,9 @@ export class BotDataService {
    * Fetch messages from admin service and store in memory
    *
    * This method:
-   * 1. Extracts unique message IDs from all steps
-   * 2. Fetches all non-hidden messages from admin service
-   * 3. Filters to only messages referenced by steps (optimization)
-   * 4. Stores data in memory
+   * 1. Fetches all non-hidden messages from admin service
+   * 2. Stores the full catalog (handlers look up by id or name)
+   * 3. Warns if a step references a message that is missing
    *
    * Errors are logged but don't fail initialization
    */
@@ -121,22 +120,13 @@ export class BotDataService {
         }
       }
 
-      // Build storage structure - only store messages referenced by steps
+      // Store the full catalog so handlers can reuse messages by name,
+      // including ones not attached to a step.
       const messagesMap = new Map<string, MessageDTO>();
-      let storedCount = 0;
       let missingCount = 0;
 
       for (const message of messagesArray) {
-        // Only store messages that are referenced by steps (if steps are loaded)
-        // If steps are not loaded, store all messages
-        if (
-          !this.stepsData ||
-          referencedMessageIds.size === 0 ||
-          referencedMessageIds.has(message.id)
-        ) {
-          messagesMap.set(message.id, message);
-          storedCount++;
-        }
+        messagesMap.set(message.id, message);
       }
 
       // Check for missing references
@@ -156,7 +146,7 @@ export class BotDataService {
       };
 
       console.log(
-        `Messages fetched and stored successfully: ${storedCount} messages stored${
+        `Messages fetched and stored successfully: ${messagesMap.size} messages stored${
           missingCount > 0 ? `, ${missingCount} missing references` : ""
         }`
       );
@@ -177,10 +167,9 @@ export class BotDataService {
    * Fetch keyboards from admin service and store in memory
    *
    * This method:
-   * 1. Extracts unique keyboard IDs from all steps
-   * 2. Fetches all non-hidden keyboards from admin service
-   * 3. Filters to only keyboards referenced by steps (optimization)
-   * 4. Stores data in memory
+   * 1. Fetches all non-hidden keyboards from admin service
+   * 2. Stores the full catalog (handlers look up by id or name)
+   * 3. Warns if a step references a keyboard that is missing
    *
    * Errors are logged but don't fail initialization
    */
@@ -199,22 +188,13 @@ export class BotDataService {
         }
       }
 
-      // Build storage structure - only store keyboards referenced by steps
+      // Store the full catalog so handlers can reuse keyboards by name,
+      // including ones not attached to a step.
       const keyboardsMap = new Map<string, KeyboardDTO>();
-      let storedCount = 0;
       let missingCount = 0;
 
       for (const keyboard of keyboardsArray) {
-        // Only store keyboards that are referenced by steps (if steps are loaded)
-        // If steps are not loaded, store all keyboards
-        if (
-          !this.stepsData ||
-          referencedKeyboardIds.size === 0 ||
-          referencedKeyboardIds.has(keyboard.id)
-        ) {
-          keyboardsMap.set(keyboard.id, keyboard);
-          storedCount++;
-        }
+        keyboardsMap.set(keyboard.id, keyboard);
       }
 
       // Check for missing references
@@ -234,7 +214,7 @@ export class BotDataService {
       };
 
       console.log(
-        `Keyboards fetched and stored successfully: ${storedCount} keyboards stored${
+        `Keyboards fetched and stored successfully: ${keyboardsMap.size} keyboards stored${
           missingCount > 0 ? `, ${missingCount} missing references` : ""
         }`
       );
@@ -256,8 +236,8 @@ export class BotDataService {
    *
    * This method:
    * 1. Fetches all non-hidden carousels from admin service
-   * 2. Filters to only carousels referenced by cached rich-media messages
-   * 3. Stores data in memory
+   * 2. Stores the full catalog (handlers look up by id or name)
+   * 3. Warns if a rich-media message references a carousel that is missing
    *
    * Depends on messages being loaded first (referenced IDs live in message content).
    * Errors are logged but don't fail initialization
@@ -280,13 +260,7 @@ export class BotDataService {
 
       const carouselsMap = new Map<string, CarouselDTO>();
       for (const carousel of carouselsArray) {
-        if (
-          !this.messagesData ||
-          referencedCarouselIds.size === 0 ||
-          referencedCarouselIds.has(carousel.id)
-        ) {
-          carouselsMap.set(carousel.id, carousel);
-        }
+        carouselsMap.set(carousel.id, carousel);
       }
 
       for (const carouselId of referencedCarouselIds) {
@@ -414,6 +388,60 @@ export class BotDataService {
     return this.carouselsData?.carousels.get(carouselId);
   }
 
+  getSteps(): StepDTO[] {
+    return this.stepsData ? [...this.stepsData.steps.values()] : [];
+  }
+
+  getMessages(): MessageDTO[] {
+    return this.messagesData ? [...this.messagesData.messages.values()] : [];
+  }
+
+  getKeyboards(): KeyboardDTO[] {
+    return this.keyboardsData
+      ? [...this.keyboardsData.keyboards.values()]
+      : [];
+  }
+
+  getCarousels(): CarouselDTO[] {
+    return this.carouselsData
+      ? [...this.carouselsData.carousels.values()]
+      : [];
+  }
+
+  /**
+   * Look up a step by `humanReadableName` (case-insensitive, trimmed).
+   */
+  getStepByName(name: string): StepDTO | undefined {
+    return findByHumanReadableName(this.stepsData?.steps.values(), name);
+  }
+
+  /**
+   * Look up a message by `humanReadableName` (case-insensitive, trimmed).
+   */
+  getMessageByName(name: string): MessageDTO | undefined {
+    return findByHumanReadableName(this.messagesData?.messages.values(), name);
+  }
+
+  /**
+   * Look up a keyboard by `humanReadableName` (case-insensitive, trimmed).
+   */
+  getKeyboardByName(name: string): KeyboardDTO | undefined {
+    return findByHumanReadableName(
+      this.keyboardsData?.keyboards.values(),
+      name
+    );
+  }
+
+  /**
+   * Look up a carousel by `humanReadableName` (case-insensitive, trimmed).
+   */
+  getCarouselByName(name: string): CarouselDTO | undefined {
+    return findByHumanReadableName(
+      this.carouselsData?.carousels.values(),
+      name
+    );
+  }
+
   /**
    * Refresh steps from admin service and update in-memory storage
    *
@@ -475,3 +503,21 @@ export class BotDataService {
     await this.refreshCarousels();
   }
 }
+
+const normalizeName = (name: string): string => name.trim().toLowerCase();
+
+const findByHumanReadableName = <T extends { humanReadableName: string }>(
+  items: Iterable<T> | undefined,
+  name: string
+): T | undefined => {
+  const normalized = normalizeName(name);
+  if (!normalized || !items) {
+    return undefined;
+  }
+  for (const item of items) {
+    if (normalizeName(item.humanReadableName) === normalized) {
+      return item;
+    }
+  }
+  return undefined;
+};
