@@ -31,6 +31,12 @@ export interface KeyboardDraft {
   Buttons: KeyboardDraftButton[];
 }
 
+/** Compact step row for AI builders — name + triggers only, no ids or content. */
+export interface AvailableStep {
+  name: string;
+  triggers: string[];
+}
+
 export interface GenerateKeyboardInput {
   description: string;
   /** Prior turns, client-held; the service builds an in-memory ConversationContext from them. */
@@ -45,6 +51,11 @@ export interface GenerateKeyboardInput {
    * `templateButtons` when present.
    */
   currentDraft?: KeyboardDraft;
+  /**
+   * Live steps (admin-injected). When the user names or paraphrases a step,
+   * ActionBody must use that step's first trigger (or a listed trigger they typed).
+   */
+  availableSteps?: AvailableStep[];
 }
 
 export interface GenerateKeyboardResult {
@@ -99,6 +110,7 @@ export interface GenerateCarouselInput {
    * getDefaultButton uses (resolveButtonColors + resolveButtonFrame).
    */
   buttonDefaults?: KeyboardButtonDefaults;
+  availableSteps?: AvailableStep[];
 }
 
 export interface GenerateCarouselResult {

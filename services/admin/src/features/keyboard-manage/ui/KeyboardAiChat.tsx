@@ -186,7 +186,7 @@ export const KeyboardAiChat = ({
             onChange={(e) => setDescription(e.target.value)}
             rows={3}
             disabled={isGenerating}
-            placeholder="e.g. Main menu with Prices, Locations and a button opening https://example.com"
+            placeholder="e.g. Main menu with Prices that triggers the Prices step, and a button opening https://example.com"
             aria-label="Keyboard description"
             className={TEXTAREA_CLASS}
           />
@@ -216,7 +216,7 @@ export const KeyboardAiChat = ({
             onChange={(e) => setRefineText(e.target.value)}
             rows={2}
             disabled={isGenerating}
-            placeholder='Ask for changes, e.g. "make all buttons 6 columns wide"'
+            placeholder='Ask for changes, e.g. "make the Start button trigger the Welcome step"'
             aria-label="Refine keyboard draft"
             className={TEXTAREA_CLASS}
           />

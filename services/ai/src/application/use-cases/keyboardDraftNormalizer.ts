@@ -1,9 +1,11 @@
+import type { AvailableStep } from "@vbar/shared";
 import type {
   KeyboardButtonDefaults,
   KeyboardDraft,
   KeyboardDraftButton,
 } from "../../ports/in/BuildKeyboardUseCase";
 import type { LlmKeyboardOutput } from "./keyboardBuilderPrompt";
+import { resolveReplyActionBody } from "./stepTriggerResolver";
 import {
   extractJsonObject,
   hexOrNull,
@@ -126,7 +128,8 @@ function matchExistingButton(
 function normalizeButton(
   b: Partial<LlmKeyboardOutput["Buttons"][number]>,
   defaults: KeyboardButtonDefaults,
-  existing?: KeyboardDraftButton
+  existing?: KeyboardDraftButton,
+  availableSteps?: AvailableStep[]
 ): KeyboardDraftButton {
   const actionType = ACTION_TYPES.includes(String(b.ActionType))
     ? (b.ActionType as KeyboardDraftButton["ActionType"])
@@ -135,11 +138,17 @@ function normalizeButton(
     (typeof b.ActionBody === "string" && b.ActionBody.trim().length > 0) ||
     (typeof b.ActionBody === "object" && b.ActionBody !== null) ||
     b.isJson === true;
-  const action = llmProvidedAction
+  let action = llmProvidedAction
     ? normalizeReplyAction(b.ActionBody, b.isJson, actionType)
     : existing
       ? { ActionBody: existing.ActionBody, isJson: existing.isJson }
       : normalizeReplyAction(b.ActionBody, b.isJson, actionType);
+  if (actionType === "reply") {
+    action = {
+      ActionBody: resolveReplyActionBody(action.ActionBody, action.isJson, availableSteps),
+      isJson: action.isJson,
+    };
+  }
   const bgMedia = pickBgMedia(b.BgMedia, existing?.BgMedia);
   return {
     Columns: pickClamped(b.Columns, 1, 6, existing?.Columns, 6),
@@ -169,7 +178,8 @@ function normalizeButton(
 export function normalizeKeyboardDraft(
   parsed: LlmKeyboardOutput,
   defaults?: KeyboardButtonDefaults,
-  existingButtons?: KeyboardDraftButton[]
+  existingButtons?: KeyboardDraftButton[],
+  availableSteps?: AvailableStep[]
 ): KeyboardDraft {
   const theme = resolveDefaults(defaults);
   const sourceButtons = existingButtons ?? [];
@@ -196,7 +206,8 @@ export function normalizeKeyboardDraft(
               typeof b.Text === "string" ? b.Text : "",
               unusedExisting,
               sourceButtons
-            )
+            ),
+            availableSteps
           )
         )
       : [],

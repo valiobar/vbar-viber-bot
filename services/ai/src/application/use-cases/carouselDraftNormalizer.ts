@@ -1,3 +1,4 @@
+import type { AvailableStep } from "@vbar/shared";
 import type {
   CarouselCtaDefaults,
   CarouselDraft,
@@ -6,6 +7,7 @@ import type {
   KeyboardDraftButton,
 } from "../../ports/in/BuildCarouselUseCase";
 import type { LlmCarouselOutput } from "./carouselBuilderPrompt";
+import { resolveReplyActionBody, resolveTriggerValue } from "./stepTriggerResolver";
 import {
   extractJsonObject,
   hexOrNull,
@@ -266,7 +268,8 @@ function normalizeCustomButton(
   defaults: KeyboardButtonDefaults,
   groupColumns: number,
   groupRows: number,
-  existing?: KeyboardDraftButton
+  existing?: KeyboardDraftButton,
+  availableSteps?: AvailableStep[]
 ): KeyboardDraftButton {
   const rawType = String(b.ActionType);
   let actionType: KeyboardDraftButton["ActionType"] = "reply";
@@ -284,6 +287,12 @@ function normalizeCustomButton(
     action = normalizeReplyAction(b.ActionBody, b.isJson, actionType);
   } else {
     action = { ActionBody: existing.ActionBody, isJson: existing.isJson };
+  }
+  if (actionType === "reply") {
+    action = {
+      ActionBody: resolveReplyActionBody(action.ActionBody, action.isJson, availableSteps),
+      isJson: action.isJson,
+    };
   }
   const bgMedia = pickBgMedia(b.BgMedia, existing?.BgMedia);
   return {
@@ -338,18 +347,24 @@ function simulateCardRows(
 function normalizeCta(
   cta: Partial<LlmCta>,
   defaults: CarouselCtaDefaults,
-  existing?: CarouselDraftCard["ctaButtons"][number]
+  existing?: CarouselDraftCard["ctaButtons"][number],
+  availableSteps?: AvailableStep[]
 ): CarouselDraftCard["ctaButtons"][number] {
+  const actionType = CTA_ACTION_TYPES.includes(String(cta.actionType))
+    ? (cta.actionType as CarouselDraftCard["ctaButtons"][number]["actionType"])
+    : (existing?.actionType ?? "reply");
+  let actionBody = pickNonEmptyString(cta.actionBody, existing?.actionBody, "");
+  if (actionType === "reply") {
+    actionBody = resolveTriggerValue(actionBody, availableSteps);
+  }
   return {
     text: pickNonEmptyString(cta.text, existing?.text, ""),
     textColor:
       pickHex(cta.textColor, existing?.textColor, defaults.textColor) ??
       defaults.textColor,
     bgColor: pickHex(cta.bgColor, existing?.bgColor, defaults.bgColor),
-    actionType: CTA_ACTION_TYPES.includes(String(cta.actionType))
-      ? (cta.actionType as CarouselDraftCard["ctaButtons"][number]["actionType"])
-      : (existing?.actionType ?? "reply"),
-    actionBody: pickNonEmptyString(cta.actionBody, existing?.actionBody, ""),
+    actionType,
+    actionBody,
     openURLType:
       cta.openURLType === "internal" || cta.openURLType === "external"
         ? cta.openURLType
@@ -380,7 +395,8 @@ function normalizeCard(
   buttonDefaults: KeyboardButtonDefaults,
   groupColumns: number,
   groupRows: number,
-  existing?: CarouselDraftCard
+  existing?: CarouselDraftCard,
+  availableSteps?: AvailableStep[]
 ): CarouselDraftCard {
   const mode = resolveMode(card, existing);
   if (mode === "custom") {
@@ -408,7 +424,8 @@ function normalizeCard(
                   unusedButtons,
                   sourceButtons,
                   (item) => item.Text
-                )
+                ),
+                availableSteps
               )
             )
           : sourceButtons,
@@ -437,7 +454,8 @@ function normalizeCard(
               unusedCtas,
               sourceCtas,
               (item) => item.text
-            )
+            ),
+            availableSteps
           )
         )
       : [],
@@ -449,7 +467,8 @@ export function normalizeCarouselDraft(
   parsed: LlmCarouselOutput,
   ctaDefaults?: CarouselCtaDefaults,
   existingCards?: CarouselDraftCard[],
-  buttonDefaults?: KeyboardButtonDefaults
+  buttonDefaults?: KeyboardButtonDefaults,
+  availableSteps?: AvailableStep[]
 ): CarouselDraft {
   const ctaTheme = resolveCtaDefaults(ctaDefaults);
   const buttonTheme = resolveButtonDefaults(buttonDefaults);
@@ -476,7 +495,8 @@ export function normalizeCarouselDraft(
             buttonTheme,
             groupColumns,
             groupRows,
-            matchExistingCard(card, unusedExisting, sourceCards)
+            matchExistingCard(card, unusedExisting, sourceCards),
+            availableSteps
           )
         )
       : [],

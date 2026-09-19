@@ -40,6 +40,8 @@ interface CardEditorProps {
   buttonsGroupColumns: number;
   buttonsGroupRows: number;
   errors: Record<string, string>;
+  /** Open this custom-card button (or structured CTA) after validation. */
+  openButtonIndex?: number | null;
   onUpdate: (updates: Partial<CarouselCardDTO>) => void;
 }
 
@@ -179,6 +181,7 @@ export const CardEditor = ({
   buttonsGroupColumns,
   buttonsGroupRows,
   errors,
+  openButtonIndex = null,
   onUpdate,
 }: CardEditorProps) => {
   const [editingButtonIndex, setEditingButtonIndex] = useState<number | null>(
@@ -190,6 +193,11 @@ export const CardEditor = ({
   useEffect(() => {
     void loadBotSettings();
   }, [loadBotSettings]);
+
+  useEffect(() => {
+    if (openButtonIndex === null || openButtonIndex === undefined) return;
+    setEditingButtonIndex(openButtonIndex);
+  }, [openButtonIndex, index]);
 
   const formButtons = toFormButtons(card.Buttons);
   const formCtas = toFormCtas(card.ctaButtons);
@@ -563,7 +571,7 @@ export const CardEditor = ({
                     <input
                       type="text"
                       id={`card-${index}-cta-${ctaIndex}-actionBody`}
-                      value={cta.actionBody}
+                      value={cta.actionBody ?? ""}
                       onChange={(e) =>
                         handleCtaUpdate(ctaIndex, { actionBody: e.target.value })
                       }

@@ -16,6 +16,12 @@ import {
   normalizeKeyboardDraft,
   computeMissingFields,
 } from "../application/use-cases/keyboardDraftNormalizer";
+import { buildKeyboardUserPrompt } from "../application/use-cases/keyboardBuilderPrompt";
+import { buildCarouselUserPrompt } from "../application/use-cases/carouselBuilderPrompt";
+import {
+  resolveTriggerValue,
+  resolveReplyActionBody,
+} from "../application/use-cases/stepTriggerResolver";
 
 // --- Part A: normalizer assertions (offline) ---
 const fenced =
@@ -300,6 +306,60 @@ assert.equal(keptMediaDraft.Buttons[0].BgMedia, "https://cdn.example.com/kept.gi
 assert.equal(keptMediaDraft.Buttons[0].BgMediaType, "gif");
 assert.equal(keptMediaDraft.Buttons[0].BgMediaScaleType, "crop");
 assert.equal(keptMediaDraft.Buttons[0].BgLoop, false);
+
+const catalog = [{ name: "Welcome", triggers: ["welcome", "start"] }];
+
+assert.equal(resolveTriggerValue("Welcome", catalog), "welcome");
+assert.equal(resolveTriggerValue("START", catalog), "start");
+assert.equal(resolveTriggerValue("order_now", catalog), "order_now");
+assert.equal(
+  resolveReplyActionBody(JSON.stringify({ trigger: "Welcome", click: "now" }), true, catalog),
+  JSON.stringify({ trigger: "welcome", click: "now" })
+);
+
+const named = normalizeKeyboardDraft(
+  parseLlmKeyboardJson(
+    JSON.stringify({
+      humanReadableName: "Pad",
+      title: null,
+      InputFieldState: "hidden",
+      BgColor: null,
+      Buttons: [
+        {
+          Columns: 6,
+          Rows: 1,
+          Text: "Start",
+          TextColor: "#FFFFFF",
+          BgColor: null,
+          ActionType: "reply",
+          ActionBody: "Welcome",
+          isJson: false,
+          OpenURLType: "internal",
+        },
+      ],
+      summary: "ok",
+    })
+  ),
+  theme,
+  undefined,
+  catalog
+);
+assert.equal(named.Buttons[0].ActionBody, "welcome");
+assert.equal(named.Buttons[0].isJson, false);
+
+const kbPrompt = buildKeyboardUserPrompt({
+  description: "make Start trigger Welcome",
+  availableSteps: catalog,
+});
+assert.match(kbPrompt, /Available bot steps/);
+assert.match(kbPrompt, /"name":"Welcome"/);
+
+const carPrompt = buildCarouselUserPrompt({
+  description: "Order button triggers Welcome",
+  availableSteps: catalog,
+});
+assert.match(carPrompt, /Available bot steps/);
+
 console.log("Part A (normalizer): all assertions passed");
 
 // --- Part B: live LLM call (requires provider env), only with --live ---

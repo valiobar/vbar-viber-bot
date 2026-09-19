@@ -55,13 +55,16 @@ export function createCarouselBuilderRouter(logger: Logger): Router {
   router.post(
     "/generate",
     asyncHandler(async (req, res) => {
-      const { description, history, currentDraft, ctaDefaults } = req.body ?? {};
+      const { description, history, currentDraft, ctaDefaults, buttonDefaults, availableSteps } =
+        req.body ?? {};
       res.json({
         data: await getUseCase().generate({
           description,
           history,
           currentDraft,
           ctaDefaults,
+          buttonDefaults,
+          availableSteps,
         }),
       });
     })

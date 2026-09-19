@@ -57,6 +57,7 @@ Browser (JWT) ──REST──► Admin :3000
                            ├─ RabbitMQ `analytics.step-usage`  (inbound consumer)
                            └─ REST + X-Service-Token ──► AI `/api/knowledge-base/*`
                                                          AI `POST /api/keyboard-builder/generate`
+                                                         AI `POST /api/carousel-builder/generate`
 
 Viber :3001 ──REST + X-Service-Token──► Admin CMS APIs
               (steps, messages, keyboards, carousels, bot-settings)
@@ -94,7 +95,7 @@ Repositories are **concrete Mongo classes**. Do not add a port interface, `ports
 
 **Bot settings** is `BotSettingsService` (`get` / `update`) — singleton, not a list.
 
-**Deviation — AI proxies:** `app/api/knowledge-base/*` and `POST /api/ai/keyboard-builder` forward to AI (`lib/aiService.ts` + `X-Service-Token`). No admin repository, no domain service. Justified as transport adapters: admin owns no KB data and does not persist AI keyboard drafts.
+**Deviation — AI proxies:** `app/api/knowledge-base/*`, `POST /api/ai/keyboard-builder`, and `POST /api/ai/carousel-builder` forward to AI (`lib/aiService.ts` + `X-Service-Token`). Keyboard / carousel proxies attach `availableSteps` from `lib/aiBuilderContext.ts` (StepService.list behind a 15 min in-process TTL) and still persist nothing. No admin AI-builder domain. Justified as transport adapters: admin owns no KB data and does not persist AI drafts.
 
 Route helpers (`src/lib/api/routeHelpers.ts`): `withDb`, `jsonOk`, `jsonError`, `noContent`, `parsePagination`, `parseBoolParam`, `notifyRefresh`, `mapError`. Content CRUD routes use these. Auth and bot-settings still use hand-rolled try/catch.
 
@@ -498,13 +499,19 @@ The draft is saved only through the normal Create Keyboard submit. Existing `val
 
 The chat shell is feature-agnostic (`shared/ui/AiChatDrawer` + `shared/lib/useAiChat`). Keyboard-specific phases live in `features/keyboard-manage` (`KeyboardAiChat`); carousel-specific phases live in `features/carousel-manage` (`CarouselAiChat`).
 
-Admin proxy: `POST /api/ai/keyboard-builder` → AI `POST /api/keyboard-builder/generate`. JWT via existing middleware; admin adds `X-Service-Token` when forwarding. Same 503 / 502 proxy errors as knowledge-base (`AI_SERVICE_NOT_CONFIGURED` / `AI_SERVICE_UNAVAILABLE`). Contract types (`AiChatTurn`, `KeyboardDraft`, `GenerateKeyboardInput`, `GenerateKeyboardResult`, …) live in `@vbar/shared` (`types/ai.ts`) — not mirrored in admin. AI-side rules: [ai.md](./ai.md#keyboard-builder). HTTP contract: [api.md](./api.md#ai-keyboard-builder-thin-proxy-to-ai).
+Each Generate / Refine turn: the admin proxy attaches `availableSteps` from `aiBuilderContext` (15 min in-process TTL; Mongo on cache miss; cache cleared on step create/update/delete) so the model can set a button ActionBody to a real trigger when the user names or paraphrases a step (e.g. "make Start trigger the Welcome step" or "the greeting screen"). The chat client does not fetch or send the catalog.
+
+Admin proxy: `POST /api/ai/keyboard-builder` → AI `POST /api/keyboard-builder/generate`. JWT via existing middleware; admin adds `X-Service-Token` when forwarding. Same 503 / 502 proxy errors as knowledge-base (`AI_SERVICE_NOT_CONFIGURED` / `AI_SERVICE_UNAVAILABLE`). Contract types (`AiChatTurn`, `AvailableStep`, `KeyboardDraft`, `GenerateKeyboardInput`, `GenerateKeyboardResult`, …) live in `@vbar/shared` (`types/ai.ts`) — not mirrored in admin. AI-side rules: [ai.md](./ai.md#keyboard-builder). HTTP contract: [api.md](./api.md#ai-keyboard-builder-thin-proxy-to-ai).
 
 ## AI carousel builder
 
 Create-mode only (`/carousels/new`). Same drawer and chat shell as the keyboard builder (`AiChatDrawer` + `useAiChat` + shared `MissingFieldsNotice`). Phases: source choice (scratch or any visible existing carousel) → description → generated draft. Picking an existing carousel immediately hydrates the form (name with an ` (AI)` suffix, grid, cards) while the drawer stays open. Every Generate / Refine turn sends the live form state as `currentDraft` (whenever the form has a name or at least one card). Required fields the AI left blank are listed only in the chat. The form shows a required-fields banner only after Create / Update Carousel is clicked while the form is incomplete (any path — AI draft, template, or hand-filled); the form column then scrolls to the top so that banner is visible.
 
 The draft is saved only through the normal Create Carousel submit. Existing `validate()` still blocks empty names, empty cards, custom-card row fill, and missing reply / open-url bodies. AI-side rules: [ai.md](./ai.md#carousel-builder). HTTP contract: [api.md](./api.md#carousel-builder-ai-service-rest).
+
+Each Generate / Refine turn: the admin proxy attaches `availableSteps` from `aiBuilderContext` (15 min in-process TTL; Mongo on cache miss; cache cleared on step create/update/delete) so the model can set a custom-button or CTA ActionBody to a real trigger when the user names or paraphrases a step (e.g. "make the Order button trigger the Welcome step" or "the greeting screen"). The chat client does not fetch or send the catalog. The proxy also forwards `buttonDefaults` (custom-card theme) with `ctaDefaults`.
+
+Admin proxy: `POST /api/ai/carousel-builder` → AI `POST /api/carousel-builder/generate`. JWT via existing middleware; admin adds `X-Service-Token` when forwarding. Same 503 / 502 proxy errors as knowledge-base. Contract types (`AiChatTurn`, `AvailableStep`, `CarouselDraft`, `GenerateCarouselInput`, `GenerateCarouselResult`, …) live in `@vbar/shared` (`types/ai.ts`) — not mirrored in admin.
 
 ---
 

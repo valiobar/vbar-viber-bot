@@ -37,7 +37,7 @@ It exposes two inbound surfaces:
 | gRPC `ai.AIProcessingService` | `50051` (`GRPC_PORT`) | Viber service | `ProcessMessage` — the primary API |
 | HTTP (Express) | `3002` (`PORT`) | Admin service, health checks | `GET /api/health`, `/api/knowledge-base/*` ingest, `POST /api/keyboard-builder/generate`, `POST /api/carousel-builder/generate` |
 
-The service does **not** connect to RabbitMQ and has no REST message-processing endpoint. It does not read admin Mongo (steps, messages, keyboards, carousels). Viber sends gRPC `ProcessMessage`; admin sends HTTP for ingest, keyboard generation (`description`, optional `history` / `templateButtons` / `buttonDefaults`), and carousel generation (`description`, optional `history` / `currentDraft` / `ctaDefaults`).
+The service does **not** connect to RabbitMQ and has no REST message-processing endpoint. It does not read admin Mongo (steps, messages, keyboards, carousels). Admin may attach a request-scoped `availableSteps` catalog (`{ name, triggers[] }[]`) when calling the keyboard / carousel builders. Viber sends gRPC `ProcessMessage`; admin sends HTTP for ingest, keyboard generation (`description`, optional `history` / `templateButtons` / `buttonDefaults` / `currentDraft` / `availableSteps`), and carousel generation (`description`, optional `history` / `currentDraft` / `ctaDefaults` / `buttonDefaults` / `availableSteps`).
 
 Stack: Node 20, Express, `@grpc/grpc-js`, LangChain (`langchain` + `@langchain/*`), MongoDB via `@vbar/shared/infra`, Chroma for vectors, optional LangSmith tracing.
 
@@ -180,7 +180,7 @@ There is no admin UI or API for prompt templates; they are managed directly in M
 
 Inbound HTTP adapter `routes/keyboardBuilder.ts` over `BuildKeyboardUseCaseImpl`. Service-token middleware matches the knowledge-base / prompts routers: `503 KEYBOARD_BUILDER_NOT_CONFIGURED` when `AI_SERVICE_TOKEN` is unset on the AI service, `401 UNAUTHORIZED` on mismatch. The LLM provider is constructed lazily on the first generate call via `createAIProvider` (`AI_MODEL_PROVIDER`), so missing provider env does not break startup or `/api/health`.
 
-`POST /api/keyboard-builder/generate` takes a free-text description (and optional client-held `history`, `templateButtons`, `buttonDefaults`, `currentDraft`) and returns a normalized draft that matches admin `CreateKeyboardInput` (minus `DefaultHeight`, which admin adds). Admin reaches this endpoint through `POST /api/ai/keyboard-builder` (JWT on admin, `X-Service-Token` when forwarding). UI flow: [admin.md](./admin.md#ai-keyboard-builder). HTTP contract: [api.md](./api.md#ai-keyboard-builder-thin-proxy-to-ai).
+`POST /api/keyboard-builder/generate` takes a free-text description (and optional client-held `history`, `templateButtons`, `buttonDefaults`, `currentDraft`, `availableSteps`) and returns a normalized draft that matches admin `CreateKeyboardInput` (minus `DefaultHeight`, which admin adds). Admin reaches this endpoint through `POST /api/ai/keyboard-builder` (JWT on admin, `X-Service-Token` when forwarding). The admin proxy injects `availableSteps`; the AI service never loads steps. UI flow: [admin.md](./admin.md#ai-keyboard-builder). HTTP contract: [api.md](./api.md#ai-keyboard-builder-thin-proxy-to-ai).
 
 ```ts
 // request body
@@ -194,6 +194,7 @@ Inbound HTTP adapter `routes/keyboardBuilder.ts` over `BuildKeyboardUseCaseImpl`
     Frame: ButtonFrame | null;         // { BorderWidth, BorderColor, CornerRadius }
   };
   currentDraft?: KeyboardDraft;        // live form state (may include manual edits) — authoritative base for this turn
+  availableSteps?: AvailableStep[];    // admin-injected; AI never loads steps itself
 }
 
 // response { data }
@@ -211,13 +212,15 @@ The LLM must not invent required business values: unknown `humanReadableName` an
 
 **JSON reply payloads (`isJson`):** when the description asks for a JSON action body, a JSON trigger, or to set a property/prop on a button (e.g. “2nd button JSON action body that triggers welcome and set click: now as a prop”), the draft sets `isJson: true` and `ActionBody` to a compact JSON object `{"trigger":"<step trigger>","<prop>":"<value>",...}`. `trigger` selects the step (same as `steps.trigger[]`); every other key is merged into Viber user state before the step is sent. The system prompt and a few-shot example require the full object — a bare `"welcome"` string is a plain reply, not a JSON payload. The LLM may emit `ActionBody` as that object or as a JSON string; the normalizer always stores a string. If `isJson` is true but `ActionBody` is a plain trigger string, the normalizer wraps it as `{"trigger":"..."}`. If `ActionBody` is already an object with `trigger`, `isJson` is inferred even when the model omitted the flag. A JSON button with an empty `trigger` is listed in `missingFields` as `JSON trigger (ActionBody.trigger)`. Runtime: [viber.md](./viber.md#step-routing). Admin editor: [admin.md](./admin.md#keyboard).
 
+**Available steps:** when the description names or paraphrases a listed step, a plain reply uses `ActionType` `"reply"`, `isJson` false, and `ActionBody` = that step’s **first** trigger (or the listed trigger the user typed). JSON / props use `isJson` true and `{"trigger":"<resolved trigger>", ...}`. The LLM may map a clear paraphrase (e.g. “greeting screen” → Welcome) in the same generate turn. After the LLM returns, `stepTriggerResolver` rewrites an exact (case-insensitive) step **name** in `ActionBody` (or JSON `trigger`) to the first trigger, and a listed trigger to its stored spelling. No Levenshtein / substring / vectors. Ambiguous or unknown wording stays `""` and is listed in `missingFields`.
+
 Error codes: `KEYBOARD_BUILDER_VALIDATION` (400), `UNAUTHORIZED` (401), `KEYBOARD_BUILDER_BAD_AI_OUTPUT` (502, unusable JSON), `KEYBOARD_BUILDER_NOT_CONFIGURED` (503), `KEYBOARD_BUILDER_FAILED` (500).
 
 ## Carousel builder
 
 Inbound HTTP adapter `routes/carouselBuilder.ts` over `BuildCarouselUseCaseImpl`. Service-token middleware matches the knowledge-base / keyboard-builder routers: `503 CAROUSEL_BUILDER_NOT_CONFIGURED` when `AI_SERVICE_TOKEN` is unset on the AI service, `401 UNAUTHORIZED` on mismatch. The LLM provider is constructed lazily on the first generate call via `createAIProvider` (`AI_MODEL_PROVIDER`), so missing provider env does not break startup or `/api/health`.
 
-`POST /api/carousel-builder/generate` takes a free-text description (and optional client-held `history`, `currentDraft`, `ctaDefaults`, `buttonDefaults`) and returns a normalized draft that matches admin `CarouselForm` state. Flattening `Cards` → `Buttons` stays on the admin server (`CardFlattener`) at save time — the AI service never flattens. The admin proxy is documented in the admin carousel-builder plan (Part 2). HTTP contract: [api.md](./api.md#carousel-builder-ai-service-rest).
+`POST /api/carousel-builder/generate` takes a free-text description (and optional client-held `history`, `currentDraft`, `ctaDefaults`, `buttonDefaults`, `availableSteps`) and returns a normalized draft that matches admin `CarouselForm` state. Flattening `Cards` → `Buttons` stays on the admin server (`CardFlattener`) at save time — the AI service never flattens. Admin reaches this endpoint through `POST /api/ai/carousel-builder` (JWT on admin, `X-Service-Token` when forwarding), which injects `availableSteps` and forwards `buttonDefaults`. The AI service never loads steps. HTTP contract: [api.md](./api.md#carousel-builder-ai-service-rest).
 
 ```ts
 // request body
@@ -235,6 +238,7 @@ Inbound HTTP adapter `routes/carouselBuilder.ts` over `BuildCarouselUseCaseImpl`
     BgColor: string | null;
     Frame: ButtonFrame | null;
   };
+  availableSteps?: AvailableStep[];    // admin-injected; AI never loads steps itself
 }
 
 // response { data }
@@ -251,6 +255,8 @@ Multi-turn refinement is stateless: the client holds the history and sends it wi
 **Custom cards by default.** New cards are `mode: "custom"` with a free-grid `Buttons[]` that must fill `ButtonsGroupRows` exactly (same wrap math as `CarouselValidators`). Structured cards (`image` / title / description / `ctaButtons`) are used only when the user asks for that layout, or when an existing `currentDraft` card is already structured. A background image / fill / crop / fit on a custom card stays custom: the URL goes on that button’s `BgMedia`, not on card-level `image`. Custom buttons reuse the keyboard draft button shape (`Columns`, `Rows` 1–`ButtonsGroupRows`, `Text`, colors, `BgMedia`, `BgMediaType` `picture` | `gif`, `BgMediaScaleType` `fit` | `crop` | `fill`, `BgLoop`, `ActionType` `reply` / `open-url` / `none`, `ActionBody`, `isJson`, `Frame`). `location-picker` and `share-phone` are rejected. Existing custom cards are matched by first button `Text` (they often have no title) and are never converted to structured CTAs unless the model returns a real `Buttons[]`. If the model still emits the old title+CTA shape for a new card, the normalizer promotes it into a custom grid (label button + one-row actions).
 
 The LLM must not invent required business values: unknown `humanReadableName` and unknown reply / open-url bodies come back as `""`, unknown images / `BgMedia` come back as `null`, and all are listed in `missingFields`. Image URLs are never invented. Everything else is clamped or defaulted by `carouselDraftNormalizer` (`ButtonsGroupColumns` 1–6 default 6, `ButtonsGroupRows` 1–7 default 7, `textRows` 1–3 default 2, hex colors, Frame, `BgMediaScaleType` default `fit`, `BgMediaType` `gif` when the URL ends in `.gif` otherwise `picture`, `BgLoop` default `true`). `buttonDefaults` is the admin-resolved keyboard theme (`resolveButtonColors` / `resolveButtonFrame`) for **new custom Buttons**, then `#000000` / `null`. `ctaDefaults` is the CTA theme (`resolveCtaColors` / `resolveButtonFrame`) for **new structured CTAs**, then `#FFFFFF` / `#7360F2` / `null`. Existing `currentDraft` cards/buttons (matched by title, first button text, or image) keep their own colors, frame, media, `Columns`, and `Rows`. Carousel `BgColor` accepts `#RRGGBB` or `#RRGGBBAA`.
+
+**Available steps:** same catalog and matching rules as the keyboard builder. Custom reply: `ActionType` `"reply"`, `isJson` false, `ActionBody` = the resolved first trigger (JSON / props → `isJson` true and `{"trigger":"<first trigger>", ...}`). Structured CTA: `actionType` `"reply"`, `actionBody` = that same trigger string (no `isJson` on CTAs). After the LLM returns, `stepTriggerResolver` rewrites an exact (case-insensitive) step **name** to the first trigger. Ambiguous or unknown wording stays `""` and is listed in `missingFields`.
 
 Error codes: `CAROUSEL_BUILDER_VALIDATION` (400), `UNAUTHORIZED` (401), `CAROUSEL_BUILDER_BAD_AI_OUTPUT` (502, unusable JSON), `CAROUSEL_BUILDER_NOT_CONFIGURED` (503), `CAROUSEL_BUILDER_FAILED` (500).
 
@@ -326,11 +332,11 @@ Proxy-level errors added by admin: `AI_SERVICE_NOT_CONFIGURED` (503, token unset
 
 ### Admin service — REST (keyboard builder)
 
-Admin is the intended caller of `POST /api/keyboard-builder/generate` (same `X-Service-Token` / `AI_SERVICE_URL` pattern as ingest). The admin proxy and chat UI are documented in the admin keyboard-builder plan; this service only exposes the generate contract. Admin imports the generate types (`GenerateKeyboardInput`, `KeyboardDraft`, `GenerateKeyboardResult`, `AiChatTurn`) from `@vbar/shared` — no per-service mirrors.
+Admin is the intended caller of `POST /api/keyboard-builder/generate` (same `X-Service-Token` / `AI_SERVICE_URL` pattern as ingest). The admin proxy (`POST /api/ai/keyboard-builder`) attaches `availableSteps` and the chat UI is documented in [admin.md](./admin.md#ai-keyboard-builder); this service only exposes the generate contract. Admin imports the generate types (`GenerateKeyboardInput`, `KeyboardDraft`, `GenerateKeyboardResult`, `AvailableStep`, `AiChatTurn`) from `@vbar/shared` — no per-service mirrors.
 
 ### Admin service — REST (carousel builder)
 
-Admin is the intended caller of `POST /api/carousel-builder/generate` (same `X-Service-Token` / `AI_SERVICE_URL` pattern as ingest and the keyboard builder). The admin proxy and chat UI are documented in the admin carousel-builder plan (Part 2); this service only exposes the generate contract. Admin imports the generate types (`GenerateCarouselInput`, `CarouselDraft`, `GenerateCarouselResult`, `CarouselCtaDefaults`, `AiChatTurn`) from `@vbar/shared` — no per-service mirrors.
+Admin is the intended caller of `POST /api/carousel-builder/generate` (same `X-Service-Token` / `AI_SERVICE_URL` pattern as ingest and the keyboard builder). The admin proxy (`POST /api/ai/carousel-builder`) attaches `availableSteps` and forwards `buttonDefaults`; the chat UI is documented in [admin.md](./admin.md#ai-carousel-builder). This service only exposes the generate contract. Admin imports the generate types (`GenerateCarouselInput`, `CarouselDraft`, `GenerateCarouselResult`, `CarouselCtaDefaults`, `AvailableStep`, `AiChatTurn`) from `@vbar/shared` — no per-service mirrors.
 
 ### Not consumers
 
@@ -398,7 +404,7 @@ Keyboard builder — `X-Service-Token` required, `ApiResponse<GenerateKeyboardRe
 
 | Method | Path | Body | Returns |
 |--------|------|------|---------|
-| `POST` | `/api/keyboard-builder/generate` | `{ description, history?, templateButtons?, buttonDefaults? }` | `GenerateKeyboardResult` |
+| `POST` | `/api/keyboard-builder/generate` | `{ description, history?, templateButtons?, buttonDefaults?, currentDraft?, availableSteps? }` | `GenerateKeyboardResult` |
 
 Error codes: `KEYBOARD_BUILDER_NOT_CONFIGURED` (503), `UNAUTHORIZED` (401), `KEYBOARD_BUILDER_VALIDATION` (400), `KEYBOARD_BUILDER_BAD_AI_OUTPUT` (502), `KEYBOARD_BUILDER_FAILED` (500). See [Keyboard builder](#keyboard-builder).
 
@@ -406,7 +412,7 @@ Carousel builder — `X-Service-Token` required, `ApiResponse<GenerateCarouselRe
 
 | Method | Path | Body | Returns |
 |--------|------|------|---------|
-| `POST` | `/api/carousel-builder/generate` | `{ description, history?, currentDraft?, ctaDefaults?, buttonDefaults? }` | `GenerateCarouselResult` |
+| `POST` | `/api/carousel-builder/generate` | `{ description, history?, currentDraft?, ctaDefaults?, buttonDefaults?, availableSteps? }` | `GenerateCarouselResult` |
 
 Error codes: `CAROUSEL_BUILDER_NOT_CONFIGURED` (503), `UNAUTHORIZED` (401), `CAROUSEL_BUILDER_VALIDATION` (400), `CAROUSEL_BUILDER_BAD_AI_OUTPUT` (502), `CAROUSEL_BUILDER_FAILED` (500). See [Carousel builder](#carousel-builder).
 
@@ -429,7 +435,7 @@ interface KnowledgeSource {
 }
 ```
 
-The keyboard-builder and carousel-builder contract types live in `@vbar/shared` (`packages/shared/src/types/ai.ts`). The inbound ports `src/ports/in/BuildKeyboardUseCase.ts` and `src/ports/in/BuildCarouselUseCase.ts` keep only the use-case interfaces and re-export those types. Draft buttons reuse `ButtonDTO` from `@vbar/shared` (minus `id` / timestamps). Draft cards reuse `CarouselCardDTO` with meta-free `Buttons`. Admin imports the same types from `@vbar/shared` (no per-service mirrors). The turn shape is `AiChatTurn` so both builder chats reuse it.
+The keyboard-builder and carousel-builder contract types live in `@vbar/shared` (`packages/shared/src/types/ai.ts`). The inbound ports `src/ports/in/BuildKeyboardUseCase.ts` and `src/ports/in/BuildCarouselUseCase.ts` keep only the use-case interfaces and re-export those types. Draft buttons reuse `ButtonDTO` from `@vbar/shared` (minus `id` / timestamps). Draft cards reuse `CarouselCardDTO` with meta-free `Buttons`. The compact catalog row is `AvailableStep` (`name`, `triggers[]`). Admin imports the same types from `@vbar/shared` (no per-service mirrors). The turn shape is `AiChatTurn` so both builder chats reuse it.
 
 ```ts
 interface GenerateKeyboardResult {

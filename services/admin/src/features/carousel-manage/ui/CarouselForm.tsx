@@ -62,9 +62,11 @@ const stampItemTempId = <T,>(
 
 const toEditableCard = (card: CarouselCardDTO, idx: number): EditableCard => ({
   ...card,
+  title: card.title ?? "",
+  description: card.description ?? "",
   tempId: `card-${idx}-${newTempId("card")}`,
-  Buttons: card.Buttons.map((button) => stampItemTempId(button, "btn")),
-  ctaButtons: card.ctaButtons.map((cta) => stampItemTempId(cta, "cta")),
+  Buttons: (card.Buttons ?? []).map((button) => stampItemTempId(button, "btn")),
+  ctaButtons: (card.ctaButtons ?? []).map((cta) => stampItemTempId(cta, "cta")),
 });
 
 const stripTempId = <T extends { tempId?: string }>({
@@ -83,16 +85,32 @@ const isValidHttpUrl = (value: string): boolean => {
 
 const isHexColor = (value: string): boolean => /^#[0-9A-F]{6}$/i.test(value);
 
+const readText = (value: unknown): string =>
+  typeof value === "string" ? value.trim() : "";
+
+const readActionBody = (value: unknown): string => {
+  const text = readText(value);
+  if (text) return text;
+  if (value && typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return "";
+    }
+  }
+  return "";
+};
+
 const firstButtonText = (card: EditableCard): string => {
   const firstButton = card.Buttons[0];
-  if (firstButton?.Text.trim()) return firstButton.Text.trim();
+  if (readText(firstButton?.Text)) return readText(firstButton?.Text);
   const firstCta = card.ctaButtons[0];
-  if (firstCta?.text.trim()) return firstCta.text.trim();
+  if (readText(firstCta?.text)) return readText(firstCta?.text);
   return "";
 };
 
 const cardLabel = (card: EditableCard, index: number): string => {
-  if (card.title.trim()) return `"${card.title.trim()}"`;
+  if (readText(card.title)) return `"${readText(card.title)}"`;
   const buttonText = firstButtonText(card);
   if (buttonText) return `"${buttonText}"`;
   return `#${index + 1}`;
@@ -120,26 +138,28 @@ const collectCtaErrors = (
   groupRows: number
 ): Record<string, string> => {
   const cardErrors: Record<string, string> = {};
-  const hasText = Boolean(card.title.trim() || card.description.trim());
-  if (!card.image && !hasText && card.ctaButtons.length === 0) {
+  const hasText = Boolean(readText(card.title) || readText(card.description));
+  const ctas = card.ctaButtons ?? [];
+  if (!card.image && !hasText && ctas.length === 0) {
     cardErrors[`card-${index}`] = "Add an image, text, or at least one button";
   }
   if (card.image && !isValidHttpUrl(card.image)) {
     cardErrors[`card-${index}-image`] = "Image must be a valid http(s) URL";
   }
   const textRows = hasText ? card.textRows : 0;
-  if (card.image && groupRows - textRows - card.ctaButtons.length < 1) {
+  if (card.image && groupRows - textRows - ctas.length < 1) {
     cardErrors[`card-${index}`] =
       "No rows left for the image — reduce text rows or CTA buttons";
   }
-  card.ctaButtons.forEach((cta, j) => {
-    if (cta.actionType !== "none" && !cta.actionBody.trim()) {
-      cardErrors[`card-${index}-cta-${j}-actionBody`] = "Action body is required";
-    } else if (
-      cta.actionType === "open-url" &&
-      cta.actionBody.trim() &&
-      !isValidHttpUrl(cta.actionBody)
-    ) {
+  ctas.forEach((cta, j) => {
+    const actionType = cta.actionType || "reply";
+    const actionBody = readActionBody(cta.actionBody);
+    if (actionType !== "none" && !actionBody) {
+      cardErrors[`card-${index}-cta-${j}-actionBody`] =
+        actionType === "reply"
+          ? "reply text (ActionBody)"
+          : "URL to open (ActionBody)";
+    } else if (actionType === "open-url" && actionBody && !isValidHttpUrl(actionBody)) {
       cardErrors[`card-${index}-cta-${j}-actionBody`] =
         "Action body must be a valid http(s) URL";
     }
@@ -154,11 +174,12 @@ const collectCustomButtonErrors = (
   groupRows: number
 ): Record<string, string> => {
   const cardErrors: Record<string, string> = {};
-  if (card.Buttons.length === 0) {
+  const buttons = card.Buttons ?? [];
+  if (buttons.length === 0) {
     cardErrors[`card-${index}`] = "Custom card must have at least one button";
     return cardErrors;
   }
-  card.Buttons.forEach((button, j) => {
+  buttons.forEach((button, j) => {
     if (button.Columns < 1 || button.Columns > groupColumns) {
       cardErrors[`card-${index}-button-${j}-columns`] =
         `Columns must be 1-${groupColumns}`;
@@ -167,18 +188,22 @@ const collectCustomButtonErrors = (
       cardErrors[`card-${index}-button-${j}-rows`] =
         `Rows must be 1-${groupRows}`;
     }
-    if (button.ActionType !== "none" && !button.ActionBody.trim()) {
+    const actionType = button.ActionType || "reply";
+    const actionBody = readActionBody(button.ActionBody);
+    if (actionType !== "none" && !actionBody) {
       cardErrors[`card-${index}-button-${j}-actionBody`] =
-        "Action body is required";
-    } else if (button.isJson && button.ActionType === "reply") {
-      const jsonError = validateJsonActionBody(button.ActionBody);
+        actionType === "reply"
+          ? "reply text (ActionBody)"
+          : "URL to open (ActionBody)";
+    } else if (button.isJson && actionType === "reply") {
+      const jsonError = validateJsonActionBody(actionBody);
       if (jsonError) {
         cardErrors[`card-${index}-button-${j}-actionBody`] = jsonError;
       }
     } else if (
-      button.ActionType === "open-url" &&
-      button.ActionBody.trim() &&
-      !isValidHttpUrl(button.ActionBody)
+      actionType === "open-url" &&
+      actionBody &&
+      !isValidHttpUrl(actionBody)
     ) {
       cardErrors[`card-${index}-button-${j}-actionBody`] =
         "Action body must be a valid http(s) URL";
@@ -188,7 +213,7 @@ const collectCustomButtonErrors = (
         "Background media must be a valid http(s) URL";
     }
   });
-  const usedRows = simulateCardRows(card.Buttons, groupColumns);
+  const usedRows = simulateCardRows(buttons, groupColumns);
   if (usedRows !== groupRows) {
     cardErrors[`card-${index}`] =
       `Buttons fill ${usedRows} of ${groupRows} rows — every card must fill the block exactly`;
@@ -237,15 +262,83 @@ const summarizeCardError = (
   const label = cardLabel(card, index);
   const buttonLabel = itemLabelFromKey(key, "button", (itemIndex) => {
     const button = card.Buttons[itemIndex];
-    return button?.Text.trim() ? `"${button.Text.trim()}"` : `#${itemIndex + 1}`;
+    const text = readText(button?.Text);
+    return text ? `"${text}"` : `#${itemIndex + 1}`;
   });
   if (buttonLabel) return `Card ${label}, button ${buttonLabel}: ${message}`;
   const ctaLabel = itemLabelFromKey(key, "cta", (itemIndex) => {
     const cta = card.ctaButtons[itemIndex];
-    return cta?.text.trim() ? `"${cta.text.trim()}"` : `#${itemIndex + 1}`;
+    const text = readText(cta?.text);
+    return text ? `"${text}"` : `#${itemIndex + 1}`;
   });
   if (ctaLabel) return `Card ${label}, button ${ctaLabel}: ${message}`;
   return `Card ${label}: ${message}`;
+};
+
+const collectFormValidation = (
+  name: string,
+  color: string | null,
+  formCards: EditableCard[],
+  cols: number,
+  rows: number
+): {
+  errors: Record<string, string>;
+  summary: string[];
+  firstInvalidCardIndex: number | null;
+  firstInvalidButtonIndex: number | null;
+} => {
+  const errors: Record<string, string> = {};
+  const summary: string[] = [];
+  let firstInvalidCardIndex: number | null = null;
+  let firstInvalidButtonIndex: number | null = null;
+
+  if (!readText(name)) {
+    errors.humanReadableName = "Name is required";
+    summary.push("Carousel name (required)");
+  } else if (readText(name).length > 100) {
+    errors.humanReadableName = "Name must be 100 characters or less";
+    summary.push("Carousel name must be 100 characters or less");
+  }
+
+  if (color && !isHexColor(color)) {
+    errors.bgColor = "Valid hex color is required";
+    summary.push("Carousel background color must be a valid hex color");
+  }
+
+  if (formCards.length === 0) {
+    errors.cards = "At least one card is required";
+    summary.push("At least one card is required");
+  }
+
+  formCards.forEach((card, i) => {
+    const cardErrors = collectCardErrors(card, i, cols, rows);
+    if (Object.keys(cardErrors).length > 0 && firstInvalidCardIndex === null) {
+      firstInvalidCardIndex = i;
+    }
+    Object.assign(errors, cardErrors);
+    Object.entries(cardErrors).forEach(([key, message]) => {
+      summary.push(summarizeCardError(key, message, card, i));
+    });
+  });
+
+  const firstActionBodyKey = Object.keys(errors).find((key) =>
+    key.endsWith("-actionBody")
+  );
+  if (firstActionBodyKey) {
+    const cardMatch = /^card-(\d+)/.exec(firstActionBodyKey);
+    const buttonMatch = /-button-(\d+)-actionBody$/.exec(firstActionBodyKey);
+    const ctaMatch = /-cta-(\d+)-actionBody$/.exec(firstActionBodyKey);
+    const cardIndex = Number(cardMatch?.[1]);
+    const itemIndex = Number(buttonMatch?.[1] ?? ctaMatch?.[1]);
+    if (Number.isFinite(cardIndex)) {
+      firstInvalidCardIndex = cardIndex;
+    }
+    if (Number.isFinite(itemIndex)) {
+      firstInvalidButtonIndex = itemIndex;
+    }
+  }
+
+  return { errors, summary, firstInvalidCardIndex, firstInvalidButtonIndex };
 };
 
 export const CarouselForm = ({
@@ -266,6 +359,7 @@ export const CarouselForm = ({
   const [groupRows, setGroupRows] = useState(7);
   const [cards, setCards] = useState<EditableCard[]>([]);
   const [editingCardIndex, setEditingCardIndex] = useState<number | null>(null);
+  const [focusButtonIndex, setFocusButtonIndex] = useState<number | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showAiChat, setShowAiChat] = useState(false);
   const [submitMissingFields, setSubmitMissingFields] = useState<string[]>([]);
@@ -319,17 +413,64 @@ export const CarouselForm = ({
     })),
   };
 
-  const hydrateFormFromDraft = (draft: CarouselDraft) => {
+  const scrollFormToTop = () => {
+    formColumnRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const applyValidationResult = (
+    result: ReturnType<typeof collectFormValidation>,
+    extraSummary: string[] = []
+  ): boolean => {
+    const summary = [...result.summary];
+    extraSummary.forEach((field) => {
+      if (field && !summary.includes(field)) {
+        summary.push(field);
+      }
+    });
+    setErrors(result.errors);
+    setSubmitMissingFields(summary);
+    setFocusButtonIndex(result.firstInvalidButtonIndex);
+    if (result.firstInvalidCardIndex !== null) {
+      setEditingCardIndex(result.firstInvalidCardIndex);
+    }
+    if (summary.length > 0) {
+      scrollFormToTop();
+    }
+    return summary.length === 0;
+  };
+
+  const hydrateFormFromDraft = (
+    draft: CarouselDraft,
+    missingFields?: string[]
+  ) => {
+    const nextCards = draft.Cards.map((card, idx) =>
+      toEditableCard(card as CarouselCardDTO, idx)
+    );
     setHumanReadableName(draft.humanReadableName);
     setBgColor(draft.BgColor);
     setGroupColumns(draft.ButtonsGroupColumns);
     setGroupRows(draft.ButtonsGroupRows);
-    setCards(
-      draft.Cards.map((card, idx) => toEditableCard(card as CarouselCardDTO, idx))
-    );
+    setCards(nextCards);
     setEditingCardIndex(null);
-    setSubmitMissingFields([]);
-    setErrors({});
+    try {
+      applyValidationResult(
+        collectFormValidation(
+          draft.humanReadableName,
+          draft.BgColor,
+          nextCards,
+          draft.ButtonsGroupColumns,
+          draft.ButtonsGroupRows
+        ),
+        missingFields
+      );
+    } catch {
+      const fallback = (missingFields ?? []).filter(Boolean);
+      setSubmitMissingFields(fallback);
+      if (fallback.length > 0) {
+        scrollFormToTop();
+      }
+    }
   };
 
   const handleSelectTemplate = (id: string) => {
@@ -420,52 +561,21 @@ export const CarouselForm = ({
     });
   };
 
-  const scrollFormToTop = () => {
-    formColumnRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
   /**
    * Validate the whole form. Field errors stay on the inputs; the summary
-   * banner is shown only after Create / Update Carousel is clicked.
+   * banner is shown after Create / Update, or when an AI draft is applied
+   * with missing fields.
    */
-  const validate = (): boolean => {
-    const newErrors: Record<string, string> = {};
-    const summary: string[] = [];
-
-    if (!humanReadableName.trim()) {
-      newErrors.humanReadableName = "Name is required";
-      summary.push("Carousel name (required)");
-    } else if (humanReadableName.trim().length > 100) {
-      newErrors.humanReadableName = "Name must be 100 characters or less";
-      summary.push("Carousel name must be 100 characters or less");
-    }
-
-    if (bgColor && !isHexColor(bgColor)) {
-      newErrors.bgColor = "Valid hex color is required";
-      summary.push("Carousel background color must be a valid hex color");
-    }
-
-    if (cards.length === 0) {
-      newErrors.cards = "At least one card is required";
-      summary.push("At least one card is required");
-    }
-
-    cards.forEach((card, i) => {
-      const cardErrors = collectCardErrors(card, i, groupColumns, groupRows);
-      Object.assign(newErrors, cardErrors);
-      Object.entries(cardErrors).forEach(([key, message]) => {
-        summary.push(summarizeCardError(key, message, card, i));
-      });
-    });
-
-    setErrors(newErrors);
-    setSubmitMissingFields(summary);
-    if (summary.length > 0) {
-      scrollFormToTop();
-    }
-    return summary.length === 0;
-  };
+  const validate = (): boolean =>
+    applyValidationResult(
+      collectFormValidation(
+        humanReadableName,
+        bgColor,
+        cards,
+        groupColumns,
+        groupRows
+      )
+    );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -519,6 +629,7 @@ export const CarouselForm = ({
       >
         {heading}
         <form
+          noValidate
           onSubmit={handleSubmit}
           className="space-y-6"
           data-testid="carousel-form"
@@ -750,6 +861,7 @@ export const CarouselForm = ({
                 buttonsGroupColumns={groupColumns}
                 buttonsGroupRows={groupRows}
                 errors={errors}
+                openButtonIndex={focusButtonIndex}
                 onUpdate={handleUpdateCard}
               />
             </div>
