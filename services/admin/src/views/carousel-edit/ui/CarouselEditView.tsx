@@ -123,34 +123,38 @@ export const CarouselEditView = () => {
   }
 
   return (
-    <main className="container mx-auto px-4 py-6">
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-            Edit Carousel
-          </h1>
-          <p className="mt-2 text-base text-gray-600 dark:text-gray-400">
-            Update carousel settings and cards
-          </p>
-        </div>
-        <button
-          type="button"
-          aria-label={`Delete ${carousel.humanReadableName}`}
-          onClick={handleDelete}
-          disabled={isDeleting}
-          className="rounded-md border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 dark:border-red-700 dark:bg-gray-800 dark:text-red-400 dark:hover:bg-gray-700"
-        >
-          {isDeleting ? "Deleting..." : "Delete"}
-        </button>
-      </div>
+    <CarouselForm
+      heading={
+        <>
+          <div className="mb-6 flex items-start justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+                Edit Carousel
+              </h1>
+              <p className="mt-2 text-base text-gray-600 dark:text-gray-400">
+                Update carousel settings and cards
+              </p>
+            </div>
+            <button
+              type="button"
+              aria-label={`Delete ${carousel.humanReadableName}`}
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="rounded-md border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 dark:border-red-700 dark:bg-gray-800 dark:text-red-400 dark:hover:bg-gray-700"
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </button>
+          </div>
 
-      {error && (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
-          <p className="text-sm text-red-600 dark:text-red-300">{error}</p>
-        </div>
-      )}
-
-      <CarouselForm initialData={carousel} onSubmit={handleSubmit} />
-    </main>
+          {error && (
+            <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
+              <p className="text-sm text-red-600 dark:text-red-300">{error}</p>
+            </div>
+          )}
+        </>
+      }
+      initialData={carousel}
+      onSubmit={handleSubmit}
+    />
   );
 };

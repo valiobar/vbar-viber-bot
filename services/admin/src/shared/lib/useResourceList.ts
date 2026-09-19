@@ -50,6 +50,16 @@ export const useResourceList = <
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
 
+  // Tracks the last page/limit combination that was fetched. Seeded from
+  // initialData so the mount effect doesn't re-fetch data the server already
+  // rendered (which caused a "table -> Loading... -> table" flicker).
+  const lastFetchedPageKeyRef = useRef<string | null>(
+    initialData ? `${initialData.page}:${initialData.limit}` : null
+  );
+  // Tracks the last filters object handled by the debounce effect, so it
+  // doesn't fire a redundant fetch on mount.
+  const lastFiltersRef = useRef(filters);
+
   const fetchPage = useCallback(
     async (nextPage: number, nextLimit: number, nextFilters: TFilters) => {
       setIsLoading(true);
@@ -74,10 +84,20 @@ export const useResourceList = <
   );
 
   useEffect(() => {
+    const key = `${page}:${limit}`;
+    if (lastFetchedPageKeyRef.current === key) {
+      return;
+    }
+    lastFetchedPageKeyRef.current = key;
     void fetchPage(page, limit, filtersRef.current);
   }, [page, limit, fetchPage]);
 
   useEffect(() => {
+    if (lastFiltersRef.current === filters) {
+      return;
+    }
+    lastFiltersRef.current = filters;
+
     const timer = setTimeout(() => {
       if (page !== 1) {
         setPage(1);

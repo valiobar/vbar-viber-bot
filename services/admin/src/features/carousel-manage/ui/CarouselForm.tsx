@@ -609,23 +609,11 @@ export const CarouselForm = ({
     submitLabel = "Update Carousel";
   }
 
-  const isCreateLayout = !initialData;
-
   return (
-    <div
-      className={
-        isCreateLayout
-          ? "-m-4 -mt-20 flex h-screen md:-m-8 md:-mt-8"
-          : undefined
-      }
-    >
+    <div className="-m-4 -mt-20 flex h-screen md:-m-8 md:-mt-8">
       <div
         ref={formColumnRef}
-        className={
-          isCreateLayout
-            ? "min-h-0 min-w-0 flex-1 overflow-y-auto p-4 pt-20 md:p-8 md:pt-8"
-            : "w-full"
-        }
+        className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 pt-20 md:p-8 md:pt-8"
       >
         {heading}
         <form
@@ -678,6 +666,17 @@ export const CarouselForm = ({
                     Create with AI
                   </button>
                 </div>
+              )}
+
+              {initialData && (
+                <button
+                  type="button"
+                  data-testid="ai-chat-open"
+                  onClick={() => setShowAiChat(true)}
+                  className="w-full rounded-md border border-blue-600 px-4 py-2 text-sm font-medium text-blue-600 transition-colors hover:bg-blue-50 dark:border-blue-500 dark:text-blue-400 dark:hover:bg-blue-900/20"
+                >
+                  Edit with AI
+                </button>
               )}
 
               <div>
@@ -907,23 +906,22 @@ export const CarouselForm = ({
         </form>
       </div>
 
-      {isCreateLayout && (
-        <CarouselAiChat
-          isOpen={showAiChat}
-          sourceCarousels={sourceCarousels}
-          ctaDefaults={{
-            ...resolveCtaColors(settings),
-            Frame: resolveButtonFrame(settings),
-          }}
-          buttonDefaults={{
-            ...resolveButtonColors(settings),
-            Frame: resolveButtonFrame(settings),
-          }}
-          currentDraft={currentFormDraft}
-          onApply={hydrateFormFromDraft}
-          onClose={() => setShowAiChat(false)}
-        />
-      )}
+      <CarouselAiChat
+        isOpen={showAiChat}
+        mode={initialData ? "edit" : "create"}
+        sourceCarousels={sourceCarousels}
+        ctaDefaults={{
+          ...resolveCtaColors(settings),
+          Frame: resolveButtonFrame(settings),
+        }}
+        buttonDefaults={{
+          ...resolveButtonColors(settings),
+          Frame: resolveButtonFrame(settings),
+        }}
+        currentDraft={currentFormDraft}
+        onApply={hydrateFormFromDraft}
+        onClose={() => setShowAiChat(false)}
+      />
     </div>
   );
 };

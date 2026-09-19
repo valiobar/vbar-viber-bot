@@ -12,10 +12,12 @@ import type {
 } from "@vbar/shared";
 import { generateCarouselDraft } from "../api/generateCarouselDraft";
 
+type AiChatMode = "create" | "edit";
+
 interface CarouselAiChatProps {
   isOpen: boolean;
   /** Any visible carousel — used as a starting point, not only isTemplate rows. */
-  sourceCarousels: CarouselDTO[];
+  sourceCarousels?: CarouselDTO[];
   ctaDefaults: CarouselCtaDefaults;
   buttonDefaults: KeyboardButtonDefaults;
   /** Live form state — sent as the authoritative base so manual edits survive refinements. */
@@ -23,6 +25,8 @@ interface CarouselAiChatProps {
   /** Hydrate the form from a picked carousel or a generated draft. Drawer stays open. */
   onApply: (draft: CarouselDraft, missingFields?: string[]) => void;
   onClose: () => void;
+  /** Edit starts at refine against the loaded carousel; create starts from scratch / existing. */
+  mode?: AiChatMode;
 }
 
 type Phase = "source" | "template" | "describe" | "result";
@@ -55,14 +59,15 @@ const withAiNameSuffix = (name: string): string => {
 
 export const CarouselAiChat = ({
   isOpen,
-  sourceCarousels,
+  sourceCarousels = [],
   ctaDefaults,
   buttonDefaults,
   currentDraft,
   onApply,
   onClose,
+  mode = "create",
 }: CarouselAiChatProps) => {
-  const [phase, setPhase] = useState<Phase>("source");
+  const [phase, setPhase] = useState<Phase>(mode === "edit" ? "result" : "source");
   const [description, setDescription] = useState("");
   const [refineText, setRefineText] = useState("");
   const [result, setResult] = useState<{
@@ -75,7 +80,9 @@ export const CarouselAiChat = ({
 
   const { messages, say, isGenerating, runGenerate } = useAiChat<GenerateCarouselResult>({
     intro:
-      "Describe the carousel you want me to build. Do you want to start from scratch or from an existing carousel?",
+      mode === "edit"
+        ? "Describe what to change — I'll refine the current carousel."
+        : "Describe the carousel you want me to build. Do you want to start from scratch or from an existing carousel?",
     generate: (text, history) =>
       generateCarouselDraft({
         description: text,
@@ -142,7 +149,7 @@ export const CarouselAiChat = ({
   return (
     <AiChatDrawer
       isOpen={isOpen}
-      title="Create carousel with AI"
+      title={mode === "edit" ? "Edit carousel with AI" : "Create carousel with AI"}
       messages={messages}
       isGenerating={isGenerating}
       onClose={onClose}
@@ -213,14 +220,16 @@ export const CarouselAiChat = ({
         </div>
       )}
 
-      {phase === "result" && result && (
+      {phase === "result" && (
         <div className="space-y-3">
-          <MissingFieldsNotice
-            variant="chat"
-            testId="ai-missing-fields"
-            title="Missing required fields — fill these in the form:"
-            fields={result.missingFields}
-          />
+          {result && (
+            <MissingFieldsNotice
+              variant="chat"
+              testId="ai-missing-fields"
+              title="Missing required fields — fill these in the form:"
+              fields={result.missingFields}
+            />
+          )}
           <textarea
             value={refineText}
             onChange={(e) => setRefineText(e.target.value)}

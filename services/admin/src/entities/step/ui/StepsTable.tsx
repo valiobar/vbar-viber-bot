@@ -82,7 +82,7 @@ export const StepsTable = ({
 }: StepsTableProps) => {
   return (
     <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow dark:border-gray-700 dark:bg-gray-800">
-      {isLoading ? (
+      {isLoading && steps.length === 0 ? (
         <div className="p-8 text-center text-gray-500 dark:text-gray-400">
           Loading...
         </div>
@@ -91,7 +91,11 @@ export const StepsTable = ({
           No steps found.
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        <div
+          className={`overflow-x-auto transition-opacity ${
+            isLoading ? "pointer-events-none opacity-60" : ""
+          }`}
+        >
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-900">
               <tr>

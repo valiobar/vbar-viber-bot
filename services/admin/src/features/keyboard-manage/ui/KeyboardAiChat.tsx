@@ -11,16 +11,20 @@ import type {
 } from "@vbar/shared";
 import { generateKeyboardDraft } from "../api/generateKeyboardDraft";
 
+type AiChatMode = "create" | "edit";
+
 interface KeyboardAiChatProps {
   isOpen: boolean;
   /** Any visible keyboard — used as a starting layout, not only isTemplate rows. */
-  sourceKeyboards: KeyboardDTO[];
+  sourceKeyboards?: KeyboardDTO[];
   buttonDefaults: KeyboardButtonDefaults;
   /** Live form state — sent as the authoritative base so manual edits survive refinements. */
   currentDraft: KeyboardDraft;
   /** Hydrate the form from a picked keyboard or a generated draft. Drawer stays open. */
   onApply: (draft: KeyboardDraft, missingFields?: string[]) => void;
   onClose: () => void;
+  /** Edit starts at refine against the loaded keyboard; create starts from scratch / existing. */
+  mode?: AiChatMode;
 }
 
 type Phase = "source" | "template" | "describe" | "result";
@@ -49,13 +53,14 @@ const withAiNameSuffix = (name: string): string => {
 
 export const KeyboardAiChat = ({
   isOpen,
-  sourceKeyboards,
+  sourceKeyboards = [],
   buttonDefaults,
   currentDraft,
   onApply,
   onClose,
+  mode = "create",
 }: KeyboardAiChatProps) => {
-  const [phase, setPhase] = useState<Phase>("source");
+  const [phase, setPhase] = useState<Phase>(mode === "edit" ? "result" : "source");
   const [description, setDescription] = useState("");
   const [refineText, setRefineText] = useState("");
   const [result, setResult] = useState<{ draft: KeyboardDraft; missingFields: string[] } | null>(
@@ -68,7 +73,10 @@ export const KeyboardAiChat = ({
     currentDraft.Buttons.length > 0 || currentDraft.humanReadableName.trim().length > 0;
 
   const { messages, say, isGenerating, runGenerate } = useAiChat<GenerateKeyboardResult>({
-    intro: "Describe the keyboard you want me to build. Do you want to start from scratch or from an existing keyboard?",
+    intro:
+      mode === "edit"
+        ? "Describe what to change — I'll refine the current keyboard."
+        : "Describe the keyboard you want me to build. Do you want to start from scratch or from an existing keyboard?",
     generate: (text, history) =>
       generateKeyboardDraft({
         description: text,
@@ -132,7 +140,7 @@ export const KeyboardAiChat = ({
   return (
     <AiChatDrawer
       isOpen={isOpen}
-      title="Create keyboard with AI"
+      title={mode === "edit" ? "Edit keyboard with AI" : "Create keyboard with AI"}
       messages={messages}
       isGenerating={isGenerating}
       onClose={onClose}
@@ -203,14 +211,16 @@ export const KeyboardAiChat = ({
         </div>
       )}
 
-      {phase === "result" && result && (
+      {phase === "result" && (
         <div className="space-y-3">
-          <MissingFieldsNotice
-            variant="chat"
-            testId="ai-missing-fields"
-            title="Missing required fields — fill these in the form:"
-            fields={result.missingFields}
-          />
+          {result && (
+            <MissingFieldsNotice
+              variant="chat"
+              testId="ai-missing-fields"
+              title="Missing required fields — fill these in the form:"
+              fields={result.missingFields}
+            />
+          )}
           <textarea
             value={refineText}
             onChange={(e) => setRefineText(e.target.value)}
