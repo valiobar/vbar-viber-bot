@@ -7,7 +7,7 @@
  * sticky phone preview on the right. Cards are sent as Cards[] on submit.
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import {
   CarouselPreview,
   listCarousels,
@@ -16,17 +16,28 @@ import {
   type CreateCarouselInput,
   type UpdateCarouselInput,
 } from "@/entities/carousel";
+import {
+  resolveButtonColors,
+  resolveButtonFrame,
+  resolveCtaColors,
+  useBotSettingsStore,
+} from "@/entities/bot-settings";
+import { MissingFieldsNotice } from "@/shared";
+import type { CarouselDraft } from "@vbar/shared";
 import { reorderItems } from "../lib/reorderItems";
 import { simulateCardRows } from "../lib/simulateCardRows";
 import { newTempId } from "../lib/tempId";
 import { CardEditor } from "./CardEditor";
 import { CardsList, type EditableCard } from "./CardsList";
+import { CarouselAiChat } from "./CarouselAiChat";
 
 interface CarouselFormProps {
   initialData?: CarouselDTO;
   onSubmit: (data: CreateCarouselInput | UpdateCarouselInput) => Promise<void>;
   onCancel?: () => void;
   isLoading?: boolean;
+  /** Page heading rendered in the squeezed content column (create + AI panel) */
+  heading?: ReactNode;
 }
 
 const getDefaultCard = (): CarouselCardDTO => ({
@@ -72,6 +83,119 @@ const isValidHttpUrl = (value: string): boolean => {
 
 const isHexColor = (value: string): boolean => /^#[0-9A-F]{6}$/i.test(value);
 
+const firstButtonText = (card: EditableCard): string => {
+  const firstButton = card.Buttons[0];
+  if (firstButton?.Text.trim()) return firstButton.Text.trim();
+  const firstCta = card.ctaButtons[0];
+  if (firstCta?.text.trim()) return firstCta.text.trim();
+  return "";
+};
+
+const cardLabel = (card: EditableCard, index: number): string => {
+  if (card.title.trim()) return `"${card.title.trim()}"`;
+  const buttonText = firstButtonText(card);
+  if (buttonText) return `"${buttonText}"`;
+  return `#${index + 1}`;
+};
+
+const validateJsonActionBody = (raw: string): string | null => {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      return "JSON action body must be an object";
+    }
+    const trigger = (parsed as { trigger?: unknown }).trigger;
+    if (typeof trigger !== "string" || !trigger.trim()) {
+      return "JSON action body requires a non-empty 'trigger' property";
+    }
+    return null;
+  } catch {
+    return "Action body must be valid JSON";
+  }
+};
+
+const collectCtaErrors = (
+  card: EditableCard,
+  index: number,
+  groupRows: number
+): Record<string, string> => {
+  const cardErrors: Record<string, string> = {};
+  const hasText = Boolean(card.title.trim() || card.description.trim());
+  if (!card.image && !hasText && card.ctaButtons.length === 0) {
+    cardErrors[`card-${index}`] = "Add an image, text, or at least one button";
+  }
+  if (card.image && !isValidHttpUrl(card.image)) {
+    cardErrors[`card-${index}-image`] = "Image must be a valid http(s) URL";
+  }
+  const textRows = hasText ? card.textRows : 0;
+  if (card.image && groupRows - textRows - card.ctaButtons.length < 1) {
+    cardErrors[`card-${index}`] =
+      "No rows left for the image — reduce text rows or CTA buttons";
+  }
+  card.ctaButtons.forEach((cta, j) => {
+    if (cta.actionType !== "none" && !cta.actionBody.trim()) {
+      cardErrors[`card-${index}-cta-${j}-actionBody`] = "Action body is required";
+    } else if (
+      cta.actionType === "open-url" &&
+      cta.actionBody.trim() &&
+      !isValidHttpUrl(cta.actionBody)
+    ) {
+      cardErrors[`card-${index}-cta-${j}-actionBody`] =
+        "Action body must be a valid http(s) URL";
+    }
+  });
+  return cardErrors;
+};
+
+const collectCustomButtonErrors = (
+  card: EditableCard,
+  index: number,
+  groupColumns: number,
+  groupRows: number
+): Record<string, string> => {
+  const cardErrors: Record<string, string> = {};
+  if (card.Buttons.length === 0) {
+    cardErrors[`card-${index}`] = "Custom card must have at least one button";
+    return cardErrors;
+  }
+  card.Buttons.forEach((button, j) => {
+    if (button.Columns < 1 || button.Columns > groupColumns) {
+      cardErrors[`card-${index}-button-${j}-columns`] =
+        `Columns must be 1-${groupColumns}`;
+    }
+    if (button.Rows < 1 || button.Rows > groupRows) {
+      cardErrors[`card-${index}-button-${j}-rows`] =
+        `Rows must be 1-${groupRows}`;
+    }
+    if (button.ActionType !== "none" && !button.ActionBody.trim()) {
+      cardErrors[`card-${index}-button-${j}-actionBody`] =
+        "Action body is required";
+    } else if (button.isJson && button.ActionType === "reply") {
+      const jsonError = validateJsonActionBody(button.ActionBody);
+      if (jsonError) {
+        cardErrors[`card-${index}-button-${j}-actionBody`] = jsonError;
+      }
+    } else if (
+      button.ActionType === "open-url" &&
+      button.ActionBody.trim() &&
+      !isValidHttpUrl(button.ActionBody)
+    ) {
+      cardErrors[`card-${index}-button-${j}-actionBody`] =
+        "Action body must be a valid http(s) URL";
+    }
+    if (button.BgMedia && !isValidHttpUrl(button.BgMedia)) {
+      cardErrors[`card-${index}-button-${j}-bgMedia`] =
+        "Background media must be a valid http(s) URL";
+    }
+  });
+  const usedRows = simulateCardRows(card.Buttons, groupColumns);
+  if (usedRows !== groupRows) {
+    cardErrors[`card-${index}`] =
+      `Buttons fill ${usedRows} of ${groupRows} rows — every card must fill the block exactly`;
+  }
+  return cardErrors;
+};
+
 const collectCardErrors = (
   card: EditableCard,
   index: number,
@@ -88,54 +212,40 @@ const collectCardErrors = (
   }
 
   if (card.mode === "structured") {
-    const hasText = Boolean(card.title.trim() || card.description.trim());
-    if (!card.image && !hasText && card.ctaButtons.length === 0) {
-      cardErrors[`card-${index}`] =
-        "Add an image, text, or at least one button";
-    }
-    if (card.image && !isValidHttpUrl(card.image)) {
-      cardErrors[`card-${index}-image`] = "Image must be a valid http(s) URL";
-    }
-    const textRows = hasText ? card.textRows : 0;
-    if (card.image && groupRows - textRows - card.ctaButtons.length < 1) {
-      cardErrors[`card-${index}`] =
-        "No rows left for the image — reduce text rows or CTA buttons";
-    }
-    card.ctaButtons.forEach((cta, j) => {
-      // CTA text is optional (Viber allows buttons without text)
-      if (cta.actionType !== "none" && !cta.actionBody.trim()) {
-        cardErrors[`card-${index}-cta-${j}-actionBody`] =
-          "Action body is required";
-      }
-    });
-    return cardErrors;
+    return { ...cardErrors, ...collectCtaErrors(card, index, groupRows) };
   }
+  return { ...cardErrors, ...collectCustomButtonErrors(card, index, groupColumns, groupRows) };
+};
 
-  if (card.Buttons.length === 0) {
-    cardErrors[`card-${index}`] = "Custom card must have at least one button";
-    return cardErrors;
-  }
-  card.Buttons.forEach((button, j) => {
-    if (button.Columns < 1 || button.Columns > groupColumns) {
-      cardErrors[`card-${index}-button-${j}-columns`] =
-        `Columns must be 1-${groupColumns}`;
-    }
-    if (button.Rows < 1 || button.Rows > groupRows) {
-      cardErrors[`card-${index}-button-${j}-rows`] =
-        `Rows must be 1-${groupRows}`;
-    }
-    // Button text is optional (Viber allows image-only buttons)
-    if (button.ActionType !== "none" && !button.ActionBody.trim()) {
-      cardErrors[`card-${index}-button-${j}-actionBody`] =
-        "Action body is required";
-    }
+const itemLabelFromKey = (
+  key: string,
+  prefix: string,
+  getLabel: (itemIndex: number) => string
+): string | null => {
+  const match = new RegExp(String.raw`-${prefix}-(\d+)-`).exec(key);
+  if (!match) return null;
+  const itemIndex = Number(match[1]);
+  return getLabel(itemIndex);
+};
+
+const summarizeCardError = (
+  key: string,
+  message: string,
+  card: EditableCard,
+  index: number
+): string => {
+  const label = cardLabel(card, index);
+  const buttonLabel = itemLabelFromKey(key, "button", (itemIndex) => {
+    const button = card.Buttons[itemIndex];
+    return button?.Text.trim() ? `"${button.Text.trim()}"` : `#${itemIndex + 1}`;
   });
-  const usedRows = simulateCardRows(card.Buttons, groupColumns);
-  if (usedRows !== groupRows) {
-    cardErrors[`card-${index}`] =
-      `Buttons fill ${usedRows} of ${groupRows} rows — every card must fill the block exactly`;
-  }
-  return cardErrors;
+  if (buttonLabel) return `Card ${label}, button ${buttonLabel}: ${message}`;
+  const ctaLabel = itemLabelFromKey(key, "cta", (itemIndex) => {
+    const cta = card.ctaButtons[itemIndex];
+    return cta?.text.trim() ? `"${cta.text.trim()}"` : `#${itemIndex + 1}`;
+  });
+  if (ctaLabel) return `Card ${label}, button ${ctaLabel}: ${message}`;
+  return `Card ${label}: ${message}`;
 };
 
 export const CarouselForm = ({
@@ -143,18 +253,29 @@ export const CarouselForm = ({
   onSubmit,
   onCancel,
   isLoading = false,
+  heading,
 }: CarouselFormProps) => {
   const [humanReadableName, setHumanReadableName] = useState("");
   const [hidden, setHidden] = useState(false);
   const [isTemplate, setIsTemplate] = useState(false);
   const [templateId, setTemplateId] = useState("");
   const [templates, setTemplates] = useState<CarouselDTO[]>([]);
+  const [sourceCarousels, setSourceCarousels] = useState<CarouselDTO[]>([]);
   const [bgColor, setBgColor] = useState<string | null>(null);
   const [groupColumns, setGroupColumns] = useState(6);
   const [groupRows, setGroupRows] = useState(7);
   const [cards, setCards] = useState<EditableCard[]>([]);
   const [editingCardIndex, setEditingCardIndex] = useState<number | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [showAiChat, setShowAiChat] = useState(false);
+  const [submitMissingFields, setSubmitMissingFields] = useState<string[]>([]);
+  const formColumnRef = useRef<HTMLDivElement>(null);
+  const settings = useBotSettingsStore((state) => state.settings);
+  const loadBotSettings = useBotSettingsStore((state) => state.load);
+
+  useEffect(() => {
+    void loadBotSettings();
+  }, [loadBotSettings]);
 
   useEffect(() => {
     if (!initialData) return;
@@ -169,19 +290,47 @@ export const CarouselForm = ({
 
   useEffect(() => {
     if (initialData) return;
-    const loadTemplates = async () => {
+    const loadCarousels = async () => {
       try {
-        const data = await listCarousels(
-          { isTemplate: true, hidden: false },
-          { limit: 100 }
-        );
-        setTemplates(data.carousels);
+        const data = await listCarousels({ hidden: false }, { limit: 100 });
+        setSourceCarousels(data.carousels);
+        setTemplates(data.carousels.filter((c) => c.isTemplate));
       } catch (err) {
-        console.error("Error fetching carousel templates:", err);
+        console.error("Error fetching carousels:", err);
       }
     };
-    void loadTemplates();
+    void loadCarousels();
   }, [initialData]);
+
+  /** Live form state as a draft — the AI chat sends it so manual edits survive refinements. */
+  const currentFormDraft: CarouselDraft = {
+    humanReadableName,
+    BgColor: bgColor,
+    ButtonsGroupColumns: groupColumns,
+    ButtonsGroupRows: groupRows,
+    Cards: cards.map(({ tempId: _t, ...card }) => ({
+      ...card,
+      Buttons: card.Buttons.map((button) =>
+        stripTempId(button as typeof button & { tempId?: string })
+      ),
+      ctaButtons: card.ctaButtons.map((cta) =>
+        stripTempId(cta as typeof cta & { tempId?: string })
+      ),
+    })),
+  };
+
+  const hydrateFormFromDraft = (draft: CarouselDraft) => {
+    setHumanReadableName(draft.humanReadableName);
+    setBgColor(draft.BgColor);
+    setGroupColumns(draft.ButtonsGroupColumns);
+    setGroupRows(draft.ButtonsGroupRows);
+    setCards(
+      draft.Cards.map((card, idx) => toEditableCard(card as CarouselCardDTO, idx))
+    );
+    setEditingCardIndex(null);
+    setSubmitMissingFields([]);
+    setErrors({});
+  };
 
   const handleSelectTemplate = (id: string) => {
     if (!id) {
@@ -271,32 +420,51 @@ export const CarouselForm = ({
     });
   };
 
+  const scrollFormToTop = () => {
+    formColumnRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  /**
+   * Validate the whole form. Field errors stay on the inputs; the summary
+   * banner is shown only after Create / Update Carousel is clicked.
+   */
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
+    const summary: string[] = [];
 
     if (!humanReadableName.trim()) {
       newErrors.humanReadableName = "Name is required";
+      summary.push("Carousel name (required)");
     } else if (humanReadableName.trim().length > 100) {
       newErrors.humanReadableName = "Name must be 100 characters or less";
+      summary.push("Carousel name must be 100 characters or less");
     }
 
     if (bgColor && !isHexColor(bgColor)) {
       newErrors.bgColor = "Valid hex color is required";
+      summary.push("Carousel background color must be a valid hex color");
     }
 
     if (cards.length === 0) {
       newErrors.cards = "At least one card is required";
+      summary.push("At least one card is required");
     }
 
     cards.forEach((card, i) => {
-      Object.assign(
-        newErrors,
-        collectCardErrors(card, i, groupColumns, groupRows)
-      );
+      const cardErrors = collectCardErrors(card, i, groupColumns, groupRows);
+      Object.assign(newErrors, cardErrors);
+      Object.entries(cardErrors).forEach(([key, message]) => {
+        summary.push(summarizeCardError(key, message, card, i));
+      });
     });
 
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    setSubmitMissingFields(summary);
+    if (summary.length > 0) {
+      scrollFormToTop();
+    }
+    return summary.length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -331,12 +499,35 @@ export const CarouselForm = ({
     submitLabel = "Update Carousel";
   }
 
+  const isCreateLayout = !initialData;
+
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="space-y-6"
-      data-testid="carousel-form"
+    <div
+      className={
+        isCreateLayout
+          ? "-m-4 -mt-20 flex h-screen md:-m-8 md:-mt-8"
+          : undefined
+      }
     >
+      <div
+        ref={formColumnRef}
+        className={
+          isCreateLayout
+            ? "min-h-0 min-w-0 flex-1 overflow-y-auto p-4 pt-20 md:p-8 md:pt-8"
+            : "w-full"
+        }
+      >
+        {heading}
+        <form
+          onSubmit={handleSubmit}
+          className="space-y-6"
+          data-testid="carousel-form"
+        >
+      <MissingFieldsNotice
+        testId="form-missing-fields-notice"
+        title="Complete these required fields:"
+        fields={submitMissingFields}
+      />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="space-y-6">
           <div className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
@@ -367,6 +558,14 @@ export const CarouselForm = ({
                       </option>
                     ))}
                   </select>
+                  <button
+                    type="button"
+                    data-testid="ai-chat-open"
+                    onClick={() => setShowAiChat(true)}
+                    className="mt-2 w-full rounded-md border border-blue-600 px-4 py-2 text-sm font-medium text-blue-600 transition-colors hover:bg-blue-50 dark:border-blue-500 dark:text-blue-400 dark:hover:bg-blue-900/20"
+                  >
+                    Create with AI
+                  </button>
                 </div>
               )}
 
@@ -593,6 +792,26 @@ export const CarouselForm = ({
           {submitLabel}
         </button>
       </div>
-    </form>
+        </form>
+      </div>
+
+      {isCreateLayout && (
+        <CarouselAiChat
+          isOpen={showAiChat}
+          sourceCarousels={sourceCarousels}
+          ctaDefaults={{
+            ...resolveCtaColors(settings),
+            Frame: resolveButtonFrame(settings),
+          }}
+          buttonDefaults={{
+            ...resolveButtonColors(settings),
+            Frame: resolveButtonFrame(settings),
+          }}
+          currentDraft={currentFormDraft}
+          onApply={hydrateFormFromDraft}
+          onClose={() => setShowAiChat(false)}
+        />
+      )}
+    </div>
   );
 };

@@ -23,6 +23,7 @@ import {
   resolveButtonFrame,
   useBotSettingsStore,
 } from "@/entities/bot-settings";
+import { MissingFieldsNotice } from "@/shared";
 import type { KeyboardDraft } from "@vbar/shared";
 import { reorderButtons } from "../lib/reorderButtons";
 import { ButtonForm } from "./ButtonForm";
@@ -658,22 +659,11 @@ export const KeyboardForm = ({
           <>
     {heading}
     <form onSubmit={handleSubmit} className="space-y-6">
-      {submitMissingFields.length > 0 && (
-        <div
-          role="alert"
-          data-testid="form-missing-fields-notice"
-          className="rounded-md border border-amber-300 bg-amber-50 p-4 text-sm dark:border-amber-700 dark:bg-amber-900/20"
-        >
-          <p className="font-medium text-amber-800 dark:text-amber-200">
-            Complete these required fields:
-          </p>
-          <ul className="mt-1 list-inside list-disc text-amber-700 dark:text-amber-300">
-            {submitMissingFields.map((field) => (
-              <li key={field}>{field}</li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <MissingFieldsNotice
+        testId="form-missing-fields-notice"
+        title="Complete these required fields:"
+        fields={submitMissingFields}
+      />
       {/* Main Content Grid - Form on left, Preview on right */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Left Column - Form Fields */}

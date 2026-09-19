@@ -19,12 +19,13 @@ Collection field lists live in [databases.md](./databases.md). HTTP contracts li
 11. [Step usage analytics](#step-usage-analytics)
 12. [Knowledge-base proxy](#knowledge-base-proxy)
 13. [AI keyboard builder](#ai-keyboard-builder)
-14. [Client (FSD)](#client-fsd)
-15. [App routes](#app-routes)
-16. [Environment](#environment)
-17. [Adding a new CMS domain](#adding-a-new-cms-domain)
-18. [Leftover code](#leftover-code)
-19. [What is not implemented](#what-is-not-implemented)
+14. [AI carousel builder](#ai-carousel-builder)
+15. [Client (FSD)](#client-fsd)
+16. [App routes](#app-routes)
+17. [Environment](#environment)
+18. [Adding a new CMS domain](#adding-a-new-cms-domain)
+19. [Leftover code](#leftover-code)
+20. [What is not implemented](#what-is-not-implemented)
 
 ---
 
@@ -302,8 +303,8 @@ On create/update:
 
 Card modes:
 
-- **structured** (default): image + title/description + CTA buttons. Server generates the button layout.
-- **custom**: free-form buttons, up to `ButtonsGroupRows` tall. Must fill the card block exactly (otherwise the next card bleeds into it on device).
+- **structured**: image + title/description + CTA buttons. Server generates the button layout.
+- **custom** (AI default): free-form buttons, up to `ButtonsGroupRows` tall. Must fill the card block exactly (otherwise the next card bleeds into it on device). Create-mode “Create with AI” emits custom cards unless the user asks for an image/title/description layout or an existing form card is already structured.
 
 Forbidden in carousel context: `location-picker`, `share-phone`. CTAs are `reply` | `open-url` | `none`.
 
@@ -493,11 +494,17 @@ Create-mode only (`/keyboards/new`). “Create with AI” (next to “Start from
 
 Phases: source choice (scratch or any visible existing keyboard) → description → generated draft. Picking an existing keyboard immediately hydrates the form (name with an ` (AI)` suffix, title, colors, buttons) while the drawer stays open. Every Generate / Refine turn sends the live form state as `currentDraft` (whenever the form has a name or at least one button) — the AI treats it as the authoritative base, so manual form edits (a hand-typed name, a tweaked button) survive the next refinement unless the newest instruction changes them. The client no longer sends `templateButtons`. The form’s “Start from template” select is still limited to `isTemplate` keyboards. Each successful Generate or Refine hydrates the existing `KeyboardForm` state immediately (drawer stays open for more refinements). Required fields the AI left blank are listed only in the chat. The form shows a required-fields banner only after Create / Update Keyboard is clicked while the form is incomplete (any path — AI draft, template, or hand-filled); the form column then scrolls to the top so that banner is visible. Reopening the drawer continues the same conversation (the drawer stays mounted until the page is left). Leaving or reloading the page starts a fresh chat — history is client-held only.
 
-The draft is saved only through the normal Create Keyboard submit. Existing `validate()` still blocks empty names and other required fields. Buttons inherit the current Bot Settings theme (`resolveButtonColors` / `resolveButtonFrame`) unless the description asked for specific colors. A request like “make the 2nd button a JSON action body that triggers welcome and set click: now as a prop” must come back as `isJson: true` and `ActionBody` `{"trigger":"welcome","click":"now"}` — not a plain `"welcome"` reply. AI-side rules: [ai.md](./ai.md#keyboard-builder).
+The draft is saved only through the normal Create Keyboard submit. Existing `validate()` still blocks empty names and other required fields. Newly added buttons inherit the current Bot Settings theme (`resolveButtonColors` / `resolveButtonFrame`) unless the description asked for specific colors. Buttons already on the form (including those copied from an existing keyboard) keep their own colors, frame, and background media. A requested button image is `BgMedia` plus `BgMediaType` / `BgMediaScaleType` (`fit` | `crop` | `fill`) / `BgLoop`. A request like “make the 2nd button a JSON action body that triggers welcome and set click: now as a prop” must come back as `isJson: true` and `ActionBody` `{"trigger":"welcome","click":"now"}` — not a plain `"welcome"` reply. AI-side rules: [ai.md](./ai.md#keyboard-builder).
 
-The chat shell is feature-agnostic (`shared/ui/AiChatDrawer` + `shared/lib/useAiChat`) and is intended for future AI builders (next planned: carousel generation). Keyboard-specific phases, the generate call, and auto-apply-to-form live in `features/keyboard-manage` (`KeyboardAiChat`).
+The chat shell is feature-agnostic (`shared/ui/AiChatDrawer` + `shared/lib/useAiChat`). Keyboard-specific phases live in `features/keyboard-manage` (`KeyboardAiChat`); carousel-specific phases live in `features/carousel-manage` (`CarouselAiChat`).
 
 Admin proxy: `POST /api/ai/keyboard-builder` → AI `POST /api/keyboard-builder/generate`. JWT via existing middleware; admin adds `X-Service-Token` when forwarding. Same 503 / 502 proxy errors as knowledge-base (`AI_SERVICE_NOT_CONFIGURED` / `AI_SERVICE_UNAVAILABLE`). Contract types (`AiChatTurn`, `KeyboardDraft`, `GenerateKeyboardInput`, `GenerateKeyboardResult`, …) live in `@vbar/shared` (`types/ai.ts`) — not mirrored in admin. AI-side rules: [ai.md](./ai.md#keyboard-builder). HTTP contract: [api.md](./api.md#ai-keyboard-builder-thin-proxy-to-ai).
+
+## AI carousel builder
+
+Create-mode only (`/carousels/new`). Same drawer and chat shell as the keyboard builder (`AiChatDrawer` + `useAiChat` + shared `MissingFieldsNotice`). Phases: source choice (scratch or any visible existing carousel) → description → generated draft. Picking an existing carousel immediately hydrates the form (name with an ` (AI)` suffix, grid, cards) while the drawer stays open. Every Generate / Refine turn sends the live form state as `currentDraft` (whenever the form has a name or at least one card). Required fields the AI left blank are listed only in the chat. The form shows a required-fields banner only after Create / Update Carousel is clicked while the form is incomplete (any path — AI draft, template, or hand-filled); the form column then scrolls to the top so that banner is visible.
+
+The draft is saved only through the normal Create Carousel submit. Existing `validate()` still blocks empty names, empty cards, custom-card row fill, and missing reply / open-url bodies. AI-side rules: [ai.md](./ai.md#carousel-builder). HTTP contract: [api.md](./api.md#carousel-builder-ai-service-rest).
 
 ---
 
@@ -528,7 +535,7 @@ Admin proxy: `POST /api/ai/keyboard-builder` → AI `POST /api/keyboard-builder/
 | analytics | `analytics` | — | `step-usage-stats` | `analytics` |
 | dashboard | — | — | `dashboard-layout`, `side-menu` | `dashboard` (`/` → `/settings`) |
 
-List pages use `useResourceList` (pagination, filters, reload). Keyboard and carousel editors can reorder with dnd-kit; order is the array sent on POST/PUT. Keyboard create (`/keyboards/new`) also exposes “Create with AI”; the edit page does not.
+List pages use `useResourceList` (pagination, filters, reload). Keyboard and carousel editors can reorder with dnd-kit; order is the array sent on POST/PUT. Keyboard create (`/keyboards/new`) and carousel create (`/carousels/new`) also expose “Create with AI”; the edit pages do not.
 
 Carousel FSD does **not** import keyboard slices (same-layer imports are forbidden). Button editing is an adapted copy (`CarouselButtonForm`) with carousel row limits.
 

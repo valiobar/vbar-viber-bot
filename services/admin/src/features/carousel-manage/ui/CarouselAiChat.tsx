@@ -1,25 +1,27 @@
 "use client";
 
 import { useState } from "react";
-import type { KeyboardDTO } from "@/entities/keyboard";
+import type { CarouselCardDTO, CarouselDTO } from "@/entities/carousel";
 import { AiChatDrawer, MissingFieldsNotice, useAiChat } from "@/shared";
 import type {
-  GenerateKeyboardResult,
+  CarouselCtaDefaults,
+  CarouselDraft,
+  CarouselDraftCard,
+  GenerateCarouselResult,
   KeyboardButtonDefaults,
-  KeyboardDraft,
-  KeyboardDraftButton,
 } from "@vbar/shared";
-import { generateKeyboardDraft } from "../api/generateKeyboardDraft";
+import { generateCarouselDraft } from "../api/generateCarouselDraft";
 
-interface KeyboardAiChatProps {
+interface CarouselAiChatProps {
   isOpen: boolean;
-  /** Any visible keyboard — used as a starting layout, not only isTemplate rows. */
-  sourceKeyboards: KeyboardDTO[];
+  /** Any visible carousel — used as a starting point, not only isTemplate rows. */
+  sourceCarousels: CarouselDTO[];
+  ctaDefaults: CarouselCtaDefaults;
   buttonDefaults: KeyboardButtonDefaults;
   /** Live form state — sent as the authoritative base so manual edits survive refinements. */
-  currentDraft: KeyboardDraft;
-  /** Hydrate the form from a picked keyboard or a generated draft. Drawer stays open. */
-  onApply: (draft: KeyboardDraft, missingFields?: string[]) => void;
+  currentDraft: CarouselDraft;
+  /** Hydrate the form from a picked carousel or a generated draft. Drawer stays open. */
+  onApply: (draft: CarouselDraft, missingFields?: string[]) => void;
   onClose: () => void;
 }
 
@@ -37,8 +39,12 @@ const TEXTAREA_CLASS =
 const AI_NAME_SUFFIX = " (AI)";
 const NAME_MAX_LENGTH = 100;
 
-const stripButtonMeta = (buttons: KeyboardDTO["Buttons"]): KeyboardDraftButton[] =>
-  buttons.map(({ id: _id, createdAt: _c, updatedAt: _u, ...fields }) => fields);
+/** CarouselDTO cards → draft cards (strip button meta from custom-card Buttons). */
+const toDraftCards = (cards: CarouselCardDTO[]): CarouselDraftCard[] =>
+  cards.map((card) => ({
+    ...card,
+    Buttons: card.Buttons.map(({ id: _id, createdAt: _c, updatedAt: _u, ...fields }) => fields),
+  }));
 
 const withAiNameSuffix = (name: string): string => {
   const trimmed = name.trim();
@@ -47,33 +53,35 @@ const withAiNameSuffix = (name: string): string => {
   return `${trimmed.slice(0, budget)}${AI_NAME_SUFFIX}`;
 };
 
-export const KeyboardAiChat = ({
+export const CarouselAiChat = ({
   isOpen,
-  sourceKeyboards,
+  sourceCarousels,
+  ctaDefaults,
   buttonDefaults,
   currentDraft,
   onApply,
   onClose,
-}: KeyboardAiChatProps) => {
+}: CarouselAiChatProps) => {
   const [phase, setPhase] = useState<Phase>("source");
   const [description, setDescription] = useState("");
   const [refineText, setRefineText] = useState("");
-  const [result, setResult] = useState<{ draft: KeyboardDraft; missingFields: string[] } | null>(
-    null
-  );
+  const [result, setResult] = useState<{
+    draft: CarouselDraft;
+    missingFields: string[];
+  } | null>(null);
 
-  // The live form (buttons or a typed name) is the authoritative base:
-  // sending it lets manual edits survive the next refinement.
   const formHasContent =
-    currentDraft.Buttons.length > 0 || currentDraft.humanReadableName.trim().length > 0;
+    currentDraft.Cards.length > 0 || currentDraft.humanReadableName.trim().length > 0;
 
-  const { messages, say, isGenerating, runGenerate } = useAiChat<GenerateKeyboardResult>({
-    intro: "Describe the keyboard you want me to build. Do you want to start from scratch or from an existing keyboard?",
+  const { messages, say, isGenerating, runGenerate } = useAiChat<GenerateCarouselResult>({
+    intro:
+      "Describe the carousel you want me to build. Do you want to start from scratch or from an existing carousel?",
     generate: (text, history) =>
-      generateKeyboardDraft({
+      generateCarouselDraft({
         description: text,
         history: history.length > 0 ? history : undefined,
         currentDraft: formHasContent ? currentDraft : undefined,
+        ctaDefaults,
         buttonDefaults,
       }),
     getAssistantTurn: (res) => res.assistantMessage,
@@ -82,32 +90,34 @@ export const KeyboardAiChat = ({
 
   const handleChooseScratch = () => {
     say({ role: "user", text: "From scratch" });
-    say({ role: "bot", text: "Great — describe the keyboard (buttons, layout, colors, actions)." });
+    say({
+      role: "bot",
+      text: "Great — describe the carousel (cards, images, titles, buttons).",
+    });
     setPhase("describe");
   };
 
   const handleStartFromExisting = () => {
-    say({ role: "user", text: "Start from an existing keyboard" });
+    say({ role: "user", text: "Start from an existing carousel" });
     say({
       role: "bot",
-      text: "Pick a keyboard — I will use its buttons as the base, then you can describe changes.",
+      text: "Pick a carousel — I will use its cards as the base, then you can describe changes.",
     });
     setPhase("template");
   };
 
-  const handlePickSourceKeyboard = (kb: KeyboardDTO) => {
-    const buttons = stripButtonMeta(kb.Buttons);
-    say({ role: "user", text: `Start from: ${kb.humanReadableName}` });
+  const handlePickSourceCarousel = (carousel: CarouselDTO) => {
+    say({ role: "user", text: `Start from: ${carousel.humanReadableName}` });
     onApply({
-      humanReadableName: withAiNameSuffix(kb.humanReadableName),
-      title: kb.title,
-      InputFieldState: kb.InputFieldState,
-      BgColor: kb.BgColor,
-      Buttons: buttons,
+      humanReadableName: withAiNameSuffix(carousel.humanReadableName),
+      BgColor: carousel.BgColor,
+      ButtonsGroupColumns: carousel.ButtonsGroupColumns,
+      ButtonsGroupRows: carousel.ButtonsGroupRows,
+      Cards: toDraftCards(carousel.Cards),
     });
     say({
       role: "bot",
-      text: "I applied this keyboard to the form. Describe what should change — you can refine again after the first draft.",
+      text: "I applied this carousel to the form. Describe what should change — you can refine again after the first draft.",
     });
     setPhase("describe");
   };
@@ -132,7 +142,7 @@ export const KeyboardAiChat = ({
   return (
     <AiChatDrawer
       isOpen={isOpen}
-      title="Create keyboard with AI"
+      title="Create carousel with AI"
       messages={messages}
       isGenerating={isGenerating}
       onClose={onClose}
@@ -147,14 +157,14 @@ export const KeyboardAiChat = ({
           >
             From scratch
           </button>
-          {sourceKeyboards.length > 0 && (
+          {sourceCarousels.length > 0 && (
             <button
               type="button"
               onClick={handleStartFromExisting}
-              aria-label="Start from an existing keyboard"
+              aria-label="Start from an existing carousel"
               className={QUICK_REPLY_CLASS}
             >
-              Start from an existing keyboard
+              Start from an existing carousel
             </button>
           )}
         </div>
@@ -163,16 +173,16 @@ export const KeyboardAiChat = ({
       {phase === "template" && (
         <div className="max-h-48 overflow-y-auto">
           <div className="flex flex-wrap gap-2">
-            {sourceKeyboards.map((kb) => (
+            {sourceCarousels.map((carousel) => (
               <button
-                key={kb.id}
+                key={carousel.id}
                 type="button"
-                onClick={() => handlePickSourceKeyboard(kb)}
-                aria-label={`Start from keyboard ${kb.humanReadableName}`}
+                onClick={() => handlePickSourceCarousel(carousel)}
+                aria-label={`Start from carousel ${carousel.humanReadableName}`}
                 className={QUICK_REPLY_CLASS}
               >
-                {kb.humanReadableName}
-                {kb.isTemplate ? " (template)" : ""}
+                {carousel.humanReadableName}
+                {carousel.isTemplate ? " (template)" : ""}
               </button>
             ))}
           </div>
@@ -186,8 +196,8 @@ export const KeyboardAiChat = ({
             onChange={(e) => setDescription(e.target.value)}
             rows={3}
             disabled={isGenerating}
-            placeholder="e.g. Main menu with Prices, Locations and a button opening https://example.com"
-            aria-label="Keyboard description"
+            placeholder="e.g. Carousel with 3 product cards, each with an image, a short description and an Order button"
+            aria-label="Carousel description"
             className={TEXTAREA_CLASS}
           />
           <button
@@ -195,7 +205,7 @@ export const KeyboardAiChat = ({
             onClick={handleGenerate}
             disabled={!description.trim() || isGenerating}
             data-testid="ai-chat-generate"
-            aria-label="Generate keyboard draft"
+            aria-label="Generate carousel draft"
             className={PRIMARY_BUTTON_CLASS}
           >
             Generate
@@ -216,8 +226,8 @@ export const KeyboardAiChat = ({
             onChange={(e) => setRefineText(e.target.value)}
             rows={2}
             disabled={isGenerating}
-            placeholder='Ask for changes, e.g. "make all buttons 6 columns wide"'
-            aria-label="Refine keyboard draft"
+            placeholder='Ask for changes, e.g. "add a fourth card for desserts"'
+            aria-label="Refine carousel draft"
             className={TEXTAREA_CLASS}
           />
           <button
@@ -225,7 +235,7 @@ export const KeyboardAiChat = ({
             onClick={handleRefine}
             disabled={!refineText.trim() || isGenerating}
             data-testid="ai-chat-refine"
-            aria-label="Refine keyboard draft"
+            aria-label="Refine carousel draft"
             className={PRIMARY_BUTTON_CLASS}
           >
             Refine

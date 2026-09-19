@@ -4,8 +4,19 @@ import type {
   KeyboardDraftButton,
 } from "../../ports/in/BuildKeyboardUseCase";
 import type { LlmKeyboardOutput } from "./keyboardBuilderPrompt";
+import {
+  extractJsonObject,
+  hexOrNull,
+  pickBgLoop,
+  pickBgMedia,
+  pickBgMediaScaleType,
+  pickBgMediaType,
+  pickClamped,
+  pickFrame,
+  pickHex,
+  pickNonEmptyString,
+} from "./normalizerPrimitives";
 
-const HEX_COLOR = /^#[0-9A-F]{6}$/i;
 const ACTION_TYPES = [
   "reply",
   "open-url",
@@ -16,22 +27,8 @@ const ACTION_TYPES = [
 const INPUT_FIELD_STATES = ["regular", "minimized", "hidden"];
 
 export function parseLlmKeyboardJson(raw: string): LlmKeyboardOutput {
-  // Models sometimes wrap JSON in ```json fences or add prose — extract the outermost object.
-  const start = raw.indexOf("{");
-  const end = raw.lastIndexOf("}");
-  if (start === -1 || end === -1 || end <= start) {
-    throw new Error("AI response did not contain a JSON object");
-  }
-  return JSON.parse(raw.slice(start, end + 1)) as LlmKeyboardOutput;
+  return extractJsonObject<LlmKeyboardOutput>(raw);
 }
-
-const clamp = (n: unknown, min: number, max: number, fallback: number): number => {
-  const v = typeof n === "number" && Number.isFinite(n) ? Math.round(n) : fallback;
-  return Math.min(max, Math.max(min, v));
-};
-
-const hexOrNull = (v: unknown): string | null =>
-  typeof v === "string" && HEX_COLOR.test(v) ? v : null;
 
 /** Same fallbacks as admin FALLBACK_BUTTON_TEXT_COLOR / resolveButtonFrame. */
 const HARDCODED_DEFAULTS: KeyboardButtonDefaults = {
@@ -100,64 +97,83 @@ function normalizeReplyAction(
   };
 }
 
+/** Consume the first unused existing button with the same label. */
+function takeExistingButton(
+  text: string,
+  unused: KeyboardDraftButton[]
+): KeyboardDraftButton | undefined {
+  const needle = text.trim();
+  if (!needle) return undefined;
+  const idx = unused.findIndex((b) => b.Text.trim() === needle);
+  if (idx === -1) return undefined;
+  return unused.splice(idx, 1)[0];
+}
+
+/** Same-label unused first, then an already-consumed same-label button (duplicate). */
+function matchExistingButton(
+  text: string,
+  unused: KeyboardDraftButton[],
+  all: readonly KeyboardDraftButton[]
+): KeyboardDraftButton | undefined {
+  const consumed = takeExistingButton(text, unused);
+  if (consumed) return consumed;
+  const needle = text.trim();
+  if (!needle) return undefined;
+  return all.find((b) => b.Text.trim() === needle);
+}
+
 /** Same visual defaults as admin getDefaultButton (KeyboardForm.tsx), using bot settings. */
 function normalizeButton(
   b: Partial<LlmKeyboardOutput["Buttons"][number]>,
-  defaults: KeyboardButtonDefaults
+  defaults: KeyboardButtonDefaults,
+  existing?: KeyboardDraftButton
 ): KeyboardDraftButton {
   const actionType = ACTION_TYPES.includes(String(b.ActionType))
     ? (b.ActionType as KeyboardDraftButton["ActionType"])
-    : "reply";
+    : (existing?.ActionType ?? "reply");
+  const llmProvidedAction =
+    (typeof b.ActionBody === "string" && b.ActionBody.trim().length > 0) ||
+    (typeof b.ActionBody === "object" && b.ActionBody !== null) ||
+    b.isJson === true;
+  const action = llmProvidedAction
+    ? normalizeReplyAction(b.ActionBody, b.isJson, actionType)
+    : existing
+      ? { ActionBody: existing.ActionBody, isJson: existing.isJson }
+      : normalizeReplyAction(b.ActionBody, b.isJson, actionType);
+  const bgMedia = pickBgMedia(b.BgMedia, existing?.BgMedia);
   return {
-    Columns: clamp(b.Columns, 1, 6, 6),
-    Rows: clamp(b.Rows, 1, 2, 1),
-    Text: typeof b.Text === "string" ? b.Text : "",
-    TextColor: hexOrNull(b.TextColor) ?? defaults.TextColor,
-    BgColor: hexOrNull(b.BgColor) ?? defaults.BgColor,
-    BgMedia: null,
-    BgMediaType: "picture",
-    BgMediaScaleType: "fit",
-    BgLoop: true,
+    Columns: pickClamped(b.Columns, 1, 6, existing?.Columns, 6),
+    Rows: pickClamped(b.Rows, 1, 2, existing?.Rows, 1),
+    Text: pickNonEmptyString(b.Text, existing?.Text, ""),
+    TextColor: pickHex(b.TextColor, existing?.TextColor, defaults.TextColor) ?? defaults.TextColor,
+    BgColor: pickHex(b.BgColor, existing?.BgColor, defaults.BgColor),
+    BgMedia: bgMedia,
+    BgMediaType: pickBgMediaType(b.BgMediaType, bgMedia, existing?.BgMediaType),
+    BgMediaScaleType: pickBgMediaScaleType(b.BgMediaScaleType, existing?.BgMediaScaleType),
+    BgLoop: pickBgLoop(b.BgLoop, existing?.BgLoop),
     ActionType: actionType,
-    ...normalizeReplyAction(b.ActionBody, b.isJson, actionType),
-    OpenURLType: b.OpenURLType === "external" ? "external" : "internal",
+    ...action,
+    OpenURLType:
+      b.OpenURLType === "external" || b.OpenURLType === "internal"
+        ? b.OpenURLType
+        : (existing?.OpenURLType ?? "internal"),
     InternalBrowser: { Mode: "fullscreen-portrait" },
     TextVAlign: "middle",
     TextHAlign: "center",
     TextSize: "regular",
-    Silent: true,
-    Frame: normalizeFrame(b.Frame, defaults.Frame),
-  };
-}
-
-function normalizeFrame(
-  raw: unknown,
-  fallback: KeyboardButtonDefaults["Frame"]
-): KeyboardButtonDefaults["Frame"] {
-  if (!raw || typeof raw !== "object") {
-    return fallback;
-  }
-  const f = raw as {
-    BorderWidth?: unknown;
-    BorderColor?: unknown;
-    CornerRadius?: unknown;
-  };
-  const BorderColor = hexOrNull(f.BorderColor);
-  if (!BorderColor) {
-    return fallback;
-  }
-  return {
-    BorderWidth: clamp(f.BorderWidth, 0, 10, 1),
-    BorderColor,
-    CornerRadius: clamp(f.CornerRadius, 0, 10, 0),
+    Silent: existing?.Silent ?? true,
+    Frame: pickFrame(b.Frame, existing?.Frame, defaults.Frame),
   };
 }
 
 export function normalizeKeyboardDraft(
   parsed: LlmKeyboardOutput,
-  defaults?: KeyboardButtonDefaults
+  defaults?: KeyboardButtonDefaults,
+  existingButtons?: KeyboardDraftButton[]
 ): KeyboardDraft {
   const theme = resolveDefaults(defaults);
+  const sourceButtons = existingButtons ?? [];
+  const unusedExisting = [...sourceButtons];
   return {
     humanReadableName:
       typeof parsed.humanReadableName === "string"
@@ -172,7 +188,17 @@ export function normalizeKeyboardDraft(
       : "hidden",
     BgColor: hexOrNull(parsed.BgColor),
     Buttons: Array.isArray(parsed.Buttons)
-      ? parsed.Buttons.map((b) => normalizeButton(b, theme))
+      ? parsed.Buttons.map((b) =>
+          normalizeButton(
+            b,
+            theme,
+            matchExistingButton(
+              typeof b.Text === "string" ? b.Text : "",
+              unusedExisting,
+              sourceButtons
+            )
+          )
+        )
       : [],
   };
 }
@@ -204,6 +230,9 @@ export function computeMissingFields(draft: KeyboardDraft): string[] {
     }
     if (btn.ActionType === "open-url" && btn.ActionBody && !/^https?:\/\//i.test(btn.ActionBody)) {
       missing.push(`Button ${label}: ActionBody must be a valid http(s) URL`);
+    }
+    if (btn.BgMedia && !/^https?:\/\//i.test(btn.BgMedia)) {
+      missing.push(`Button ${label}: BgMedia must be a valid http(s) URL`);
     }
   });
   return missing;
