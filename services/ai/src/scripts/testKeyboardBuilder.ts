@@ -15,6 +15,7 @@ import {
   parseLlmKeyboardJson,
   normalizeKeyboardDraft,
   computeMissingFields,
+  mentionsButtonStyle,
 } from "../domains/builder/services/keyboardDraftNormalizer";
 import { buildKeyboardUserPrompt } from "../application/prompts/keyboardBuilderPrompt";
 import { buildCarouselUserPrompt } from "../application/prompts/carouselBuilderPrompt";
@@ -223,6 +224,61 @@ assert.deepEqual(mixedDraft.Buttons[0].Frame, templateButton.Frame);
 assert.equal(mixedDraft.Buttons[1].TextColor, theme.TextColor); // new button → defaults
 assert.equal(mixedDraft.Buttons[1].BgColor, theme.BgColor);
 assert.deepEqual(mixedDraft.Buttons[1].Frame, theme.Frame);
+
+assert.equal(mentionsButtonStyle("change the middle button text"), false);
+assert.equal(mentionsButtonStyle("make the Start button red"), true);
+assert.equal(mentionsButtonStyle("смени цвета на бутона на #FF0000"), true);
+
+const llmRestyle = {
+  Columns: 6,
+  Rows: 1,
+  Text: "Menu",
+  TextColor: "#FF0000",
+  BgColor: "#00FF00",
+  ActionType: "reply",
+  ActionBody: "menu",
+  OpenURLType: "internal",
+  Frame: { BorderWidth: 2, BorderColor: "#0000FF", CornerRadius: 1 },
+};
+const textOnlyDraft = normalizeKeyboardDraft(
+  parseLlmKeyboardJson(
+    JSON.stringify({
+      humanReadableName: "From template",
+      title: null,
+      InputFieldState: "hidden",
+      BgColor: null,
+      Buttons: [llmRestyle],
+      summary: "ok",
+    })
+  ),
+  theme,
+  [templateButton],
+  undefined,
+  "change the middle button text"
+);
+assert.equal(textOnlyDraft.Buttons[0].TextColor, "#AABBCC");
+assert.equal(textOnlyDraft.Buttons[0].BgColor, "#112233");
+assert.deepEqual(textOnlyDraft.Buttons[0].Frame, templateButton.Frame);
+
+const colorDraft = normalizeKeyboardDraft(
+  parseLlmKeyboardJson(
+    JSON.stringify({
+      humanReadableName: "From template",
+      title: null,
+      InputFieldState: "hidden",
+      BgColor: null,
+      Buttons: [llmRestyle],
+      summary: "ok",
+    })
+  ),
+  theme,
+  [templateButton],
+  undefined,
+  "make the Menu button red with a green background"
+);
+assert.equal(colorDraft.Buttons[0].TextColor, "#FF0000");
+assert.equal(colorDraft.Buttons[0].BgColor, "#00FF00");
+assert.deepEqual(colorDraft.Buttons[0].Frame, llmRestyle.Frame);
 
 const mediaDraft = normalizeKeyboardDraft(
   parseLlmKeyboardJson(

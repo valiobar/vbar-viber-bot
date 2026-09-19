@@ -84,7 +84,8 @@ export class BuildKeyboardUseCaseImpl implements BuildKeyboardUseCase {
       parsed,
       input.buttonDefaults,
       existingButtons,
-      input.availableSteps
+      input.availableSteps,
+      description
     );
     const missingFields = computeMissingFields(draft);
     const summary =
