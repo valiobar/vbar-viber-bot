@@ -21,6 +21,7 @@ import {
   notifyRefresh,
   noContent,
 } from "@/lib/api/routeHelpers";
+import { invalidateAvailableStepsCache } from "@/lib/aiBuilderContext";
 
 const createStepService = (): StepService =>
   new StepService(
@@ -81,6 +82,7 @@ export async function PUT(request: Request, { params }: IdParams) {
 
     const stepDTO = await createStepService().update(params.id, input);
     notifyRefresh("steps");
+    invalidateAvailableStepsCache();
     return jsonOk(stepDTO);
   }, { fallback: "An unexpected error occurred while updating step" });
 }
@@ -93,6 +95,7 @@ export async function DELETE(_request: Request, { params }: IdParams) {
     }
     await createStepService().delete(params.id);
     notifyRefresh("steps");
+    invalidateAvailableStepsCache();
     return noContent();
   }, { fallback: "An unexpected error occurred while deleting step" });
 }

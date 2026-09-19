@@ -66,6 +66,7 @@ export class BuildCarouselUseCaseImpl implements BuildCarouselUseCase {
       currentDraft: input.currentDraft,
       ctaDefaults: input.ctaDefaults,
       buttonDefaults: input.buttonDefaults,
+      availableSteps: input.availableSteps,
     });
 
     const parsed = await this.aiProvider.generateStructured(
@@ -79,7 +80,8 @@ export class BuildCarouselUseCaseImpl implements BuildCarouselUseCase {
       parsed,
       input.ctaDefaults,
       input.currentDraft?.Cards,
-      input.buttonDefaults
+      input.buttonDefaults,
+      input.availableSteps
     );
     const missingFields = computeMissingFields(draft);
     const summary =

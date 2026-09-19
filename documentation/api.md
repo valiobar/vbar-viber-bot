@@ -170,9 +170,9 @@ Proxy-only error codes (admin, before the call reaches AI): `AI_SERVICE_NOT_CONF
 
 ### AI keyboard builder (thin proxy to AI)
 
-`POST /api/ai/keyboard-builder` → AI `POST /api/keyboard-builder/generate`. JWT via existing middleware. Admin adds `X-Service-Token` when forwarding and stores nothing — the browser holds `history` and resends it on each turn. Contract types live in `@vbar/shared` (`types/ai.ts`). AI-side rules: [ai.md](./ai.md#keyboard-builder).
+`POST /api/ai/keyboard-builder` → AI `POST /api/keyboard-builder/generate`. JWT via existing middleware. Admin adds `X-Service-Token` when forwarding and stores nothing — the browser holds `history` and resends it on each turn. Before forwarding, the proxy overwrites `availableSteps` with the live step catalog from `lib/aiBuilderContext.ts` (up to 200 steps including hidden, 15 min in-process TTL). Contract types live in `@vbar/shared` (`types/ai.ts`). AI-side rules: [ai.md](./ai.md#keyboard-builder).
 
-**Request:** `{ description: string, history?: AiChatTurn[], templateButtons?: KeyboardDraftButton[], buttonDefaults?: { TextColor, BgColor, Frame }, currentDraft?: KeyboardDraft }`
+**Request:** `{ description: string, history?: AiChatTurn[], templateButtons?: KeyboardDraftButton[], buttonDefaults?: { TextColor, BgColor, Frame }, currentDraft?: KeyboardDraft, availableSteps?: AvailableStep[] }`
 
 **Response:** `{ data: { draft, missingFields, summary, assistantMessage } }` — `draft` matches `CreateKeyboardInput` (without `DefaultHeight`); blank required values are listed in `missingFields`. Assistant turns in `history` must be the previous `assistantMessage`. `buttonDefaults` is the current Bot Settings button theme (`resolveButtonColors` / `resolveButtonFrame`); unspecified colors/frame on **newly added** buttons use that theme. Buttons already in `currentDraft` / `templateButtons` keep their own colors, frame, and `BgMedia`. A requested background image is `BgMedia` plus `BgMediaType` / `BgMediaScaleType` / `BgLoop`. `currentDraft` is the live form state (may include manual user edits) — when present it is the authoritative base the newest turn refines, taking precedence over drafts in `history` and over `templateButtons`. The admin client sends it whenever the form has a name or at least one button.
 
@@ -347,7 +347,8 @@ Admin proxy: `POST /api/ai/keyboard-builder` (JWT). See [AI keyboard builder (th
     "InputFieldState": "hidden",
     "BgColor": null,
     "Buttons": []
-  }
+  },
+  "availableSteps": [{ "name": "Welcome", "triggers": ["welcome", "start"] }]
 }
 ```
 
@@ -358,6 +359,7 @@ Admin proxy: `POST /api/ai/keyboard-builder` (JWT). See [AI keyboard builder (th
 | `templateButtons` | no | Starting layout (first turn only; ignored when `history` or `currentDraft` is present). |
 | `buttonDefaults` | no | Admin-resolved bot-settings theme (`TextColor`, `BgColor`, `Frame`). |
 | `currentDraft` | no | Live form state (may include manual user edits). Authoritative base for the newest turn — takes precedence over drafts in `history` and over `templateButtons`. |
+| `availableSteps` | no | `{ name, triggers[] }[]`. Admin `POST /api/ai/keyboard-builder` and `/api/ai/carousel-builder` attach the live step list (up to 200, including hidden) before forwarding. Direct AI callers may send it; the AI service does not load steps. |
 
 **Success `200`:**
 
@@ -401,7 +403,7 @@ Error codes: `KEYBOARD_BUILDER_VALIDATION` (400), `UNAUTHORIZED` (401), `KEYBOAR
 
 `POST /api/carousel-builder/generate`. Requires `X-Service-Token` (`AI_SERVICE_TOKEN`). Responses are `ApiResponse<GenerateCarouselResult>`. The service is stateless: the client holds `history` and sends it on every turn. Architecture and normalization rules: [ai.md](./ai.md#carousel-builder).
 
-The admin proxy is documented in the admin carousel-builder plan (Part 2).
+Admin proxy: `POST /api/ai/carousel-builder` (JWT). Same thin-proxy pattern as the keyboard builder: attaches `availableSteps` and forwards `buttonDefaults`. See [admin.md](./admin.md#ai-carousel-builder).
 
 #### `POST /api/carousel-builder/generate`
 
@@ -430,7 +432,8 @@ The admin proxy is documented in the admin carousel-builder plan (Part 2).
     "TextColor": "#000000",
     "BgColor": null,
     "Frame": null
-  }
+  },
+  "availableSteps": [{ "name": "Welcome", "triggers": ["welcome", "start"] }]
 }
 ```
 
@@ -440,7 +443,8 @@ The admin proxy is documented in the admin carousel-builder plan (Part 2).
 | `history` | no | Prior turns, client-held. Assistant `content` must be the previous `assistantMessage`. |
 | `currentDraft` | no | Live form state (may include manual user edits). Authoritative base for the newest turn — takes precedence over drafts in `history`. |
 | `ctaDefaults` | no | Admin-resolved bot-settings CTA theme (`textColor`, `bgColor`, `Frame` via `resolveCtaColors` / `resolveButtonFrame`). Applied only to newly added structured CTAs. |
-| `buttonDefaults` | no | Admin-resolved keyboard button theme (`TextColor`, `BgColor`, `Frame` via `resolveButtonColors` / `resolveButtonFrame`). Applied only to newly added custom Buttons. |
+| `buttonDefaults` | no | Admin-resolved keyboard button theme (`TextColor`, `BgColor`, `Frame` via `resolveButtonColors` / `resolveButtonFrame`). Applied only to newly added custom Buttons. The admin carousel proxy forwards this field. |
+| `availableSteps` | no | `{ name, triggers[] }[]`. Admin `POST /api/ai/keyboard-builder` and `/api/ai/carousel-builder` attach the live step list (up to 200, including hidden) before forwarding. Direct AI callers may send it; the AI service does not load steps. |
 
 **Success `200`:**
 
@@ -599,7 +603,7 @@ Import from `@vbar/shared`:
 - `ApiResponse<T>`, `PaginationParams`, `HealthCheckResponse`
 - `RefreshEvent`, `MessageQueueName`, `MessageQueueEvent`
 - Admin content DTOs: `StepDTO`, `MessageDTO`, `KeyboardDTO`, `ButtonDTO`, `CarouselDTO`, `CarouselCardDTO`, `CarouselCtaDTO`, `User`
-- AI↔admin builder contracts (`types/ai.ts`): `AiChatTurn`, `KeyboardDraft`, `KeyboardDraftButton`, `KeyboardButtonDefaults`, `GenerateKeyboardInput`, `GenerateKeyboardResult`, `CarouselDraft`, `CarouselDraftCard`, `CarouselCtaDefaults`, `GenerateCarouselInput`, `GenerateCarouselResult` — implemented by AI, consumed by admin; not mirrored per service
+- AI↔admin builder contracts (`types/ai.ts`): `AiChatTurn`, `AvailableStep`, `KeyboardDraft`, `KeyboardDraftButton`, `KeyboardButtonDefaults`, `GenerateKeyboardInput`, `GenerateKeyboardResult`, `CarouselDraft`, `CarouselDraftCard`, `CarouselCtaDefaults`, `GenerateCarouselInput`, `GenerateCarouselResult` — implemented by AI, consumed by admin; not mirrored per service
 
 Admin application input types (`CreateMessageInput`, etc.) live on the domain services and are re-exported to the client through `entities/*/model/types.ts`.
 

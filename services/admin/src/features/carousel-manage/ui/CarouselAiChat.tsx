@@ -196,7 +196,7 @@ export const CarouselAiChat = ({
             onChange={(e) => setDescription(e.target.value)}
             rows={3}
             disabled={isGenerating}
-            placeholder="e.g. Carousel with 3 product cards, each with an image, a short description and an Order button"
+            placeholder="e.g. Carousel with 3 product cards, each with an Order button that triggers the Order step"
             aria-label="Carousel description"
             className={TEXTAREA_CLASS}
           />
@@ -226,7 +226,7 @@ export const CarouselAiChat = ({
             onChange={(e) => setRefineText(e.target.value)}
             rows={2}
             disabled={isGenerating}
-            placeholder='Ask for changes, e.g. "add a fourth card for desserts"'
+            placeholder='Ask for changes, e.g. "make the Order button trigger the Welcome step"'
             aria-label="Refine carousel draft"
             className={TEXTAREA_CLASS}
           />

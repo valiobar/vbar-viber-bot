@@ -3,6 +3,7 @@ import type {
   GenerateKeyboardInput,
   KeyboardDraft,
 } from "../../ports/in/BuildKeyboardUseCase";
+import { appendAvailableSteps } from "./availableStepsPrompt";
 
 /**
  * Zod schema for the reduced LLM output shape — passed to generateStructured (Step 4).
@@ -53,6 +54,7 @@ export type LlmKeyboardOutput = z.infer<typeof llmKeyboardOutputSchema>;
  * unknown required values left blank ("" name, "" reply ActionBody).
  * Example 2 (English): open-url button with explicit URL and colors.
  * Example 3 (English): JSON reply payload — isJson true, trigger + a named prop.
+ * Example 5 (English): catalog lookup — exact name or paraphrase → first trigger.
  */
 const KEYBOARD_BUILDER_FEW_SHOT_EXAMPLES = `Examples:
 
@@ -94,7 +96,21 @@ Output:
   {"Columns":6,"Rows":2,"Text":"Pizza","TextColor":"","BgColor":null,"BgMedia":"https://cdn.example.com/pizza.jpg","BgMediaType":"picture","BgMediaScaleType":"fill","BgLoop":true,"ActionType":"none","ActionBody":"","isJson":false,"OpenURLType":"internal"},
   {"Columns":6,"Rows":1,"Text":"Order","TextColor":"","BgColor":null,"BgMedia":null,"BgMediaType":"picture","BgMediaScaleType":"fit","BgLoop":true,"ActionType":"reply","ActionBody":"","isJson":false,"OpenURLType":"internal"}],
  "summary":"Pizza button uses the given image as background (fill). Order has no reply payload."}
-(Note: BgMedia is the URL the user gave. Scale is "fill" because they asked. No image URL → BgMedia is null. Never invent a URL.)`;
+(Note: BgMedia is the URL the user gave. Scale is "fill" because they asked. No image URL → BgMedia is null. Never invent a URL.)
+
+Example 5
+Available steps: [{"name":"Welcome","triggers":["welcome","start"]}]
+Description: "Full-width Start button that triggers the Welcome step"
+Output:
+{"humanReadableName":"","title":null,"InputFieldState":"hidden","BgColor":null,
+ "Buttons":[
+  {"Columns":6,"Rows":1,"Text":"Start","TextColor":"","BgColor":null,"ActionType":"reply","ActionBody":"welcome","isJson":false,"OpenURLType":"internal"}],
+ "summary":"One full-width Start button. Its reply payload is the Welcome step's first trigger."}
+(Note: ActionBody is "welcome" — the first trigger — not the name "Welcome".)
+
+Description: "make Start open the greeting / start screen"
+Output: same ActionBody "welcome", isJson false
+(Note: a paraphrase still maps to the single listed Welcome step.)`;
 
 export const KEYBOARD_BUILDER_SYSTEM_PROMPT = `You are a Viber bot keyboard designer.
 You convert a plain-text description into a Viber keyboard draft.
@@ -105,6 +121,7 @@ Rules:
 - ActionType is one of: reply, open-url, location-picker, share-phone, none.
 - For a plain "reply" button, ActionBody is the exact text sent back by the tap and isJson is false. For "open-url" ActionBody must be a full URL and isJson is false.
 - JSON reply payload (isJson): use this when the user asks for a JSON action body, a JSON trigger, "is JSON", or to set a property/prop on the button (e.g. "2nd button JSON action body that triggers welcome and set click: now as a prop"). Then ActionType stays "reply", isJson is true, and ActionBody is ONE object — not a plain trigger string — of the shape {"trigger":"<step trigger>","<prop>":"<value>",...}. "trigger" is required and names the step to open. Every other key is a user-state property: copy the key and value exactly as stated ("set click: now as a prop" → "click":"now"). Include every named prop; never drop them and never invent extras. Putting only "welcome" in ActionBody is WRONG for this request — that is a plain reply. If they ask for JSON with only a trigger and no props, use {"trigger":"<value>"} and still set isJson true.
+- Available steps (user prompt): when the user says a button should trigger / open / go to a step, pick the single listed step that matches — exact name, a listed trigger, or a clear paraphrase of that name (e.g. "greeting screen" / "начален екран" → Welcome). Set ActionType "reply", isJson false, ActionBody = that step's FIRST trigger. Do not put the human name in ActionBody. If they asked for JSON / props, use isJson true and {"trigger":"<first trigger>", ...props}. If two listed steps fit equally, or none fit, leave ActionBody "" (or {"trigger":""} for JSON) — do not invent a trigger.
 - NEVER invent values the user did not state: if the keyboard name is not given, return "" for humanReadableName; if a plain reply payload or URL is not given, return "" for that ActionBody; if a JSON payload is requested but the trigger is not given, use {"trigger":""} (and still isJson true); if no background-image URL is given, return null for BgMedia — NEVER fabricate an image URL.
 - Colors are hex "#RRGGBB". Only set a color the user explicitly asked for.
 - Button background media: BgMedia is an http(s) URL the user gave, else null. BgMediaType is "picture" or "gif" (use "gif" only when they said gif or the URL ends in .gif). BgMediaScaleType is "fit", "crop", or "fill" — default "fit" unless they ask (fill / crop / fit / cover / contain). BgLoop is true unless they ask not to loop.
@@ -166,6 +183,7 @@ const slimButton = (b: KeyboardDraft["Buttons"][number]) => ({
 
 export function buildKeyboardUserPrompt(input: GenerateKeyboardInput): string {
   const parts = [`Keyboard description:\n${input.description}`];
+  appendAvailableSteps(parts, input.availableSteps);
   if (input.buttonDefaults) {
     parts.push(
       `Button theme defaults (use these only for newly added buttons, unless the description asks for different colors or frame):\n${JSON.stringify(

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { CarouselDraft, GenerateCarouselInput } from "../../ports/in/BuildCarouselUseCase";
+import { appendAvailableSteps } from "./availableStepsPrompt";
 
 const llmButtonFrameSchema = z
   .object({
@@ -122,7 +123,20 @@ Output:
     {"Columns":6,"Rows":6,"Text":"Pizza","TextColor":"","BgColor":null,"BgMedia":"https://cdn.example.com/pizza.jpg","BgMediaType":"picture","BgMediaScaleType":"fill","BgLoop":true,"ActionType":"none","ActionBody":"","isJson":false,"OpenURLType":"internal"},
     {"Columns":6,"Rows":1,"Text":"Order","TextColor":"","BgColor":null,"BgMedia":null,"BgMediaType":"picture","BgMediaScaleType":"fit","BgLoop":true,"ActionType":"reply","ActionBody":"","isJson":false,"OpenURLType":"internal"}]}],
  "summary":"Custom Pizza card: the label button uses the given image as background (fill). Order has no reply payload."}
-(Note: stay in custom mode. A button background image is Buttons[].BgMedia — not card.image. Scale is "fill" because the user asked. No image URL → BgMedia is null. Never invent a URL.)`;
+(Note: stay in custom mode. A button background image is Buttons[].BgMedia — not card.image. Scale is "fill" because the user asked. No image URL → BgMedia is null. Never invent a URL.)
+
+Example 5
+Available steps: [{"name":"Welcome","triggers":["welcome","start"]}]
+Description: "Custom card Pizza with an Order button that triggers the Welcome step"
+Output:
+{"humanReadableName":"","BgColor":null,"ButtonsGroupColumns":6,"ButtonsGroupRows":7,
+ "Cards":[
+  {"mode":"custom","image":null,"title":"","titleColor":"","description":"","descriptionColor":"","textRows":2,"ctaButtons":[],
+   "Buttons":[
+    {"Columns":6,"Rows":6,"Text":"Pizza","TextColor":"","BgColor":null,"ActionType":"none","ActionBody":"","isJson":false,"OpenURLType":"internal"},
+    {"Columns":6,"Rows":1,"Text":"Order","TextColor":"","BgColor":null,"ActionType":"reply","ActionBody":"welcome","isJson":false,"OpenURLType":"internal"}]}],
+ "summary":"Custom Pizza card with an Order button. The Order reply payload is the Welcome step's first trigger."}
+(Note: the Order button has ActionType "reply", ActionBody "welcome", isJson false — the first trigger, not the name "Welcome".)`;
 
 export const CAROUSEL_BUILDER_SYSTEM_PROMPT = `You are a Viber bot rich-media carousel designer.
 You convert a plain-text description into a carousel draft: a horizontal strip of equally sized cards.
@@ -131,6 +145,7 @@ Rules:
 - Every card shares the same grid: ButtonsGroupColumns wide (1-6, keep 6 unless the user asks) and ButtonsGroupRows tall (1-7, keep 7 unless the user asks).
 - DEFAULT MODE IS CUSTOM. New cards are mode "custom" with a free button grid in Buttons. Use mode "structured" only when the user asks for a title + description + CTA layout (or a card-top photo in that layout), or when an existing card in Current carousel state is already structured and they did not ask to convert it. A background image / fill / crop / fit on a custom card or button is NOT structured — stay custom and put the URL on that button's BgMedia.
 - CUSTOM card: Buttons is a keyboard-like grid. Each button: Columns 1-ButtonsGroupColumns, Rows 1-ButtonsGroupRows. Buttons wrap left-to-right. The buttons on a card MUST fill ButtonsGroupRows exactly (used rows = ButtonsGroupRows). Prefer a large label button on top and 1-row action button(s) at the bottom (e.g. 6+1 on a 7-row card). ctaButtons is [] and card-level image is null. ActionType is reply, open-url, or none — never location-picker or share-phone. For "reply" ActionBody is the tap payload; for "open-url" it is a full URL; for "none" it stays "".
+- Available steps (user prompt): when the user says a custom button or structured CTA should trigger / open / go to a step, pick the single listed step (exact name, listed trigger, or a clear paraphrase). Custom reply: ActionType "reply", isJson false, ActionBody = FIRST trigger (JSON / props → isJson true and {"trigger":"<first trigger>", ...}). Structured CTA: actionType "reply", actionBody = that same trigger string (no isJson on CTAs). Never put the human name in the body. If two steps fit equally or none fit, leave the body "".
 - CUSTOM button background media: BgMedia is an http(s) URL the user gave, else null — NEVER invent a URL. BgMediaType is "picture" or "gif" (use "gif" only when they said gif or the URL ends in .gif). BgMediaScaleType is "fit", "crop", or "fill" — default "fit" unless they ask (fill / crop / fit / cover / contain). BgLoop is true unless they ask not to loop. Put the image on the button they named (usually the large top label).
 - STRUCTURED card: optional image at the top (card.image), then title/description (textRows 1-3), then ctaButtons (each one full-width row). Buttons is []. Row budget: when a card has an image, textRows + CTA count must leave at least 1 row for the image.
 - NEVER invent values the user did not state: if the carousel name is not given, return "" for humanReadableName; if a reply payload or URL is not given, return "" for that ActionBody / actionBody; if no image URL is given, return null for image and for each button's BgMedia — NEVER fabricate an image URL.
@@ -197,6 +212,7 @@ const slimCard = (card: CarouselDraft["Cards"][number]) => ({
 
 export function buildCarouselUserPrompt(input: GenerateCarouselInput): string {
   const parts = [`Carousel description:\n${input.description}`];
+  appendAvailableSteps(parts, input.availableSteps);
   if (input.buttonDefaults) {
     parts.push(
       `Custom-card button theme defaults (use these only for newly added custom Buttons, unless the description asks for different colors or frame):\n${JSON.stringify(

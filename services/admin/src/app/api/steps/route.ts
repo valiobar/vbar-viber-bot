@@ -23,6 +23,7 @@ import {
   requireString,
   requireNonEmptyArray,
 } from "@/lib/api/routeHelpers";
+import { invalidateAvailableStepsCache } from "@/lib/aiBuilderContext";
 
 const createStepService = (): StepService =>
   new StepService(
@@ -99,6 +100,7 @@ export async function POST(request: Request) {
 
       const stepDTO = await createStepService().create(input);
       notifyRefresh("steps");
+      invalidateAvailableStepsCache();
       return jsonOk(stepDTO, 201);
     },
     {

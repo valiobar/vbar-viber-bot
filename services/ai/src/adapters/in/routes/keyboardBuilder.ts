@@ -62,8 +62,14 @@ export function createKeyboardBuilderRouter(logger: Logger): Router {
   router.post(
     "/generate",
     asyncHandler(async (req, res) => {
-      const { description, history, templateButtons, buttonDefaults, currentDraft } =
-        req.body ?? {};
+      const {
+        description,
+        history,
+        templateButtons,
+        buttonDefaults,
+        currentDraft,
+        availableSteps,
+      } = req.body ?? {};
       res.json({
         data: await getUseCase().generate({
           description,
@@ -71,6 +77,7 @@ export function createKeyboardBuilderRouter(logger: Logger): Router {
           templateButtons,
           buttonDefaults,
           currentDraft,
+          availableSteps,
         }),
       });
     })

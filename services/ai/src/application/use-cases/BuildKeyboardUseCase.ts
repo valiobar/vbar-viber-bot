@@ -67,6 +67,7 @@ export class BuildKeyboardUseCaseImpl implements BuildKeyboardUseCase {
       currentDraft: input.currentDraft,
       templateButtons: context ? undefined : input.templateButtons,
       buttonDefaults: input.buttonDefaults,
+      availableSteps: input.availableSteps,
     });
 
     // Native structured output with prompt-based fallback — handled inside
@@ -79,7 +80,12 @@ export class BuildKeyboardUseCaseImpl implements BuildKeyboardUseCase {
     );
 
     const existingButtons = input.currentDraft?.Buttons ?? input.templateButtons;
-    const draft = normalizeKeyboardDraft(parsed, input.buttonDefaults, existingButtons);
+    const draft = normalizeKeyboardDraft(
+      parsed,
+      input.buttonDefaults,
+      existingButtons,
+      input.availableSteps
+    );
     const missingFields = computeMissingFields(draft);
     const summary =
       typeof parsed.summary === "string" && parsed.summary.trim()
