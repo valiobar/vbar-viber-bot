@@ -18,12 +18,13 @@ Collection field lists live in [databases.md](./databases.md). HTTP contracts li
 10. [Refresh events](#refresh-events)
 11. [Step usage analytics](#step-usage-analytics)
 12. [Knowledge-base proxy](#knowledge-base-proxy)
-13. [Client (FSD)](#client-fsd)
-14. [App routes](#app-routes)
-15. [Environment](#environment)
-16. [Adding a new CMS domain](#adding-a-new-cms-domain)
-17. [Leftover code](#leftover-code)
-18. [What is not implemented](#what-is-not-implemented)
+13. [AI keyboard builder](#ai-keyboard-builder)
+14. [Client (FSD)](#client-fsd)
+15. [App routes](#app-routes)
+16. [Environment](#environment)
+17. [Adding a new CMS domain](#adding-a-new-cms-domain)
+18. [Leftover code](#leftover-code)
+19. [What is not implemented](#what-is-not-implemented)
 
 ---
 
@@ -33,6 +34,7 @@ Collection field lists live in [databases.md](./databases.md). HTTP contracts li
 - CRUD for **messages**, **keyboards**, **carousels**, **steps**
 - Singleton **bot settings** (the only bot config viber consumes)
 - Knowledge Base UI (`/knowledge-base`) — thin proxy to the AI service
+- Keyboard create page (`/keyboards/new`) — optional “Create with AI” draft (thin proxy to the AI service; saved only through normal Create Keyboard)
 - Analytics page (`/analytics`) — step-usage totals and daily activity
 - Health check
 - Publishes RabbitMQ `viber.refresh` so every viber instance reloads its cache
@@ -53,6 +55,7 @@ Browser (JWT) ──REST──► Admin :3000
                            ├─ RabbitMQ `viber.refresh`  (cache invalidation, outbound)
                            ├─ RabbitMQ `analytics.step-usage`  (inbound consumer)
                            └─ REST + X-Service-Token ──► AI `/api/knowledge-base/*`
+                                                         AI `POST /api/keyboard-builder/generate`
 
 Viber :3001 ──REST + X-Service-Token──► Admin CMS APIs
               (steps, messages, keyboards, carousels, bot-settings)
@@ -90,7 +93,7 @@ Repositories are **concrete Mongo classes**. Do not add a port interface, `ports
 
 **Bot settings** is `BotSettingsService` (`get` / `update`) — singleton, not a list.
 
-**Deviation — knowledge-base:** `app/api/knowledge-base/*` forwards to AI (`lib/aiService.ts` + `X-Service-Token`). No admin repository, no domain service. Justified as a transport adapter: admin owns no KB data.
+**Deviation — AI proxies:** `app/api/knowledge-base/*` and `POST /api/ai/keyboard-builder` forward to AI (`lib/aiService.ts` + `X-Service-Token`). No admin repository, no domain service. Justified as transport adapters: admin owns no KB data and does not persist AI keyboard drafts.
 
 Route helpers (`src/lib/api/routeHelpers.ts`): `withDb`, `jsonOk`, `jsonError`, `noContent`, `parsePagination`, `parseBoolParam`, `notifyRefresh`, `mapError`. Content CRUD routes use these. Auth and bot-settings still use hand-rolled try/catch.
 
@@ -281,9 +284,11 @@ List filters: `hidden`, `type`, `search` (regex on `humanReadableName`).
 Viber reply keyboard. Buttons are embedded.
 
 - `ViberApiValidator` + `lib/Validators.ts` enforce Viber layout (columns 1–6, rows 1–2, 6-column wrap, action types, colors).
+- Reply buttons can set `isJson: true`. `ActionBody` is then a JSON object `{"trigger":"<step trigger>", ...props}`. Viber uses `trigger` to select the step and merges every other key into user state before send. The form checkbox is “Is JSON (trigger + user state payload)”; extra keys are edited as named properties. A JSON body must be an object with a non-empty `trigger`.
 - `isTemplate: true` — starter only. Admin copies `Buttons` into a new keyboard. Not attachable to live steps/messages. Viber fetches `GET /api/keyboards?hidden=false&isTemplate=false`.
 - `isBroadcast` — filter flag; does not change send behavior by itself.
 - Nested `addButton` / `updateButton` / `removeButton` exist on `KeyboardService` but **are not exposed** as API routes. The UI submits the full `Buttons[]` on POST/PUT.
+- Create mode only: “Create with AI” can hydrate the form from an AI draft. See [AI keyboard builder](#ai-keyboard-builder). The draft is never auto-saved.
 
 ### Carousel
 
@@ -482,6 +487,20 @@ Client types (`KnowledgeSource`, `IngestResult`) live in `entities/knowledge-bas
 
 ---
 
+## AI keyboard builder
+
+Create-mode only (`/keyboards/new`). “Create with AI” (next to “Start from template”) opens a full-height right-side panel that squeezes the whole create page (title, form, and preview). Nothing overlays the page. The panel stays mounted when closed or when a button is opened for manual edit, so the conversation survives.
+
+Phases: source choice (scratch or any visible existing keyboard) → description → generated draft. Picking an existing keyboard immediately hydrates the form (name with an ` (AI)` suffix, title, colors, buttons) while the drawer stays open. Every Generate / Refine turn sends the live form state as `currentDraft` (whenever the form has a name or at least one button) — the AI treats it as the authoritative base, so manual form edits (a hand-typed name, a tweaked button) survive the next refinement unless the newest instruction changes them. The client no longer sends `templateButtons`. The form’s “Start from template” select is still limited to `isTemplate` keyboards. Each successful Generate or Refine hydrates the existing `KeyboardForm` state immediately (drawer stays open for more refinements). Required fields the AI left blank are listed only in the chat. The form shows a required-fields banner only after Create / Update Keyboard is clicked while the form is incomplete (any path — AI draft, template, or hand-filled); the form column then scrolls to the top so that banner is visible. Reopening the drawer continues the same conversation (the drawer stays mounted until the page is left). Leaving or reloading the page starts a fresh chat — history is client-held only.
+
+The draft is saved only through the normal Create Keyboard submit. Existing `validate()` still blocks empty names and other required fields. Buttons inherit the current Bot Settings theme (`resolveButtonColors` / `resolveButtonFrame`) unless the description asked for specific colors. A request like “make the 2nd button a JSON action body that triggers welcome and set click: now as a prop” must come back as `isJson: true` and `ActionBody` `{"trigger":"welcome","click":"now"}` — not a plain `"welcome"` reply. AI-side rules: [ai.md](./ai.md#keyboard-builder).
+
+The chat shell is feature-agnostic (`shared/ui/AiChatDrawer` + `shared/lib/useAiChat`) and is intended for future AI builders (next planned: carousel generation). Keyboard-specific phases, the generate call, and auto-apply-to-form live in `features/keyboard-manage` (`KeyboardAiChat`).
+
+Admin proxy: `POST /api/ai/keyboard-builder` → AI `POST /api/keyboard-builder/generate`. JWT via existing middleware; admin adds `X-Service-Token` when forwarding. Same 503 / 502 proxy errors as knowledge-base (`AI_SERVICE_NOT_CONFIGURED` / `AI_SERVICE_UNAVAILABLE`). Contract types (`AiChatTurn`, `KeyboardDraft`, `GenerateKeyboardInput`, `GenerateKeyboardResult`, …) live in `@vbar/shared` (`types/ai.ts`) — not mirrored in admin. AI-side rules: [ai.md](./ai.md#keyboard-builder). HTTP contract: [api.md](./api.md#ai-keyboard-builder-thin-proxy-to-ai).
+
+---
+
 ## Client (FSD)
 
 ### Layers
@@ -493,7 +512,7 @@ Client types (`KnowledgeSource`, `IngestResult`) live in `entities/knowledge-bas
 | `widgets/` | Dashboard shell, side menu, list screens |
 | `features/` | Forms, filters, ingest UI |
 | `entities/` | Client `api/`, `model/types` (re-export domain types), presentational `ui/`, Zustand |
-| `shared/` | `http`, `useResourceList`, Pagination, ErrorMessage, theme. Imports no FSD layer and never `@/domains` |
+| `shared/` | `http`, `useResourceList`, Pagination, ErrorMessage, theme, `AiChatDrawer`, `useAiChat`. Imports no FSD layer and never `@/domains` |
 
 ### Current slices
 
@@ -509,7 +528,7 @@ Client types (`KnowledgeSource`, `IngestResult`) live in `entities/knowledge-bas
 | analytics | `analytics` | — | `step-usage-stats` | `analytics` |
 | dashboard | — | — | `dashboard-layout`, `side-menu` | `dashboard` (`/` → `/settings`) |
 
-List pages use `useResourceList` (pagination, filters, reload). Keyboard and carousel editors can reorder with dnd-kit; order is the array sent on POST/PUT.
+List pages use `useResourceList` (pagination, filters, reload). Keyboard and carousel editors can reorder with dnd-kit; order is the array sent on POST/PUT. Keyboard create (`/keyboards/new`) also exposes “Create with AI”; the edit page does not.
 
 Carousel FSD does **not** import keyboard slices (same-layer imports are forbidden). Button editing is an adapted copy (`CarouselButtonForm`) with carousel row limits.
 

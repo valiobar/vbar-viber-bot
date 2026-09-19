@@ -6,7 +6,7 @@
  * Displays a visual preview of a keyboard with buttons in a phone-like frame
  */
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import {
   DndContext,
@@ -131,6 +131,7 @@ export const KeyboardPreview = ({
   onReorder,
 }: KeyboardPreviewProps) => {
   const [activeId, setActiveId] = useState<string | null>(null);
+  const keyboardScrollRef = useRef<HTMLDivElement>(null);
   const canReorder = Boolean(onReorder) && buttons.length >= 2;
   const buttonIds = buttons.map((button, index) => getButtonId(button, index));
   const sensors = useSensors(
@@ -240,9 +241,15 @@ export const KeyboardPreview = ({
     ? buttons.find((button, index) => getButtonId(button, index) === activeId)
     : undefined;
 
+  useEffect(() => {
+    const el = keyboardScrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [buttons]);
+
   const buttonsGrid = (
     <div
-      className="grid overflow-y-auto"
+      className="grid"
       style={{
         gridTemplateColumns: "repeat(6, 1fr)",
         gridAutoRows: `${ROW_HEIGHT}px`,
@@ -317,7 +324,7 @@ export const KeyboardPreview = ({
 
               {/* Keyboard Container - positioned at bottom, max 45% of screen height */}
               <div
-                className="flex flex-col"
+                className="flex min-h-0 flex-col overflow-hidden"
                 style={{
                   maxHeight: "45%",
                   backgroundColor: bgColor || "#f5f5f5",
@@ -326,10 +333,9 @@ export const KeyboardPreview = ({
                 {/* Input Field (when not hidden) */}
                 {inputFieldState !== "hidden" && (
                   <div
-                    className="bg-white border-t border-gray-200 dark:border-gray-700"
+                    className="shrink-0 border-t border-gray-200 bg-white dark:border-gray-700"
                     style={{
                       height: inputFieldState === "minimized" ? "36px" : "52px",
-                      flexShrink: 0,
                       padding: "8px 12px",
                     }}
                   >
@@ -350,32 +356,41 @@ export const KeyboardPreview = ({
                     </p>
                   </div>
                 )}
-                {buttons.length > 0 && !canReorder && buttonsGrid}
-                {buttons.length > 0 && canReorder && (
-                  <DndContext
-                    sensors={sensors}
-                    collisionDetection={closestCenter}
-                    onDragStart={handleDragStart}
-                    onDragEnd={handleDragEnd}
-                    onDragCancel={handleDragCancel}
+                {buttons.length > 0 && (
+                  <section
+                    ref={keyboardScrollRef}
+                    className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+                    aria-label="Scrollable keyboard buttons"
+                    data-testid="keyboard-preview-scroll"
                   >
-                    <SortableContext
-                      items={buttonIds}
-                      strategy={rectSortingStrategy}
-                    >
-                      {buttonsGrid}
-                    </SortableContext>
-                    <DragOverlay>
-                      {activeButton ? (
-                        <div
-                          style={getButtonStyle(activeButton)}
-                          className="cursor-grabbing opacity-90 shadow-lg"
+                    {!canReorder && buttonsGrid}
+                    {canReorder && (
+                      <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragStart={handleDragStart}
+                        onDragEnd={handleDragEnd}
+                        onDragCancel={handleDragCancel}
+                      >
+                        <SortableContext
+                          items={buttonIds}
+                          strategy={rectSortingStrategy}
                         >
-                          {activeButton.Text || "Button"}
-                        </div>
-                      ) : null}
-                    </DragOverlay>
-                  </DndContext>
+                          {buttonsGrid}
+                        </SortableContext>
+                        <DragOverlay>
+                          {activeButton ? (
+                            <div
+                              style={getButtonStyle(activeButton)}
+                              className="cursor-grabbing opacity-90 shadow-lg"
+                            >
+                              {activeButton.Text || "Button"}
+                            </div>
+                          ) : null}
+                        </DragOverlay>
+                      </DndContext>
+                    )}
+                  </section>
                 )}
               </div>
             </div>

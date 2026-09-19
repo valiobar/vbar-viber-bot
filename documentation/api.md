@@ -24,7 +24,7 @@ Only endpoints and queues that exist in the working tree are documented.
 | Viber platform → Viber | HTTPS webhook | `POST/GET /webhook/viber` |
 | Admin → Viber | RabbitMQ | `viber.refresh` cache invalidation |
 | Viber → Admin | RabbitMQ | `analytics.step-usage` (`StepUsageEvent`) |
-| Admin → AI | REST + `X-Service-Token` | Knowledge-base ingest / sources (`AI_SERVICE_TOKEN`) |
+| Admin → AI | REST + `X-Service-Token` | Knowledge-base ingest / sources and keyboard-builder generate (`AI_SERVICE_TOKEN`) |
 | Viber → AI | gRPC | `AIProcessingService.ProcessMessage` |
 | Viber → Admin | REST | Content fetch with service token |
 
@@ -56,7 +56,7 @@ X-Service-Token: <token>
 
 Configured via `SERVICE_TOKEN`, `ADMIN_SERVICE_TOKEN`, `VIBER_SERVICE_TOKEN`, and `AI_SERVICE_TOKEN` (see `.env.example`).
 
-`AI_SERVICE_TOKEN` must be the same value on admin (outbound proxy) and ai (inbound ingest). A mismatch returns `401 UNAUTHORIZED` from AI; an unset token on either side returns `503`.
+`AI_SERVICE_TOKEN` must be the same value on admin (outbound proxy) and ai (inbound ingest and keyboard-builder). A mismatch returns `401 UNAUTHORIZED` from AI; an unset token on either side returns `503`.
 
 ### Response envelope
 
@@ -168,6 +168,16 @@ Same paths as the AI service under `/api/knowledge-base/*`. JWT via existing mid
 
 Proxy-only error codes (admin, before the call reaches AI): `AI_SERVICE_NOT_CONFIGURED` (503, token unset on admin), `AI_SERVICE_UNAVAILABLE` (502, AI unreachable). AI error codes are passed through unchanged.
 
+### AI keyboard builder (thin proxy to AI)
+
+`POST /api/ai/keyboard-builder` → AI `POST /api/keyboard-builder/generate`. JWT via existing middleware. Admin adds `X-Service-Token` when forwarding and stores nothing — the browser holds `history` and resends it on each turn. Contract types live in `@vbar/shared` (`types/ai.ts`). AI-side rules: [ai.md](./ai.md#keyboard-builder).
+
+**Request:** `{ description: string, history?: AiChatTurn[], templateButtons?: KeyboardDraftButton[], buttonDefaults?: { TextColor, BgColor, Frame }, currentDraft?: KeyboardDraft }`
+
+**Response:** `{ data: { draft, missingFields, summary, assistantMessage } }` — `draft` matches `CreateKeyboardInput` (without `DefaultHeight`); blank required values are listed in `missingFields`. Assistant turns in `history` must be the previous `assistantMessage`. `buttonDefaults` is the current Bot Settings button theme (`resolveButtonColors` / `resolveButtonFrame`); unspecified colors/frame in the draft use that theme. `currentDraft` is the live form state (may include manual user edits) — when present it is the authoritative base the newest turn refines, taking precedence over drafts in `history` and over `templateButtons`. The admin client sends it whenever the form has a name or at least one button.
+
+Same proxy-only error codes as knowledge-base (`AI_SERVICE_NOT_CONFIGURED` / `AI_SERVICE_UNAVAILABLE`). AI error codes are passed through unchanged.
+
 ### Analytics
 
 #### `GET /api/analytics/step-usage`
@@ -255,7 +265,7 @@ Viber events. Requires a public HTTPS URL (`VIBER_BOT_WEBHOOK_URL`).
 
 ## AI Service API
 
-HTTP port **3002** (Compose: localhost-only). Viber message processing is **gRPC**. Knowledge-base ingest is **REST** (`/api/knowledge-base/*`).
+HTTP port **3002** (Compose: localhost-only). Viber message processing is **gRPC**. Knowledge-base ingest (`/api/knowledge-base/*`) and keyboard generation (`POST /api/keyboard-builder/generate`) are **REST**.
 
 ### Health
 
@@ -307,6 +317,85 @@ Admin proxy: the same paths under the admin service `/api/knowledge-base/*` (JWT
 ```
 
 For `.xlsx`, `items[].chunks` equals the number of data rows (header excluded; one row = one chunk). Free-text files still use the character splitter, so `chunks` is not a row count. Limits, row-based chunking, and Maps-link enrichment: [rag.md](./rag.md).
+
+### Keyboard builder (AI service, REST)
+
+`POST /api/keyboard-builder/generate`. Requires `X-Service-Token` (`AI_SERVICE_TOKEN`). Responses are `ApiResponse<GenerateKeyboardResult>`. The service is stateless: the client holds `history` and sends it on every turn. Architecture and normalization rules: [ai.md](./ai.md#keyboard-builder).
+
+Admin proxy: `POST /api/ai/keyboard-builder` (JWT). See [AI keyboard builder (thin proxy to AI)](#ai-keyboard-builder-thin-proxy-to-ai).
+
+#### `POST /api/keyboard-builder/generate`
+
+**Request body:**
+
+```json
+{
+  "description": "Main menu in Bulgarian with buttons Цени, Локации and Контакти",
+  "history": [
+    { "role": "user", "content": "previous description" },
+    { "role": "assistant", "content": "<assistantMessage from the previous response>" }
+  ],
+  "templateButtons": [],
+  "buttonDefaults": {
+    "TextColor": "#000000",
+    "BgColor": null,
+    "Frame": { "BorderWidth": 1, "BorderColor": "#000000", "CornerRadius": 10 }
+  },
+  "currentDraft": {
+    "humanReadableName": "My menu (AI)",
+    "title": null,
+    "InputFieldState": "hidden",
+    "BgColor": null,
+    "Buttons": []
+  }
+}
+```
+
+| Field | Required | Notes |
+|-------|----------|--------|
+| `description` | yes | Newest user message: full description (first turn) or a refinement. Max 4000 characters. |
+| `history` | no | Prior turns, client-held. Assistant `content` must be the previous `assistantMessage`. |
+| `templateButtons` | no | Starting layout (first turn only; ignored when `history` or `currentDraft` is present). |
+| `buttonDefaults` | no | Admin-resolved bot-settings theme (`TextColor`, `BgColor`, `Frame`). |
+| `currentDraft` | no | Live form state (may include manual user edits). Authoritative base for the newest turn — takes precedence over drafts in `history` and over `templateButtons`. |
+
+**Success `200`:**
+
+```json
+{
+  "data": {
+    "draft": {
+      "humanReadableName": "",
+      "title": null,
+      "InputFieldState": "hidden",
+      "BgColor": null,
+      "Buttons": [
+        {
+          "Columns": 2,
+          "Rows": 1,
+          "Text": "Цени",
+          "TextColor": "#000000",
+          "BgColor": null,
+          "ActionType": "reply",
+          "ActionBody": "",
+          "OpenURLType": "internal",
+          "Frame": null
+        }
+      ]
+    },
+    "missingFields": [
+      "Keyboard name (required)",
+      "Button \"Цени\": reply text (ActionBody)"
+    ],
+    "summary": "Клавиатура с 3 бутона…",
+    "assistantMessage": "{\"humanReadableName\":\"\",\"title\":null,…}"
+  }
+}
+```
+
+`draft` matches admin `CreateKeyboardInput` (admin adds `DefaultHeight`). Unknown required values (`humanReadableName`, reply / open-url `ActionBody`) are `""` and listed in `missingFields`. JSON reply buttons set `isJson: true` and `ActionBody` to `{"trigger":"...","<prop>":"..."}`; a missing `trigger` is listed as `JSON trigger (ActionBody.trigger)`. Append `assistantMessage` as the next `history` assistant turn.
+
+Error codes: `KEYBOARD_BUILDER_VALIDATION` (400), `UNAUTHORIZED` (401), `KEYBOARD_BUILDER_BAD_AI_OUTPUT` (502), `KEYBOARD_BUILDER_NOT_CONFIGURED` (503), `KEYBOARD_BUILDER_FAILED` (500).
 
 ### Not implemented (REST)
 
@@ -400,6 +489,7 @@ Import from `@vbar/shared`:
 - `ApiResponse<T>`, `PaginationParams`, `HealthCheckResponse`
 - `RefreshEvent`, `MessageQueueName`, `MessageQueueEvent`
 - Admin content DTOs: `StepDTO`, `MessageDTO`, `KeyboardDTO`, `ButtonDTO`, `CarouselDTO`, `CarouselCardDTO`, `CarouselCtaDTO`, `User`
+- AI↔admin builder contracts (`types/ai.ts`): `AiChatTurn`, `KeyboardDraft`, `KeyboardDraftButton`, `KeyboardButtonDefaults`, `GenerateKeyboardInput`, `GenerateKeyboardResult` — implemented by AI, consumed by admin; not mirrored per service
 
 Admin application input types (`CreateMessageInput`, etc.) live on the domain services and are re-exported to the client through `entities/*/model/types.ts`.
 

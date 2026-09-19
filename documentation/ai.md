@@ -13,16 +13,17 @@ Architecture, runtime behaviour, consumers, and contracts of `services/ai`. Accu
 7. [AI providers](#ai-providers)
 8. [Conversation history](#conversation-history)
 9. [Prompt templates](#prompt-templates)
-10. [Knowledge base and RAG](#knowledge-base-and-rag)
-11. [Consumers](#consumers)
-12. [Contracts](#contracts)
-13. [Configuration](#configuration)
-14. [Storage](#storage)
-15. [Observability and error handling](#observability-and-error-handling)
-16. [Deployment](#deployment)
-17. [Security notes](#security-notes)
-18. [Known gaps](#known-gaps)
-19. [Related documentation](#related-documentation)
+10. [Keyboard builder](#keyboard-builder)
+11. [Knowledge base and RAG](#knowledge-base-and-rag)
+12. [Consumers](#consumers)
+13. [Contracts](#contracts)
+14. [Configuration](#configuration)
+15. [Storage](#storage)
+16. [Observability and error handling](#observability-and-error-handling)
+17. [Deployment](#deployment)
+18. [Security notes](#security-notes)
+19. [Known gaps](#known-gaps)
+20. [Related documentation](#related-documentation)
 
 ## Overview
 
@@ -33,9 +34,9 @@ It exposes two inbound surfaces:
 | Surface | Port | Used by | Purpose |
 |---------|------|---------|---------|
 | gRPC `ai.AIProcessingService` | `50051` (`GRPC_PORT`) | Viber service | `ProcessMessage` — the primary API |
-| HTTP (Express) | `3002` (`PORT`) | Admin service, health checks | `GET /api/health`, `/api/knowledge-base/*` ingest |
+| HTTP (Express) | `3002` (`PORT`) | Admin service, health checks | `GET /api/health`, `/api/knowledge-base/*` ingest, `POST /api/keyboard-builder/generate` |
 
-The service does **not** connect to RabbitMQ, has no REST message-processing endpoint, and does not read admin content (steps, messages, keyboards). It only receives what viber puts in the gRPC request.
+The service does **not** connect to RabbitMQ and has no REST message-processing endpoint. It does not read admin Mongo (steps, messages, keyboards). Viber sends gRPC `ProcessMessage`; admin sends HTTP for ingest and keyboard generation (`description`, optional `history` / `templateButtons` / `buttonDefaults`).
 
 Stack: Node 20, Express, `@grpc/grpc-js`, LangChain (`langchain` + `@langchain/*`), MongoDB via `@vbar/shared/infra`, Chroma for vectors, optional LangSmith tracing.
 
@@ -65,9 +66,9 @@ adapters/in/routes/*        ├─→ application/use-cases/* ─→ ports/out/*
 
 | Layer | Path | Contents |
 |-------|------|----------|
-| Inbound adapters | `src/adapters/in/` | `grpc/server.ts` (ProcessMessage), `routes/health.ts`, `routes/knowledgeBase.ts` |
-| Inbound ports | `src/ports/in/` | `ProcessMessageUseCase`, `IngestKnowledgeUseCase` (also the admin-facing type contract) |
-| Application | `src/application/use-cases/` | `ProcessMessageUseCaseImpl`, `IngestKnowledgeUseCaseImpl` |
+| Inbound adapters | `src/adapters/in/` | `grpc/server.ts` (ProcessMessage), `routes/health.ts`, `routes/knowledgeBase.ts`, `routes/keyboardBuilder.ts` |
+| Inbound ports | `src/ports/in/` | `ProcessMessageUseCase`, `IngestKnowledgeUseCase`, `BuildKeyboardUseCase` (interface only; keyboard-builder contract types live in `@vbar/shared`) |
+| Application | `src/application/use-cases/` | `ProcessMessageUseCaseImpl`, `IngestKnowledgeUseCaseImpl`, `BuildKeyboardUseCaseImpl` |
 | Domain | `src/domains/ai/` | Entities (`MessageRequest`, `MessageResponse`, `ConversationContext`, `AITask`, `PromptTemplate`), value objects (`AIProvider`, `AITaskType`), services (`PromptTemplateService`, `CultureDetectionService`) |
 | Outbound ports | `src/ports/out/` | `AIProviderPort`, `ChainExecutorPort`, `VectorStorePort`, `ConversationRepository`, `PromptTemplateRepository` |
 | Outbound adapters | `src/adapters/out/` | `langchain/` (adapter base, executor, providers, RAG stores), `mongodb/` (two repositories), `ingest/DocumentProcessor` |
@@ -148,7 +149,9 @@ The reasoning strip and the template lookup apply to the simple chain **only**. 
 
 Missing keys throw during `getAIConfig()`, which runs on the first request path that touches config as well as at provider creation.
 
-`LangChainAdapter.generateResponse` builds a `ChatPromptTemplate` of `[optional system] + MessagesPlaceholder("chat_history") + human "{input}"`, runs it through an `LLMChain`, and retries transient failures **3 times with exponential backoff** (1 s, 2 s, 4 s) before rethrowing. Token usage is read from `response_metadata.usage_metadata` when the provider supplies it and is logged only.
+`LangChainAdapter.generateResponse` builds a `ChatPromptTemplate` of `[optional system] + MessagesPlaceholder("chat_history") + human "{input}"`, runs it through an `LLMChain`, and retries transient failures **3 times with exponential backoff** (1 s, 2 s, 4 s) before rethrowing. Token usage is read from `response_metadata.usage_metadata` when the provider supplies it and is logged only. Literal `{` / `}` in the system prompt are escaped before the template is built, so JSON-heavy system prompts (keyboard builder) are treated as text, not f-string variables.
+
+`LangChainAdapter.generateStructured` (on `AIProviderPort`) returns a zod-validated object. It tries the provider's native structured-output API first (`withStructuredOutput`); if that fails (for example DeepSeek thinking mode rejecting `tool_choice`), it falls back to `generateResponse` plus JSON extraction. A zod failure is rethrown with a message containing `"JSON"` so the keyboard-builder route maps it to `502 KEYBOARD_BUILDER_BAD_AI_OUTPUT`.
 
 ## Conversation history
 
@@ -158,7 +161,7 @@ Missing keys throw during `getAIConfig()`, which runs on the first request path 
 { userId, messages: [{ role: "user" | "assistant", content, timestamp }], metadata, createdAt, updatedAt }
 ```
 
-Only the last `CONVERSATION_MAX_HISTORY` messages (default 15) are loaded, stored, and sent to the model. Mongo `$push` uses `$slice: -N` so older messages are dropped on write; reads use the same slice. `LangChainAdapter` also trims via `ConversationContext.getRecentMessages(n)` before building `chat_history`. There is no process-scoped LangChain memory — history is Mongo-only and per request, so multiple AI service replicas stay consistent.
+Only the last `CONVERSATION_MAX_HISTORY` messages (default 15) are loaded, stored, and sent to the model. Mongo `$push` uses `$slice: -N` so older messages are dropped on write; reads use the same slice. `LangChainAdapter` also trims via `ConversationContext.getRecentMessages(n)` before building `chat_history`. There is no process-scoped LangChain memory — history is Mongo-only and per request, so multiple AI service replicas stay consistent. Keyboard-builder generate is the exception: it never reads or writes `conversations`; the client sends `history` and the use case builds a throwaway `ConversationContext`.
 
 `CONVERSATION_MEMORY_TYPE` is parsed and validated in `aiConfig.ts` but unused (`buffer` / `summary` have no effect). History load/save failures never fail the request; they are logged as warnings, so a Mongo outage degrades to stateless answers rather than errors.
 
@@ -172,6 +175,43 @@ Only the last `CONVERSATION_MAX_HISTORY` messages (default 15) are loaded, store
 
 There is no admin UI or API for prompt templates; they are managed directly in Mongo or through the seed script.
 
+## Keyboard builder
+
+Inbound HTTP adapter `routes/keyboardBuilder.ts` over `BuildKeyboardUseCaseImpl`. Service-token middleware matches the knowledge-base / prompts routers: `503 KEYBOARD_BUILDER_NOT_CONFIGURED` when `AI_SERVICE_TOKEN` is unset on the AI service, `401 UNAUTHORIZED` on mismatch. The LLM provider is constructed lazily on the first generate call via `createAIProvider` (`AI_MODEL_PROVIDER`), so missing provider env does not break startup or `/api/health`.
+
+`POST /api/keyboard-builder/generate` takes a free-text description (and optional client-held `history`, `templateButtons`, `buttonDefaults`, `currentDraft`) and returns a normalized draft that matches admin `CreateKeyboardInput` (minus `DefaultHeight`, which admin adds). Admin reaches this endpoint through `POST /api/ai/keyboard-builder` (JWT on admin, `X-Service-Token` when forwarding). UI flow: [admin.md](./admin.md#ai-keyboard-builder). HTTP contract: [api.md](./api.md#ai-keyboard-builder-thin-proxy-to-ai).
+
+```ts
+// request body
+{
+  description: string;                 // required; newest user message (first turn or refinement)
+  history?: { role: "user" | "assistant"; content: string }[];
+  templateButtons?: KeyboardDraftButton[];  // first turn only; ignored when history or currentDraft is present
+  buttonDefaults?: {
+    TextColor: string;
+    BgColor: string | null;
+    Frame: ButtonFrame | null;         // { BorderWidth, BorderColor, CornerRadius }
+  };
+  currentDraft?: KeyboardDraft;        // live form state (may include manual edits) — authoritative base for this turn
+}
+
+// response { data }
+{
+  draft: KeyboardDraft;                // humanReadableName, title, InputFieldState, BgColor, Buttons
+  missingFields: string[];
+  summary: string;
+  assistantMessage: string;            // compact draft JSON — send back as the next history assistant turn
+}
+```
+
+Multi-turn refinement is stateless: the client holds the history and sends it with every call. The use case builds an in-memory `ConversationContext` (synthetic id `keyboard-builder`, never written to Mongo, no process-scoped LangChain memory). Assistant turns must be the `assistantMessage` from the previous response so follow-ups like “make all buttons 6 columns” modify that draft instead of regenerating from scratch. When `currentDraft` is sent, it is injected into the user prompt as the “Current keyboard state” and the system prompt makes it the authoritative base — it wins over any draft JSON in `history`, so manual form edits survive refinements unless the newest message changes them.
+
+The LLM must not invent required business values: unknown `humanReadableName` and unknown reply / open-url `ActionBody` come back as `""` and are listed in `missingFields`. Everything else is clamped or defaulted by `keyboardDraftNormalizer` (columns 1–6, rows 1–2, enums, hex colors). `buttonDefaults` is the admin-resolved bot-settings theme (`resolveButtonColors` / `resolveButtonFrame`); omitted or invalid `TextColor` / `BgColor` / `Frame` fall back to those values, then to `#000000` / `null`. Frame is included in the user prompt and in the LLM zod schema.
+
+**JSON reply payloads (`isJson`):** when the description asks for a JSON action body, a JSON trigger, or to set a property/prop on a button (e.g. “2nd button JSON action body that triggers welcome and set click: now as a prop”), the draft sets `isJson: true` and `ActionBody` to a compact JSON object `{"trigger":"<step trigger>","<prop>":"<value>",...}`. `trigger` selects the step (same as `steps.trigger[]`); every other key is merged into Viber user state before the step is sent. The system prompt and a few-shot example require the full object — a bare `"welcome"` string is a plain reply, not a JSON payload. The LLM may emit `ActionBody` as that object or as a JSON string; the normalizer always stores a string. If `isJson` is true but `ActionBody` is a plain trigger string, the normalizer wraps it as `{"trigger":"..."}`. If `ActionBody` is already an object with `trigger`, `isJson` is inferred even when the model omitted the flag. A JSON button with an empty `trigger` is listed in `missingFields` as `JSON trigger (ActionBody.trigger)`. Runtime: [viber.md](./viber.md#step-routing). Admin editor: [admin.md](./admin.md#keyboard).
+
+Error codes: `KEYBOARD_BUILDER_VALIDATION` (400), `UNAUTHORIZED` (401), `KEYBOARD_BUILDER_BAD_AI_OUTPUT` (502, unusable JSON), `KEYBOARD_BUILDER_NOT_CONFIGURED` (503), `KEYBOARD_BUILDER_FAILED` (500).
+
 ## Knowledge base and RAG
 
 Ingest is an inbound HTTP adapter (`routes/knowledgeBase.ts`) over `IngestKnowledgeUseCaseImpl`. Two middlewares run before anything else: the service-token check (503 when `AI_SERVICE_TOKEN` is unset on the AI service, 401 on mismatch), then the RAG guard (503 when the vector store is `null`).
@@ -184,7 +224,7 @@ Full limits, chunk metadata, and enablement recipes: [rag.md](./rag.md).
 
 ## Consumers
 
-There are exactly two consumers, and neither shares a database with the AI service.
+There are two consumers, and neither shares a database with the AI service. Viber uses gRPC; admin uses REST (knowledge-base ingest and keyboard-builder generate).
 
 ### Viber service — gRPC (message processing)
 
@@ -241,6 +281,10 @@ Caveat: `executeSimpleChain` appends a hard "under 700 characters" instruction, 
 `services/admin/src/app/api/knowledge-base/**` are thin proxies over `forwardToAiService` (`src/lib/aiService.ts`). Each route forwards to `AI_SERVICE_URL` (default `http://localhost:3002`) with an `X-Service-Token` header and passes the AI body and status through unchanged. Admin owns no knowledge-base data.
 
 Proxy-level errors added by admin: `AI_SERVICE_NOT_CONFIGURED` (503, token unset on admin) and `AI_SERVICE_UNAVAILABLE` (502, AI unreachable). `AI_SERVICE_TOKEN` must be identical on both services.
+
+### Admin service — REST (keyboard builder)
+
+Admin is the intended caller of `POST /api/keyboard-builder/generate` (same `X-Service-Token` / `AI_SERVICE_URL` pattern as ingest). The admin proxy and chat UI are documented in the admin keyboard-builder plan; this service only exposes the generate contract. Admin imports the generate types (`GenerateKeyboardInput`, `KeyboardDraft`, `GenerateKeyboardResult`, `AiChatTurn`) from `@vbar/shared` — no per-service mirrors.
 
 ### Not consumers
 
@@ -304,6 +348,14 @@ Knowledge base — all paths require `X-Service-Token`, responses are `ApiRespon
 
 Error codes: `INGEST_NOT_CONFIGURED` / `RAG_DISABLED` (503), `UNAUTHORIZED` (401), `NO_FILES` / `INVALID_URLS` / `INGEST_VALIDATION` (400), `INGEST_FAILED` (500). Outside the knowledge-base router, unhandled errors return `SVC_002` (500) and unknown paths `SVC_001` (404).
 
+Keyboard builder — `X-Service-Token` required, `ApiResponse<GenerateKeyboardResult>`:
+
+| Method | Path | Body | Returns |
+|--------|------|------|---------|
+| `POST` | `/api/keyboard-builder/generate` | `{ description, history?, templateButtons?, buttonDefaults? }` | `GenerateKeyboardResult` |
+
+Error codes: `KEYBOARD_BUILDER_NOT_CONFIGURED` (503), `UNAUTHORIZED` (401), `KEYBOARD_BUILDER_VALIDATION` (400), `KEYBOARD_BUILDER_BAD_AI_OUTPUT` (502), `KEYBOARD_BUILDER_FAILED` (500). See [Keyboard builder](#keyboard-builder).
+
 ### Shared types
 
 The ingest contract lives on the inbound port `src/ports/in/IngestKnowledgeUseCase.ts` — deliberately not in `@vbar/shared`; admin mirrors these shapes in its `entities/knowledge-base` slice.
@@ -323,6 +375,23 @@ interface KnowledgeSource {
 }
 ```
 
+The keyboard-builder contract types live in `@vbar/shared` (`packages/shared/src/types/ai.ts`). The inbound port `src/ports/in/BuildKeyboardUseCase.ts` keeps only the `BuildKeyboardUseCase` interface and re-exports those types. Draft buttons reuse `ButtonDTO` from `@vbar/shared` (minus `id` / timestamps). Admin imports the same types from `@vbar/shared` (no per-service mirrors). The turn shape is `AiChatTurn` so the admin chat hook and the planned carousel-builder contract can reuse it.
+
+```ts
+interface GenerateKeyboardResult {
+  draft: {
+    humanReadableName: string;   // "" when the description did not name the keyboard
+    title: string | null;
+    InputFieldState: InputFieldState;
+    BgColor: string | null;
+    Buttons: KeyboardDraftButton[];
+  };
+  missingFields: string[];
+  summary: string;
+  assistantMessage: string;
+}
+```
+
 ## Configuration
 
 All env parsing and validation is centralised in `src/config/aiConfig.ts` via `ConfigHelper`. Invalid enum values throw at config load.
@@ -339,7 +408,7 @@ All env parsing and validation is centralised in `src/config/aiConfig.ts` via `C
 | `CONVERSATION_MEMORY_TYPE` / `CONVERSATION_MAX_HISTORY` | `buffer` / `15` | Memory type unused; max history limits Mongo and the model prompt |
 | `PROMPT_TEMPLATES_ENABLED` / `PROMPT_TEMPLATE_STORAGE` / `PROMPT_TEMPLATE_DEFAULT` | `true` / `mongodb` / unset | Template storage and custom-chain template |
 | `BULGARIAN_CULTURE_PROMPT_TEMPLATE` | `bulgarian_culture_system` | System-prompt template name for the simple chain |
-| `AI_SERVICE_TOKEN` | unset | Inbound ingest auth; must match admin |
+| `AI_SERVICE_TOKEN` | unset | Inbound ingest and keyboard-builder auth; must match admin |
 | `RAG_*`, `CHROMA_URL`, `INGEST_*` | see [rag.md](./rag.md) | Retrieval and ingest |
 | `LANGSMITH_TRACING` / `LANGSMITH_API_KEY` / `LANGSMITH_PROJECT` / `LANGSMITH_ENDPOINT` | `false` / — | Optional tracing |
 
@@ -380,7 +449,7 @@ Local development: `npm run dev:ai` (tsx watch). Start Chroma with `docker compo
 ## Security notes
 
 - The gRPC server uses `ServerCredentials.createInsecure()` and performs **no authentication**. Anything that can reach port 50051 can spend LLM budget and read nothing but its own answers. Keeping the port off the host bind is the only control today.
-- Ingest routes are protected by a shared static token (`X-Service-Token`), compared with a plain string equality check.
+- Ingest and keyboard-builder routes are protected by a shared static token (`X-Service-Token`), compared with a plain string equality check.
 - User messages are stored in Mongo verbatim and forwarded to whichever provider is configured; there is no redaction or retention policy.
 
 ## Known gaps

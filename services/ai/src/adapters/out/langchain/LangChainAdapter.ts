@@ -12,7 +12,8 @@ import {
   MessagesPlaceholder,
 } from "@langchain/core/prompts";
 import { LLMChain } from "langchain/chains";
-import { HumanMessage, AIMessage, BaseMessage } from "@langchain/core/messages";
+import { HumanMessage, AIMessage, BaseMessage, SystemMessage } from "@langchain/core/messages";
+import { z } from "zod";
 import { AIProviderPort } from "../../../ports/out/AIProviderPort";
 import { AIProvider } from "../../../domains/ai/value-objects";
 import { ConversationContext } from "../../../domains/ai/entities";
@@ -118,9 +119,13 @@ export abstract class LangChainAdapter implements AIProviderPort {
         const promptMessages: Array<[string, string] | MessagesPlaceholder> =
           [];
 
-        // Add system message if provided
+        // Add system message if provided. ChatPromptTemplate parses the
+        // string as an f-string, so literal JSON braces must be escaped.
         if (systemPrompt) {
-          promptMessages.push(["system", systemPrompt]);
+          promptMessages.push([
+            "system",
+            systemPrompt.replace(/\{/g, "{{").replace(/\}/g, "}}"),
+          ]);
         }
 
         // Add conversation history placeholder
@@ -222,6 +227,57 @@ export abstract class LangChainAdapter implements AIProviderPort {
   }
 
   /**
+   * Generate schema-validated structured output.
+   *
+   * Uses the provider's native structured-output mechanism when available
+   * (function calling / JSON mode / Ollama format=json). Falls back to a
+   * prompt-based JSON extraction for models that do not support it.
+   * Always returns a zod-validated value.
+   */
+  public async generateStructured<T>(
+    prompt: string,
+    schema: z.ZodType<T>,
+    context?: ConversationContext,
+    systemPrompt?: string
+  ): Promise<T> {
+    const messages: BaseMessage[] = [];
+    if (systemPrompt) {
+      messages.push(new SystemMessage(systemPrompt));
+    }
+    messages.push(...this.conversationToMessages(context));
+    messages.push(new HumanMessage(prompt));
+
+    let raw: unknown;
+    try {
+      // Native structured output (function calling / JSON mode / Ollama format=json)
+      const structuredModel = this.chatModel.withStructuredOutput(schema);
+      raw = await structuredModel.invoke(messages);
+      this.logger.info("Structured output generated natively", {
+        provider: this.getProviderType(),
+      });
+    } catch (error) {
+      // Model/provider does not support structured output — prompt-based fallback
+      this.logger.warn("Structured output unsupported/failed, falling back to JSON prompt", {
+        provider: this.getProviderType(),
+        error: error instanceof Error ? error.message : String(error),
+      });
+      const text = await this.generateResponse(
+        `${prompt}\n\nIMPORTANT: respond with ONLY the JSON object, no other text.`,
+        context,
+        systemPrompt
+      );
+      raw = extractJsonObject(text);
+    }
+
+    const parsed = schema.safeParse(raw);
+    if (!parsed.success) {
+      // Message contains "JSON" on purpose — route error mapping relies on it (502)
+      throw new Error(`AI returned JSON that does not match the expected schema: ${parsed.error.message}`);
+    }
+    return parsed.data;
+  }
+
+  /**
    * Convert Mongo-loaded conversation context to LangChain messages.
    * Per-request only — never stored on the adapter.
    */
@@ -262,4 +318,14 @@ export abstract class LangChainAdapter implements AIProviderPort {
     messages.push(new HumanMessage(prompt));
     return messages;
   }
+}
+
+// module-scope helper (generic; intentionally mirrors parseLlmKeyboardJson's extraction)
+function extractJsonObject(raw: string): unknown {
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start === -1 || end <= start) {
+    throw new Error("AI response did not contain a JSON object");
+  }
+  return JSON.parse(raw.slice(start, end + 1));
 }

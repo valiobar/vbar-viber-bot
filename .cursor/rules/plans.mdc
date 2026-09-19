@@ -5,6 +5,14 @@ alwaysApply: false
 
 # Implementation Plans Workflow
 
+## Shared Package First (Non-Negotiable)
+
+Cross-service types, utils, and config belong in `@vbar/shared` (`packages/shared/`). Never mirror the same shape in each service.
+
+- **Always check first**: before creating a type, util, or helper, look in `packages/shared/src/types/`, `utils/`, `config/`, and `infra/`. Reuse or extend what is already there.
+- **Always share across services via `@vbar/shared`**: if admin, viber, and/or ai will use the same contract, DTO, util, or config, put it in the shared package. Do not copy types into a port, a feature `types.ts`, or a local util "for now".
+- **Service-local is only for one-service internals**: a type that no other service imports stays in that service. The moment a second service needs it, move it to `@vbar/shared` instead of duplicating.
+
 ## Plan Structure Understanding
 
 Implementation plans typically follow this structure:
@@ -382,8 +390,9 @@ Import from `@vbar/shared` (root barrel) or `@vbar/shared/infra` (Mongo/RabbitMQ
 
    - **`common.ts`**: `BaseEntity`, `ApiResponse`, `PaginationParams`, `HealthCheckResponse`, `RefreshEvent`, queue/event names (`MessageQueueName`, `MessageQueueEvent`)
    - **`admin.ts`**: admin↔viber content DTOs (`StepDTO`, `MessageDTO`, `KeyboardDTO`, `ButtonDTO`, keyboard enums) and `User`
-   - **`index.ts`**: re-exports `common` + `admin`
-   - Content DTOs and `User` live in `admin.ts`; do not add per-service sketch type files for other runtimes
+   - **`ai.ts`**: AI↔admin builder contracts (`AiChatTurn`, `GenerateKeyboardInput`, `KeyboardDraft`, `GenerateKeyboardResult`) — keyboard now, carousel later
+   - **`index.ts`**: re-exports `common` + `admin` + `ai`
+   - Content DTOs and `User` live in `admin.ts`; AI builder contracts live in `ai.ts`; do not add per-service sketch type files for other runtimes
 
 2. **Utilities** (`packages/shared/src/utils/`):
 
@@ -423,7 +432,7 @@ import { createMongoConnection, createQueueChannel } from "@vbar/shared/infra";
 - **DO**: Add new shared types/utilities to `packages/shared/` if used by multiple services
 - **DON'T**: Duplicate types or utilities that already exist in `@vbar/shared`
 - **DON'T**: Add sketch types for runtimes that are not in the three-service stack
-- **DO**: Keep the admin↔viber contract in `types/admin.ts` / `types/common.ts`
+- **DO**: Keep the admin↔viber contract in `types/admin.ts` / `types/common.ts`, and AI↔admin builder contracts in `types/ai.ts`
 
 ### Best Practices
 

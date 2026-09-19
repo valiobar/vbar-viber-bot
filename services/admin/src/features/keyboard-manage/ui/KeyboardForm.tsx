@@ -7,7 +7,7 @@
  * Supports inline button editing, layout preview, and validation.
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import {
   KeyboardPreview,
   listKeyboards,
@@ -23,9 +23,11 @@ import {
   resolveButtonFrame,
   useBotSettingsStore,
 } from "@/entities/bot-settings";
+import type { KeyboardDraft } from "@vbar/shared";
 import { reorderButtons } from "../lib/reorderButtons";
 import { ButtonForm } from "./ButtonForm";
 import { ButtonsList } from "./ButtonsList";
+import { KeyboardAiChat } from "./KeyboardAiChat";
 
 interface KeyboardFormProps {
   /**
@@ -54,6 +56,11 @@ interface KeyboardFormProps {
    * Called with true when entering button edit mode, false when exiting
    */
   onButtonEditModeChange?: (isEditing: boolean) => void;
+
+  /**
+   * Page heading rendered in the squeezed content column (create + AI panel)
+   */
+  heading?: ReactNode;
 }
 
 /**
@@ -90,6 +97,7 @@ export const KeyboardForm = ({
   onCancel,
   isLoading = false,
   onButtonEditModeChange,
+  heading,
 }: KeyboardFormProps) => {
   // Form state
   const [humanReadableName, setHumanReadableName] = useState("");
@@ -102,12 +110,16 @@ export const KeyboardForm = ({
   const [isTemplate, setIsTemplate] = useState(false);
   const [templateId, setTemplateId] = useState("");
   const [templates, setTemplates] = useState<KeyboardDTO[]>([]);
+  const [sourceKeyboards, setSourceKeyboards] = useState<KeyboardDTO[]>([]);
   const [buttons, setButtons] = useState<
     (Omit<ButtonDTO, "id" | "createdAt" | "updatedAt"> & { tempId: string })[]
   >([]);
 
   // UI state
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [showAiChat, setShowAiChat] = useState(false);
+  const [submitMissingFields, setSubmitMissingFields] = useState<string[]>([]);
+  const formColumnRef = useRef<HTMLDivElement>(null);
   const [showButtonForm, setShowButtonForm] = useState(false);
   const [editingButton, setEditingButton] = useState<
     | (Omit<ButtonDTO, "id" | "createdAt" | "updatedAt"> & { tempId: string })
@@ -150,18 +162,16 @@ export const KeyboardForm = ({
     if (initialData) {
       return;
     }
-    const loadTemplates = async () => {
+    const loadKeyboards = async () => {
       try {
-        const data = await listKeyboards(
-          { isTemplate: true, hidden: false },
-          { limit: 100 }
-        );
-        setTemplates(data.keyboards);
+        const data = await listKeyboards({ hidden: false }, { limit: 100 });
+        setSourceKeyboards(data.keyboards);
+        setTemplates(data.keyboards.filter((kb) => kb.isTemplate));
       } catch (err) {
-        console.error("Error fetching keyboard templates:", err);
+        console.error("Error fetching keyboards:", err);
       }
     };
-    void loadTemplates();
+    void loadKeyboards();
   }, [initialData]);
 
   const handleSelectTemplate = (id: string) => {
@@ -191,6 +201,35 @@ export const KeyboardForm = ({
         return { ...fields, tempId: `btn-${Date.now()}-${idx}` };
       })
     );
+  };
+
+  /** Live form state as a draft — the AI chat sends it so manual edits survive refinements. */
+  const currentFormDraft: KeyboardDraft = {
+    humanReadableName,
+    title,
+    InputFieldState: inputFieldState,
+    BgColor: bgColor,
+    Buttons: buttons.map(({ tempId: _tempId, ...fields }) => fields),
+  };
+
+  const hydrateFormFromDraft = (draft: KeyboardDraft) => {
+    setHumanReadableName(draft.humanReadableName);
+    setTitle(draft.title);
+    setInputFieldState(draft.InputFieldState);
+    setBgColor(draft.BgColor);
+    setButtons(
+      draft.Buttons.map((btn, idx) => ({
+        ...btn,
+        tempId: `btn-ai-${Date.now()}-${idx}`,
+      }))
+    );
+    setSubmitMissingFields([]);
+    setErrors({});
+  };
+
+  const scrollFormToTop = () => {
+    formColumnRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   /**
@@ -239,31 +278,46 @@ export const KeyboardForm = ({
   };
 
   /**
-   * Validate form data (keyboard-level validation only)
+   * Validate the whole form. Field errors stay on the inputs; the summary
+   * banner is shown only after Create / Update Keyboard is clicked.
    */
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
-    console.log("validate", humanReadableName, bgColor, buttons);
-    // Validate humanReadableName
+    const summary: string[] = [];
+
     if (!humanReadableName.trim()) {
       newErrors.humanReadableName = "Name is required";
+      summary.push("Keyboard name (required)");
     } else if (humanReadableName.trim().length > 100) {
       newErrors.humanReadableName = "Name must be 100 characters or less";
+      summary.push("Keyboard name must be 100 characters or less");
     }
 
-    // Validate bgColor (if provided, must be valid hex color)
     if (bgColor && !/^#[0-9A-F]{6}$/i.test(bgColor)) {
       newErrors.bgColor = "Valid hex color is required (e.g., #FFFFFF)";
+      summary.push("Keyboard background color must be a valid hex color");
     }
 
-    // Validate buttons array (only check if empty, individual button validation happens on save)
     if (buttons.length === 0) {
       newErrors.buttons = "At least one button is required";
+      summary.push("At least one button is required");
     }
 
-    console.log("newErrors", newErrors);
+    buttons.forEach((button, index) => {
+      const buttonErrors = validateButton(button, index);
+      Object.assign(newErrors, buttonErrors);
+      const label = button.Text ? `"${button.Text}"` : `#${index + 1}`;
+      Object.values(buttonErrors).forEach((message) => {
+        summary.push(`Button ${label}: ${message}`);
+      });
+    });
+
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    setSubmitMissingFields(summary);
+    if (summary.length > 0) {
+      scrollFormToTop();
+    }
+    return summary.length === 0;
   };
 
   /**
@@ -483,9 +537,26 @@ export const KeyboardForm = ({
     return buttons;
   };
 
-  // Show button form if in button form mode
-  if (showButtonForm && editingButton) {
-    return (
+  const aiButtonColors = resolveButtonColors(settings);
+  const isCreateLayout = !initialData;
+
+  return (
+    <div
+      className={
+        isCreateLayout
+          ? "-m-4 -mt-20 flex h-screen md:-m-8 md:-mt-8"
+          : undefined
+      }
+    >
+      <div
+        ref={formColumnRef}
+        className={
+          isCreateLayout
+            ? "min-h-0 min-w-0 flex-1 overflow-y-auto p-4 pt-20 md:p-8 md:pt-8"
+            : "w-full"
+        }
+      >
+        {showButtonForm && editingButton ? (
       <div className="space-y-6">
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
@@ -583,12 +654,26 @@ export const KeyboardForm = ({
           </button>
         </div>
       </div>
-    );
-  }
-
-  // Show keyboard form
-  return (
+        ) : (
+          <>
+    {heading}
     <form onSubmit={handleSubmit} className="space-y-6">
+      {submitMissingFields.length > 0 && (
+        <div
+          role="alert"
+          data-testid="form-missing-fields-notice"
+          className="rounded-md border border-amber-300 bg-amber-50 p-4 text-sm dark:border-amber-700 dark:bg-amber-900/20"
+        >
+          <p className="font-medium text-amber-800 dark:text-amber-200">
+            Complete these required fields:
+          </p>
+          <ul className="mt-1 list-inside list-disc text-amber-700 dark:text-amber-300">
+            {submitMissingFields.map((field) => (
+              <li key={field}>{field}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       {/* Main Content Grid - Form on left, Preview on right */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Left Column - Form Fields */}
@@ -622,6 +707,14 @@ export const KeyboardForm = ({
                       </option>
                     ))}
                   </select>
+                  <button
+                    type="button"
+                    data-testid="ai-chat-open"
+                    onClick={() => setShowAiChat(true)}
+                    className="mt-2 w-full rounded-md border border-blue-600 px-4 py-2 text-sm font-medium text-blue-600 transition-colors hover:bg-blue-50 dark:border-blue-500 dark:text-blue-400 dark:hover:bg-blue-900/20"
+                  >
+                    Create with AI
+                  </button>
                 </div>
               )}
 
@@ -855,6 +948,25 @@ export const KeyboardForm = ({
         </button>
       </div>
     </form>
+          </>
+        )}
+      </div>
+
+      {isCreateLayout && (
+      <KeyboardAiChat
+        isOpen={showAiChat}
+        sourceKeyboards={sourceKeyboards}
+        buttonDefaults={{
+          TextColor: aiButtonColors.TextColor,
+          BgColor: aiButtonColors.BgColor,
+          Frame: resolveButtonFrame(settings),
+        }}
+        currentDraft={currentFormDraft}
+        onApply={hydrateFormFromDraft}
+        onClose={() => setShowAiChat(false)}
+      />
+      )}
+    </div>
   );
 };
 

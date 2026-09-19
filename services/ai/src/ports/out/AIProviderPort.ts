@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { AIProvider } from "../../domains/ai/value-objects";
 import { ConversationContext } from "../../domains/ai/entities";
 
@@ -18,6 +19,18 @@ export interface AIProviderPort {
     context?: ConversationContext,
     systemPrompt?: string
   ): Promise<string>;
+
+  /**
+   * Generate schema-validated structured output. Uses the provider's native
+   * structured-output mechanism when available; falls back to prompt-based
+   * JSON extraction otherwise. Always returns a zod-validated value.
+   */
+  generateStructured<T>(
+    prompt: string,
+    schema: z.ZodType<T>,
+    context?: ConversationContext,
+    systemPrompt?: string
+  ): Promise<T>;
 
   /**
    * Get the type of AI provider this implementation represents
