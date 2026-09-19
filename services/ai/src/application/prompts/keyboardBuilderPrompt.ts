@@ -1,51 +1,8 @@
-import { z } from "zod";
 import type {
   GenerateKeyboardInput,
   KeyboardDraft,
 } from "../../ports/in/BuildKeyboardUseCase";
 import { appendAvailableSteps } from "./availableStepsPrompt";
-
-/**
- * Zod schema for the reduced LLM output shape — passed to generateStructured (Step 4).
- * Deliberately permissive (plain numbers/strings, catch-all enums via string):
- * shape is enforced natively by the provider, business rules by the normalizer (Step 3).
- */
-export const llmKeyboardOutputSchema = z.object({
-  humanReadableName: z.string(), // "" if not stated by the user
-  title: z.string().nullable(),
-  InputFieldState: z.string(), // normalizer validates the enum
-  BgColor: z.string().nullable(),
-  Buttons: z.array(
-    z.object({
-      Columns: z.number(), // normalizer clamps 1-6
-      Rows: z.number(), // normalizer clamps 1-2
-      Text: z.string(),
-      TextColor: z.string(), // normalizer validates hex
-      BgColor: z.string().nullable(),
-      BgMedia: z.string().nullable().optional(), // http(s) URL or null; never invent
-      BgMediaType: z.string().optional(), // picture | gif
-      BgMediaScaleType: z.string().optional(), // fit | crop | fill
-      BgLoop: z.boolean().optional(),
-      ActionType: z.string(), // normalizer validates the enum
-      // string for plain reply/URL; object allowed so a JSON payload is not rejected
-      ActionBody: z.union([z.string(), z.record(z.unknown())]),
-      isJson: z.boolean().optional(), // true → ActionBody is { trigger, ...props }
-      OpenURLType: z.string(),
-      Frame: z
-        .object({
-          BorderWidth: z.number(), // normalizer clamps 0-10
-          BorderColor: z.string(),
-          CornerRadius: z.number(), // normalizer clamps 0-10
-        })
-        .nullable()
-        .optional(), // omit / null → buttonDefaults.Frame
-    })
-  ),
-  summary: z.string(), // 1-2 sentences; system prompt requires the description's language
-});
-
-/** Reduced shape we ask the LLM for; normalizer expands it to KeyboardDraftButton. */
-export type LlmKeyboardOutput = z.infer<typeof llmKeyboardOutputSchema>;
 
 /**
  * Few-shot examples appended to the system prompt (declared first — the

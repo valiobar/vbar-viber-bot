@@ -55,7 +55,14 @@ export class CardFlattener {
   ): ButtonFields[] {
     if (card.mode === "custom") {
       return card.Buttons.map(
-        ({ id: _i, createdAt: _c, updatedAt: _u, ...fields }) => fields
+        ({ id: _i, createdAt: _c, updatedAt: _u, ...fields }) => ({
+          ...fields,
+          // Viber (and mongoose) require a non-empty ActionBody even for none
+          ActionBody:
+            fields.ActionType === "none" && !fields.ActionBody.trim()
+              ? "none"
+              : fields.ActionBody,
+        })
       );
     }
 

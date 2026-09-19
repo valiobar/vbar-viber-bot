@@ -62,15 +62,19 @@ The AI service is the one service in the repo that uses full Ports & Adapters, b
 ```
 adapters/in/grpc/server.ts ─┐
 adapters/in/routes/*        ├─→ application/use-cases/* ─→ ports/out/* ─→ adapters/out/*
-                            ┘         (domain entities)
+                            ┘      │            │
+                                   │            └─→ application/prompts/*  (LLM prompt builders)
+                                   └─→ domains/*  (entities, draft normalizers, trigger resolver)
 ```
 
 | Layer | Path | Contents |
 |-------|------|----------|
 | Inbound adapters | `src/adapters/in/` | `grpc/server.ts` (ProcessMessage), `routes/health.ts`, `routes/knowledgeBase.ts`, `routes/keyboardBuilder.ts`, `routes/carouselBuilder.ts` |
 | Inbound ports | `src/ports/in/` | `ProcessMessageUseCase`, `IngestKnowledgeUseCase`, `BuildKeyboardUseCase`, `BuildCarouselUseCase` (interfaces only; builder contract types live in `@vbar/shared`) |
-| Application | `src/application/use-cases/` | `ProcessMessageUseCaseImpl`, `IngestKnowledgeUseCaseImpl`, `BuildKeyboardUseCaseImpl`, `BuildCarouselUseCaseImpl` |
+| Application | `src/application/use-cases/` | `ProcessMessageUseCaseImpl`, `IngestKnowledgeUseCaseImpl`, `BuildKeyboardUseCaseImpl`, `BuildCarouselUseCaseImpl` (orchestrators only) |
+| Application | `src/application/prompts/` | LLM prompt builders for the keyboard/carousel builders: system prompts + few-shots, user-prompt assembly, history serializers (`keyboardBuilderPrompt`, `carouselBuilderPrompt`, `availableStepsPrompt`) |
 | Domain | `src/domains/ai/` | Entities (`MessageRequest`, `MessageResponse`, `ConversationContext`, `AITask`, `PromptTemplate`), value objects (`AIProvider`, `AITaskType`), services (`PromptTemplateService`, `CultureDetectionService`) |
+| Domain | `src/domains/builder/services/` | Pure draft business rules: `keyboardDraftNormalizer`, `carouselDraftNormalizer`, `normalizerPrimitives`, `stepTriggerResolver`, plus the reduced LLM output Zod schemas (`llmOutputSchemas`) |
 | Outbound ports | `src/ports/out/` | `AIProviderPort`, `ChainExecutorPort`, `VectorStorePort`, `ConversationRepository`, `PromptTemplateRepository` |
 | Outbound adapters | `src/adapters/out/` | `langchain/` (adapter base, executor, providers, RAG stores), `mongodb/` (two repositories), `ingest/DocumentProcessor` |
 | Config | `src/config/` | `aiConfig.ts` (all env parsing/validation), `langsmith.ts` |

@@ -308,8 +308,14 @@ export class Validators {
 
       case "location-picker":
       case "share-phone":
-      case "none":
         // ActionBody may be empty or specific value
+        break;
+
+      case "none":
+        // Viber requires a non-empty ActionBody even for none — default it
+        if (body.trim().length === 0) {
+          return "none";
+        }
         break;
     }
 

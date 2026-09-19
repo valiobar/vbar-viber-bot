@@ -64,6 +64,10 @@ interface KeyboardFormProps {
   heading?: ReactNode;
 }
 
+/** ActionBody is mandatory only for these action types (auto-filled for "none"). */
+const requiresActionBody = (actionType: ButtonDTO["ActionType"]): boolean =>
+  actionType === "reply" || actionType === "open-url";
+
 /**
  * Default button data for new buttons
  */
@@ -258,8 +262,11 @@ export const KeyboardForm = ({
     if (button.Rows < 1 || button.Rows > 3) {
       buttonErrors[`button-${index}-rows`] = "Rows must be between 1 and 3";
     }
-    if (!button.ActionBody.trim()) {
-      buttonErrors[`button-${index}-actionBody`] = "Action body is required";
+    if (requiresActionBody(button.ActionType) && !button.ActionBody.trim()) {
+      buttonErrors[`button-${index}-actionBody`] =
+        button.ActionType === "open-url"
+          ? "URL is required"
+          : "Action body is required";
     } else if (button.isJson && button.ActionType === "reply") {
       try {
         const parsed = JSON.parse(button.ActionBody);

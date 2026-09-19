@@ -1,12 +1,12 @@
-import type { AvailableStep } from "@vbar/shared";
 import type {
+  AvailableStep,
   CarouselCtaDefaults,
   CarouselDraft,
   CarouselDraftCard,
   KeyboardButtonDefaults,
   KeyboardDraftButton,
-} from "../../ports/in/BuildCarouselUseCase";
-import type { LlmCarouselOutput } from "./carouselBuilderPrompt";
+} from "@vbar/shared";
+import type { LlmCarouselOutput } from "./llmOutputSchemas";
 import { resolveReplyActionBody, resolveTriggerValue } from "./stepTriggerResolver";
 import {
   extractJsonObject,
@@ -294,6 +294,10 @@ function normalizeCustomButton(
       isJson: action.isJson,
     };
   }
+  if (actionType === "none" && !action.ActionBody.trim()) {
+    // Viber requires a non-empty ActionBody even for none-buttons
+    action = { ActionBody: "none", isJson: false };
+  }
   const bgMedia = pickBgMedia(b.BgMedia, existing?.BgMedia);
   return {
     Columns: pickClamped(b.Columns, 1, groupColumns, existing?.Columns, groupColumns),
@@ -356,6 +360,10 @@ function normalizeCta(
   let actionBody = pickNonEmptyString(cta.actionBody, existing?.actionBody, "");
   if (actionType === "reply") {
     actionBody = resolveTriggerValue(actionBody, availableSteps);
+  }
+  if (actionType === "none" && !actionBody.trim()) {
+    // Viber requires a non-empty action body even for none-buttons
+    actionBody = "none";
   }
   return {
     text: pickNonEmptyString(cta.text, existing?.text, ""),

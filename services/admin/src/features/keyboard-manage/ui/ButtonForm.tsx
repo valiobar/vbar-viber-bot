@@ -306,9 +306,20 @@ export const ButtonForm = ({ button, index, errors, onUpdate }: ButtonFormProps)
             <select
               id={`button-${index}-actionType`}
               value={button.ActionType}
-              onChange={(e) =>
-                onUpdate({ ActionType: e.target.value as ActionType })
-              }
+              onChange={(e) => {
+                const ActionType = e.target.value as ActionType;
+                if (ActionType === "none") {
+                  // Viber still requires an ActionBody — auto-fill it
+                  onUpdate({ ActionType, ActionBody: "none", isJson: false });
+                } else if (
+                  button.ActionType === "none" &&
+                  button.ActionBody === "none"
+                ) {
+                  onUpdate({ ActionType, ActionBody: "" });
+                } else {
+                  onUpdate({ ActionType });
+                }
+              }}
               className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
             >
               <option value="reply">Reply</option>
@@ -341,14 +352,19 @@ export const ButtonForm = ({ button, index, errors, onUpdate }: ButtonFormProps)
                 htmlFor={`button-${index}-actionBody`}
                 className="block text-sm font-medium text-gray-700 dark:text-gray-300"
               >
-                Action Body <span className="text-red-500">*</span>
+                Action Body
+                {(button.ActionType === "reply" ||
+                  button.ActionType === "open-url") && (
+                  <span className="text-red-500"> *</span>
+                )}
               </label>
               <input
                 type="text"
                 id={`button-${index}-actionBody`}
                 value={button.ActionBody}
                 onChange={(e) => onUpdate({ ActionBody: e.target.value })}
-                className={`mt-1 block w-full rounded-md border px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 dark:bg-gray-700 dark:text-white ${
+                disabled={button.ActionType === "none"}
+                className={`mt-1 block w-full rounded-md border px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-gray-700 dark:text-white ${
                   errors[`button-${index}-actionBody`]
                     ? "border-red-500"
                     : "border-gray-300 dark:border-gray-600"
