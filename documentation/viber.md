@@ -119,6 +119,10 @@ Scripted replies go through `TextMessageHandler` + `StepSender`.
 
 `StepSender` also runs a **custom handler** when `step.customHandler` is set (`application/custom-steps/`). That replaces the normal send path; a successful custom handler still publishes analytics (with `customHandler` set).
 
+**Custom response handlers** (`application/custom-responses/`): when the user is already on a step with `responseHandler` set, `MessageHandler` runs that handler **before** AI and before per-type handlers. Prefixed keyboard taps still go through normal trigger navigation. Names are synced with `CUSTOM_RESPONSE_HANDLER_NAMES` in `@vbar/shared`.
+
+`locationHandler` reads lat/lng from a location message, calls `getNearbyLocations` from `@vbar/shared/locations`, and sends one `rich_media` carousel: up to 3 closest pharmacies (name, address, distance, Google Maps directions via `getDestinationUrl`) plus a **Виж на картата** card that opens the public admin `/locations?lat=&lng=` page. It also attaches the named admin keyboard `"hui"` and a follow-up `Message.Keyboard` so the client replaces the previous keyboard.
+
 **Analytics instrumentation** (`AnalyticsPublisher`): `sendStep` accepts an optional `{ source, trigger? }` context from the call site. Sources:
 
 | Source | Call site | When |
@@ -129,7 +133,7 @@ Scripted replies go through `TextMessageHandler` + `StepSender`.
 
 Not tracked: broadcasts (`BroadcastSender` does not go through `sendStep`) and AI conversation turns while the user stays on the same `isAi` step (no step transition). Publish failures are logged only — they never block or fail the user-visible send.
 
-Non-text message types (picture, video, file, location, contact, sticker, URL) have dedicated handlers that currently **log only**, unless the user is on an AI step (see below).
+Non-text message types (picture, video, file, location, contact, sticker, URL) have dedicated handlers that currently **log only**, unless a custom `responseHandler` handles the message (for example `locationHandler`) or the user is on an AI step (see below).
 
 First message / subscribe: if `bot-settings.welcomeStepId` is set, that step is sent once.
 
@@ -369,7 +373,7 @@ Local: `npm run dev:viber` plus ngrok (or similar) for the webhook. AI must be r
 - No gRPC deadline, retry, or health check of AI.
 - `taskType` is never sent; RAG/simple is entirely an AI-service env decision.
 - Non-text AI inputs are lossy string summaries (URLs, not bytes).
-- Picture / video / file / location / contact / sticker / URL handlers do nothing when the user is **not** on an AI step.
+- Picture / video / file / location / contact / sticker / URL handlers do nothing when the user is **not** on an AI step and no custom `responseHandler` is set (`locationHandler` is the exception for location messages).
 - `DeliveryHandler` does not persist delivery state.
 - Webhook registration failure does not fail startup.
 - Custom step handlers are in-repo code (`custom-steps/`), not CMS-editable logic.

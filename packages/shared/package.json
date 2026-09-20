@@ -16,12 +16,17 @@
     "./infra": {
       "types": "./dist/infra/index.d.ts",
       "default": "./dist/infra/index.js"
+    },
+    "./locations": {
+      "types": "./dist/locations/index.d.ts",
+      "default": "./dist/locations/index.js"
     }
   },
   "typesVersions": {
     "*": {
       "types": ["./dist/types/index.d.ts"],
-      "infra": ["./dist/infra/index.d.ts"]
+      "infra": ["./dist/infra/index.d.ts"],
+      "locations": ["./dist/locations/index.d.ts"]
     }
   },
   "scripts": {
