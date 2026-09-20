@@ -23,7 +23,8 @@
       "@/*": ["./src/*"],
       "@shared/*": ["../../packages/shared/src/*"],
       "@vbar/shared": ["../../packages/shared/dist/index"],
-      "@vbar/shared/infra": ["../../packages/shared/dist/infra/index"]
+      "@vbar/shared/infra": ["../../packages/shared/dist/infra/index"],
+      "@vbar/shared/locations": ["../../packages/shared/dist/locations/index"]
     }
   },
   "include": ["src/**/*"],

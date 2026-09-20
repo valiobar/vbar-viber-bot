@@ -172,6 +172,8 @@ Carousel has no entity class: the repository maps documents ↔ `CarouselDTO` fr
 
 Viber and AI use `@vbar/shared/infra` for Mongo. Admin does **not** — Next.js needs the build guard, seed, and index bootstrap.
 
+The public `/locations` map page and viber `locationHandler` share the pharmacy catalog and `getNearbyLocations` via `@vbar/shared/locations` (not the root barrel). Admin `entities/location` re-exports that subpath. Regenerate `packages/shared/src/locations/locations.json` with `services/admin/scripts/geocode-locations.mjs`.
+
 ### Database `admin_service`
 
 | Collection | What | Shape |

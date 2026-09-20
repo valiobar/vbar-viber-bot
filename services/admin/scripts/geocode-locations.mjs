@@ -16,7 +16,7 @@ const SOURCE =
 
 const OUT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  "../src/entities/location/model/locations.json"
+  "../../../packages/shared/src/locations/locations.json"
 );
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

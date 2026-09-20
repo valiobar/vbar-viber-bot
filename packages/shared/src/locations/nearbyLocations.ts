@@ -1,4 +1,4 @@
-import type { LatLng, NearbyLocationsResult, Location } from "../model/types";
+import type { LatLng, NearbyLocationsResult, Location } from "./types";
 
 export const DEFAULT_RADIUS_KM = 10;
 export const FALLBACK_COUNT = 15;

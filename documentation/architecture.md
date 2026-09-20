@@ -217,12 +217,13 @@ Admin persists consumed events in `admin_service.stepusageevents` (100-day TTL).
 
 ## Shared package
 
-`@vbar/shared` (root barrel) and `@vbar/shared/infra` (Mongo/RabbitMQ helpers — not on the root barrel so Edge middleware can import `ConfigHelper` without mongoose/amqplib).
+`@vbar/shared` (root barrel), `@vbar/shared/infra` (Mongo/RabbitMQ helpers), and `@vbar/shared/locations` (pharmacy catalog + nearby algorithm). Infra and locations are **not** on the root barrel so Next.js Edge middleware can import `ConfigHelper` without mongoose, amqplib, or the locations JSON.
 
 - **Types:** `common.ts` (`ApiResponse`, `PaginationParams`, `HealthCheckResponse`, `RefreshEvent`, `StepUsageEvent`, queue names), `admin.ts` (content DTOs, `User`), and `ai.ts` (AI↔admin builder contract: `AiChatTurn`, `AvailableStep`, `KeyboardDraft`, `GenerateKeyboardInput`, `GenerateKeyboardResult`, … — used by `services/ai` and `services/admin`, not mirrored per service)
 - **Utils:** `Logger` / `ConsoleLogger`, `PathUtils`
 - **Config:** `ConfigHelper`, `EnvironmentConfig`, `resolveRootEnvPath`
 - **Infra:** `createMongoConnection`, `createQueueChannel` — mandated for new connections in viber/ai. Admin `lib/mongodb.ts` stays Next.js-specific.
+- **Locations:** `@vbar/shared/locations` — `Location` / `LatLng` types, `getNearbyLocations` / `haversineKm`, `getDestinationUrl`, and `locations.json`. Admin `/locations` and viber `locationHandler` import this subpath. Regenerate the catalog with `services/admin/scripts/geocode-locations.mjs` (writes `packages/shared/src/locations/locations.json`).
 
 ## Infrastructure
 

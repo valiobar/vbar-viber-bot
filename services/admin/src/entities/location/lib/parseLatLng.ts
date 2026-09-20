@@ -1,4 +1,4 @@
-import type { LatLng } from "../model/types";
+import type { LatLng } from "@vbar/shared/locations";
 
 export const parseLatLng = (
   latRaw: string | null,

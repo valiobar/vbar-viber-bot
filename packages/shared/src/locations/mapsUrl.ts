@@ -1,4 +1,4 @@
-import type { LatLng } from "../model/types";
+import type { LatLng } from "./types";
 
 export const getDestinationUrl = (
   destination: LatLng,
