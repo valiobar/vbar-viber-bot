@@ -27,7 +27,7 @@ import { CustomResponseContext, CustomResponseHandler } from "../types";
 import { KeyboardConverter } from "../../services/KeyboardConverter";
 
 const MIN_API_VERSION = 7;
-const MAIN_KEYBOARD_NAME = "hui";
+const MAIN_KEYBOARD_NAME = "main";
 const CLOSEST_COUNT = 3;
 const CARD_COLUMNS = 6;
 const CARD_ROWS = 6;
