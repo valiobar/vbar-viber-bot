@@ -10,15 +10,16 @@ Runtime for the Viber bot. Accurate against the current working tree. System-wid
 4. [Layering](#layering)
 5. [Webhook and events](#webhook-and-events)
 6. [Step routing](#step-routing)
-7. [Communication with Admin](#communication-with-admin)
-8. [Communication with AI](#communication-with-ai)
-9. [Storage](#storage)
-10. [HTTP API](#http-api)
-11. [Configuration](#configuration)
-12. [Security](#security)
-13. [Deployment](#deployment)
-14. [Known gaps](#known-gaps)
-15. [Related documentation](#related-documentation)
+7. [Broadcasts](#broadcasts)
+8. [Communication with Admin](#communication-with-admin)
+9. [Communication with AI](#communication-with-ai)
+10. [Storage](#storage)
+11. [HTTP API](#http-api)
+12. [Configuration](#configuration)
+13. [Security](#security)
+14. [Deployment](#deployment)
+15. [Known gaps](#known-gaps)
+16. [Related documentation](#related-documentation)
 
 ## Overview
 
@@ -36,8 +37,9 @@ Viber platform
     v
 Viber :3001
     ├─ Mongo `bot`          subscribers + currentStepId
-    ├─ REST + X-Service-Token ──► Admin CMS (steps, messages, keyboards, carousels, bot-settings)
-    ├─ RabbitMQ consume `viber.refresh`  (reload in-memory cache)
+    ├─ REST + X-Service-Token ──► Admin CMS (steps, messages, keyboards, carousels, bot-settings,
+    │                              POST /api/broadcasts/claim, PATCH /api/broadcasts/:id/progress)
+    ├─ RabbitMQ consume `viber.refresh`  (reload in-memory cache, or BroadcastWorker nudge)
     ├─ RabbitMQ publish `analytics.step-usage`  (AnalyticsPublisher)
     └─ gRPC ProcessMessage ──► AI :50051
 ```
@@ -59,7 +61,8 @@ Startup (`initialize()`):
 7. `registerWebhook()` — call Viber’s `setWebhook` with `VIBER_BOT_WEBHOOK_URL`. Failure is logged; the process stays up.
 8. Register event handlers (`Message`, `Subscribe`, `Unsubscribe`, `ConversationStarted`, `Delivery`).
 9. Start `RefreshConsumer` on queue `viber.refresh`.
-10. `app.listen(PORT)`.
+10. Start `BroadcastWorker` (polls admin for due broadcasts).
+11. `app.listen(PORT)`.
 
 A Mongo or RabbitMQ connection failure at startup is fatal (`process.exit(1)`). A failed admin fetch of steps/messages is not — the bot can start with an empty cache.
 
@@ -84,7 +87,7 @@ adapters/out/  AdminServiceClient, AiServiceGrpcClient, MongooseUserRepository, 
 | Layer | Path | Contents |
 |-------|------|----------|
 | Inbound adapters | `src/adapters/in/` | Express routes, webhook middleware, `RefreshConsumer` |
-| Application | `src/application/` | Event handlers, `ViberBotService`, `BotDataService`, `StepSender`, converters, `ViberAiService` |
+| Application | `src/application/` | Event handlers, `ViberBotService`, `BotDataService`, `StepSender`, converters, `ViberAiService`, `BroadcastWorker`, `BroadcastSender` |
 | Domain | `src/domains/user/` | `ViberUser` entity |
 | Outbound ports | `src/ports/out/` | `IAdminServiceClient`, `IAiServiceClient`, `IUserRepository` |
 | Outbound adapters | `src/adapters/out/` | Admin REST client, `grpc/AiServiceGrpcClient`, mongoose user model/repo, `AnalyticsPublisher` |
@@ -94,7 +97,7 @@ Wiring is in `index.ts`: construct the gRPC client, construct `MessageHandler` w
 
 ## Webhook and events
 
-Viber calls `POST /webhook/viber`. The raw body is preserved for HMAC signature checks (`X-Viber-Content-Signature`, secret = bot token). The `viber-bot` middleware then dispatches to registered handlers.
+Viber calls `POST /webhook/viber`. The raw body is preserved on that path. `verifyWebhookSignature` exists (`adapters/in/middleware/webhookSignature.ts`) but is **not mounted** on POST — the `viber-bot` middleware in `index.ts` dispatches events. Treat HMAC as unused unless you wire that middleware back in.
 
 | Event | Handler | What it does |
 |-------|---------|--------------|
@@ -121,7 +124,7 @@ Scripted replies go through `TextMessageHandler` + `StepSender`.
 
 **Custom response handlers** (`application/custom-responses/`): when the user is already on a step with `responseHandler` set, `MessageHandler` runs that handler **before** AI and before per-type handlers. Prefixed keyboard taps still go through normal trigger navigation. Names are synced with `CUSTOM_RESPONSE_HANDLER_NAMES` in `@vbar/shared`.
 
-`locationHandler` reads lat/lng from a location message, calls `getNearbyLocations` from `@vbar/shared/locations`, and sends one `rich_media` carousel: up to 3 closest pharmacies (name, address, distance, Google Maps directions via `getDestinationUrl`) plus a **Виж на картата** card that opens the public admin `/locations?lat=&lng=` page. It also attaches the named admin keyboard `"hui"` and a follow-up `Message.Keyboard` so the client replaces the previous keyboard.
+`locationHandler` reads lat/lng from a location message, calls `getNearbyLocations` from `@vbar/shared/locations`, and sends one `rich_media` carousel: up to 3 closest pharmacies (name, address, distance, Google Maps directions via `getDestinationUrl`) plus a **Виж всички** card that opens the public admin `/locations?lat=&lng=` page (internal browser `fullscreen-portrait`). It attaches the named admin keyboard `"main"` and a follow-up `Message.Keyboard` so the client replaces the previous keyboard. `BotDataService` also exposes `getStepByName` / `getMessageByName` / `getKeyboardByName` / `getCarouselByName` for other custom handlers.
 
 **Analytics instrumentation** (`AnalyticsPublisher`): `sendStep` accepts an optional `{ source, trigger? }` context from the call site. Sources:
 
@@ -137,6 +140,29 @@ Non-text message types (picture, video, file, location, contact, sticker, URL) h
 
 First message / subscribe: if `bot-settings.welcomeStepId` is set, that step is sent once.
 
+## Broadcasts
+
+`BroadcastWorker` (`application/services/BroadcastWorker.ts`) + `BroadcastSender` send a cached step to many recipients via Viber’s `pa/broadcast_message`. They do **not** go through `StepSender`, so no `StepUsageEvent` is published.
+
+```
+Admin POST/PUT broadcast → notifyRefresh("broadcasts")
+  → RabbitMQ viber.refresh (dataType: "broadcasts")
+  → RefreshConsumer.triggerPoll()  OR  BroadcastWorker timer
+  → POST /api/broadcasts/claim { instanceId }
+  → BroadcastSender.buildRawMessages(stepId)  (same resolution as StepSender)
+  → POST https://chatapi.viber.com/pa/broadcast_message  (batches)
+  → PATCH /api/broadcasts/:id/progress  (heartbeat / finished / failed)
+```
+
+- One broadcast at a time per process. `instanceId` is `hostname-pid-uuid`.
+- Recipients: `sendToAll` pages subscribed users (`findSubscribedViberIdsAfter` + `lastProcessedId` cursor) or the remaining `testViberIds`.
+- Batch size / pause: `BROADCAST_USERS_PER_BATCH` (default 300) / `BROADCAST_BATCH_INTERVAL_MS` (default 600). Poll interval: `BROADCAST_POLL_INTERVAL_MS` (default 30000).
+- A refresh event with `dataType: "broadcasts"` only nudges the worker — it does not reload the content cache. All instances may poll; the atomic claim makes that harmless.
+- Stale `sending` locks are reclaimed by admin (`BROADCAST_STALE_MS`). Lock loss on progress aborts the send.
+- The step must already be in the in-memory cache (visible, not hidden). Admin rejects hidden steps on create/update.
+
+Admin contract: [api.md](./api.md#broadcasts).
+
 ## Communication with Admin
 
 Outbound adapter: `AdminServiceClient` implementing `IAdminServiceClient`.
@@ -146,14 +172,16 @@ Outbound adapter: `AdminServiceClient` implementing `IAdminServiceClient`.
 | Bot settings | `GET /api/bot-settings` |
 | Steps | `GET /api/steps` (non-hidden) |
 | Messages | `GET /api/messages` |
-| Keyboards | `GET /api/keyboards` |
-| Carousels | `GET /api/carousels` |
+| Keyboards | `GET /api/keyboards?hidden=false&isTemplate=false` |
+| Carousels | `GET /api/carousels?hidden=false&isTemplate=false` |
+| Claim broadcast | `POST /api/broadcasts/claim` `{ instanceId }` |
+| Broadcast progress | `PATCH /api/broadcasts/:id/progress` |
 
 Auth: `X-Service-Token`. Viber sends `ADMIN_SERVICE_TOKEN`, then `VIBER_SERVICE_TOKEN`, then `SERVICE_TOKEN`. Admin accept-lists those plus `AI_SERVICE_TOKEN`.
 
 `BotDataService` holds the result in memory (maps by id and by trigger). Fetch order: steps → messages + keyboards in parallel → carousels (after messages, because rich-media content references carousel IDs).
 
-`RefreshConsumer` binds queue `viber.refresh` and calls `refreshAllData()` so every instance reloads after an admin save. Viber never writes to `admin_service` Mongo.
+`RefreshConsumer` binds queue `viber.refresh`. Content events call `refreshAllData()` so every instance reloads after an admin save. `dataType: "broadcasts"` only calls `BroadcastWorker.triggerPoll()`. Viber never writes to `admin_service` Mongo except through the claim / progress APIs.
 
 `AnalyticsPublisher` publishes persistent `StepUsageEvent` messages to the `viber-bot` topic exchange with routing key `analytics.step-usage`. It asserts and binds the durable queue on first publish so events are retained if admin’s consumer is not yet running.
 
@@ -346,12 +374,16 @@ Root `.env` (Compose and `deploy.sh`). Relevant keys:
 | `ADMIN_SERVICE_TOKEN` / `VIBER_SERVICE_TOKEN` / `SERVICE_TOKEN` | Token sent to admin |
 | `AI_SERVICE_GRPC_HOST` / `AI_SERVICE_GRPC_PORT` | AI gRPC (`ai` / `50051` in Compose) |
 | `RATE_LIMIT_*` | Optional; webhook default 1000 req/min |
+| `BROADCAST_POLL_INTERVAL_MS` | Worker poll (default `30000`) |
+| `BROADCAST_USERS_PER_BATCH` | Viber broadcast batch size (default `300`) |
+| `BROADCAST_BATCH_INTERVAL_MS` | Pause between batches (default `600`) |
+| `NEXT_PUBLIC_APP_URL` / `PUBLIC_URL` | Public admin origin for `locationHandler` map links (`/locations?lat=&lng=`) |
 
-`AI_SERVICE_URL` and `AI_SERVICE_TOKEN` are **not** used by this service.
+`AI_SERVICE_URL` and `AI_SERVICE_TOKEN` are **not** used by this service. Compose sets a default `AI_THINKING_GIF_URL` on the `viber` container if the env var is omitted.
 
 ## Security
 
-- Webhook HMAC (`verifyWebhookSignature`) on the raw body.
+- Webhook HMAC helper exists but is **not applied** on POST today (`viber-bot` middleware only).
 - Layered rate limits (general, health, webhook).
 - Service token on **outbound** admin calls only.
 - AI gRPC is unauthenticated; do not publish `50051`.
@@ -376,6 +408,7 @@ Local: `npm run dev:viber` plus ngrok (or similar) for the webhook. AI must be r
 - Picture / video / file / location / contact / sticker / URL handlers do nothing when the user is **not** on an AI step and no custom `responseHandler` is set (`locationHandler` is the exception for location messages).
 - `DeliveryHandler` does not persist delivery state.
 - Webhook registration failure does not fail startup.
+- `verifyWebhookSignature` is not mounted on POST `/webhook/viber` (`viber-bot` middleware only).
 - Custom step handlers are in-repo code (`custom-steps/`), not CMS-editable logic.
 
 ## Related documentation

@@ -15,7 +15,7 @@ flowchart TB
 
     subgraph Stores["Stores"]
         Mongo[(MongoDB<br/>admin_service / bot / ai)]
-        RabbitMQ[RabbitMQ<br/>viber.refresh]
+        RabbitMQ[RabbitMQ<br/>viber.refresh<br/>analytics.step-usage]
         Chroma[(Chroma RAG)]
     end
 
@@ -37,7 +37,10 @@ flowchart TB
     AdminUser -->|A login / CMS CRUD| Admin
     Admin -->|B write content| Mongo
     Admin -->|C publish RefreshEvent| RabbitMQ
-    RabbitMQ -->|D invalidate cache| Viber
+    RabbitMQ -->|D invalidate cache or nudge broadcast| Viber
+    Viber -->|E StepUsageEvent| RabbitMQ
+    RabbitMQ -->|F persist analytics| Admin
+    Viber -->|G claim / progress| Admin
 
     classDef svc fill:#4ECDC4,stroke:#333,stroke-width:2px,color:#000
     classDef db fill:#95E1D3,stroke:#333,stroke-width:2px,color:#000

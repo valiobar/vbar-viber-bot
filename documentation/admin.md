@@ -18,27 +18,33 @@ Collection field lists live in [databases.md](./databases.md). HTTP contracts li
 10. [Refresh events](#refresh-events)
 11. [Step usage analytics](#step-usage-analytics)
 12. [Knowledge-base proxy](#knowledge-base-proxy)
-13. [AI keyboard builder](#ai-keyboard-builder)
-14. [AI carousel builder](#ai-carousel-builder)
-15. [Client (FSD)](#client-fsd)
-16. [App routes](#app-routes)
-17. [Environment](#environment)
-18. [Adding a new CMS domain](#adding-a-new-cms-domain)
-19. [Leftover code](#leftover-code)
-20. [What is not implemented](#what-is-not-implemented)
+13. [Prompts proxy](#prompts-proxy)
+14. [Broadcasts](#broadcasts)
+15. [Locations map](#locations-map)
+16. [AI keyboard builder](#ai-keyboard-builder)
+17. [AI carousel builder](#ai-carousel-builder)
+18. [Client (FSD)](#client-fsd)
+19. [App routes](#app-routes)
+20. [Environment](#environment)
+21. [Adding a new CMS domain](#adding-a-new-cms-domain)
+22. [Leftover code](#leftover-code)
+23. [What is not implemented](#what-is-not-implemented)
 
 ---
 
 ## What it does
 
 - JWT login / refresh / logout for dashboard users
-- CRUD for **messages**, **keyboards**, **carousels**, **steps**
+- CRUD for **messages**, **keyboards**, **carousels**, **steps**, **broadcasts**
 - Singleton **bot settings** (the only bot config viber consumes)
 - Knowledge Base UI (`/knowledge-base`) — thin proxy to the AI service
+- Prompts UI (`/prompts`) — thin proxy to AI prompt-template CRUD
+- Broadcasts UI (`/broadcasts`) — schedule a step send; viber claims and reports progress
 - Keyboard create page (`/keyboards/new`) — optional “Create with AI” draft (thin proxy to the AI service; saved only through normal Create Keyboard)
 - Analytics page (`/analytics`) — step-usage totals and daily activity
+- Public locations map (`/locations`) — pharmacy catalog from `@vbar/shared/locations` (no JWT)
 - Health check
-- Publishes RabbitMQ `viber.refresh` so every viber instance reloads its cache
+- Publishes RabbitMQ `viber.refresh` so every viber instance reloads its cache (or polls broadcasts)
 - Consumes RabbitMQ `analytics.step-usage` and persists events in `stepusageevents`
 
 It is **one bot per deployment**. Documents have no `botId`. Leftover `botId` fields on old documents are ignored.
@@ -56,15 +62,17 @@ Browser (JWT) ──REST──► Admin :3000
                            ├─ RabbitMQ `viber.refresh`  (cache invalidation, outbound)
                            ├─ RabbitMQ `analytics.step-usage`  (inbound consumer)
                            └─ REST + X-Service-Token ──► AI `/api/knowledge-base/*`
+                                                         AI `/api/prompts/*`
                                                          AI `POST /api/keyboard-builder/generate`
                                                          AI `POST /api/carousel-builder/generate`
 
 Viber :3001 ──REST + X-Service-Token──► Admin CMS APIs
-              (steps, messages, keyboards, carousels, bot-settings)
+              (steps, messages, keyboards, carousels, bot-settings,
+               POST /api/broadcasts/claim, PATCH /api/broadcasts/:id/progress)
 Viber :3001 ──RabbitMQ analytics.step-usage──► Admin consumer
 ```
 
-Admin owns the **source of truth** for conversation content. Viber owns **runtime** (subscribers, current step) in the `bot` database. AI owns **chat history / prompts** in `ai` and **RAG vectors** in Chroma. Admin does not query those stores.
+Admin owns the **source of truth** for conversation content and broadcast jobs. Viber owns **runtime** (subscribers, current step) in the `bot` database. AI owns **chat history / prompts** in `ai` and **RAG vectors** in Chroma. Admin does not query those stores — prompt CRUD is proxied.
 
 ---
 
@@ -81,7 +89,7 @@ app/api/messages/route.ts
         → MessageModel (mongoose)
 ```
 
-Same shape for keyboards, carousels, steps, bot-settings, auth, and analytics.
+Same shape for keyboards, carousels, steps, broadcasts, bot-settings, auth, and analytics.
 
 | Layer | Lives in | Allowed to do | Must not do |
 |-------|----------|---------------|-------------|
@@ -95,7 +103,7 @@ Repositories are **concrete Mongo classes**. Do not add a port interface, `ports
 
 **Bot settings** is `BotSettingsService` (`get` / `update`) — singleton, not a list.
 
-**Deviation — AI proxies:** `app/api/knowledge-base/*`, `POST /api/ai/keyboard-builder`, and `POST /api/ai/carousel-builder` forward to AI (`lib/aiService.ts` + `X-Service-Token`). Keyboard / carousel proxies attach `availableSteps` from `lib/aiBuilderContext.ts` (StepService.list behind a 15 min in-process TTL) and still persist nothing. No admin AI-builder domain. Justified as transport adapters: admin owns no KB data and does not persist AI drafts.
+**Deviation — AI proxies:** `app/api/knowledge-base/*`, `app/api/prompts/*`, `POST /api/ai/keyboard-builder`, and `POST /api/ai/carousel-builder` forward to AI (`lib/aiService.ts` + `X-Service-Token`). Keyboard / carousel proxies attach `availableSteps` from `lib/aiBuilderContext.ts` (StepService.list behind a 15 min in-process TTL) and still persist nothing. No admin AI-builder or prompt domain. Justified as transport adapters: admin owns no KB data and does not persist prompts or AI drafts.
 
 Route helpers (`src/lib/api/routeHelpers.ts`): `withDb`, `jsonOk`, `jsonError`, `noContent`, `parsePagination`, `parseBoolParam`, `notifyRefresh`, `mapError`. Content CRUD routes use these. Auth and bot-settings still use hand-rolled try/catch.
 
@@ -117,7 +125,7 @@ Do not recreate root `components/`, `store/`, or `types/` folders for new work. 
 
 Full hexagonal (ports + adapters + use-cases) is reserved for boundaries with **multiple real implementations** (for example `AIProviderPort` in the AI service). Admin CMS has one Mongo implementation and CRUD-shaped rules. Extra interfaces add files without changing behavior.
 
-Older `domains/*/ports/` and `domains/*/application/use-cases/` folders still exist on disk. **Live routes do not import them.** See [Leftover code](#leftover-code).
+There is no leftover hexagonal `ports/` / `use-cases/` tree under `domains/`. New server logic goes on `*Service`. See [Leftover code](#leftover-code).
 
 ---
 
@@ -184,6 +192,7 @@ The public `/locations` map page and viber `locationHandler` share the pharmacy 
 | `keyboards` | Reply keyboards | Buttons **embedded** in `Buttons[]` |
 | `carousels` | Rich-media carousels | `Cards[]` + computed `Buttons[]` embedded |
 | `steps` | Conversation nodes | `content[]` and `keyboard` are **ObjectId refs** |
+| `broadcasts` | Scheduled / in-flight step sends | `stepId` ObjectId; lock + progress fields for viber workers |
 | `botsettings` | Singleton bot config | One document; `findOne()` / upsert |
 | `stepusageevents` | Raw step executions from viber | One document per send; 100-day TTL |
 
@@ -224,8 +233,14 @@ botsettings (singleton)
 steps
   ├── trigger[]                    # inbound user text that selects this step
   ├── isAi                         # if true, viber also calls AI
-  ├── content[] ──────────────────► messages._id   (ordered)
+  ├── aiPromptName?                # optional AI prompt_templates.name
+  ├── customHandler?               # replaces normal send (in-repo viber handler)
+  ├── responseHandler?             # inbound reply handler (any message type)
+  ├── content[] ──────────────────► messages._id   (ordered; optional if customHandler)
   └── keyboard? ──────────────────► keyboards._id  (optional step keyboard)
+
+broadcasts
+  └── stepId ─────────────────────► steps._id      (must not be hidden)
 
 messages
   ├── type "text" | "url" | ... | "keyboard" | "rich-media"
@@ -313,6 +328,8 @@ Forbidden in carousel context: `location-picker`, `share-phone`. CTAs are `reply
 
 Defaults: `ButtonsGroupColumns = 6`, `ButtonsGroupRows = 7`. Button `Rows` may be 1–7 (keyboards stay capped at 2 via `createButtonSchema(2)`).
 
+`isTemplate: true` — starter only, same idea as keyboard templates. Viber fetches `GET /api/carousels?hidden=false&isTemplate=false`.
+
 ### Step
 
 A conversation node.
@@ -321,6 +338,9 @@ A conversation node.
 - `content[]` — at least one message ObjectId; order is send order. Create/update checks that every ID exists.
 - `keyboard` — optional keyboard ObjectId; validated if set.
 - `isAi` — viber sends the user text to the AI service for this step.
+- `aiPromptName` — optional AI `prompt_templates.name` (max 64). Null = the active prompt for the selected chain. The Step form loads prompts from `/api/prompts` when `isAi` is on.
+- `customHandler` — optional name from `CUSTOM_STEP_HANDLER_NAMES` (`"example"` today). Replaces the normal send path. `content` may be empty when set.
+- `responseHandler` — optional name from `CUSTOM_RESPONSE_HANDLER_NAMES` (`"example"` \| `"locationHandler"`). Viber runs it on the user’s reply before AI / type handlers.
 
 List filters: `hidden`, `isAi`, `search`, `trigger` (exact match in the array). `StepService.findByTrigger()` exists; the public API is `GET /api/steps?trigger=...`.
 
@@ -328,7 +348,7 @@ List filters: `hidden`, `isAi`, `search`, `trigger` (exact match in the array). 
 
 Singleton. `GET` returns **404 until the first `PUT`**, which creates the document with defaults (`botName: "Bot"`, generated 14-character `buttonsPrefix` ending in `-`).
 
-Fields viber cares about: `botName`, `botViberName`, `avatarURL`, `status`, `buttonsBackground`, `buttonsTextColor`, `buttonsPrefix`, `welcomeStepId`, `GAKey`.
+Fields viber cares about: `botName`, `botViberName`, `avatarURL`, `status`, `buttonsBackground`, `buttonsTextColor`, `buttonsFrame`, `buttonsPrefix`, `welcomeStepId`, `GAKey`. `buttonsFrame` (`BorderWidth` / `BorderColor` / `CornerRadius`) is the default Viber button frame used by keyboard / carousel forms and the AI builders.
 
 `welcomeStepId` must reference an existing step when set.
 
@@ -343,6 +363,10 @@ Read-only aggregates over `stepusageevents`. No CMS mutations, no `notifyRefresh
 - Default range when the route omits dates: last 30 days.
 
 Route: `GET /api/analytics/step-usage`.
+
+### Broadcast
+
+**Service:** `BroadcastService` — `list` / `get` / `create` / `update` / `cancel` / `claim` / `reportProgress`. See [Broadcasts](#broadcasts).
 
 ---
 
@@ -377,7 +401,7 @@ Accepted env values: `SERVICE_TOKEN`, `ADMIN_SERVICE_TOKEN`, `VIBER_SERVICE_TOKE
 
 ### Public vs protected
 
-**Public:** `/login`, `/api/auth/login`, `/api/auth/refresh`, `/api/health`.
+**Public:** `/login`, `/locations`, `/api/auth/login`, `/api/auth/refresh`, `/api/health`.
 
 **API (`/api/*`):** service token first, else JWT from `Authorization: Bearer` or cookie → 401 JSON (`AUTH_001`).
 
@@ -395,9 +419,9 @@ Envelope (`ApiResponse<T>` from `@vbar/shared`):
 { data?: T; error?: { code, message, details? }; meta?: { page, limit, total } }
 ```
 
-Pagination query: `page` (default 1), `limit` (default 10, max 100).
+Pagination query: `page` (default 1), `limit` (default 10, max 100). List handlers return `{ items, total, page, limit, totalPages }` **inside** `data`; `ApiResponse.meta` is unused.
 
-Deletes return **204** (`noContent()`).
+Deletes return **204** (`noContent()`), except broadcast cancel (`DELETE /api/broadcasts/:id` → 200 + DTO).
 
 | Resource | List / create | By id | Mutation refresh |
 |----------|---------------|-------|------------------|
@@ -405,9 +429,10 @@ Deletes return **204** (`noContent()`).
 | Messages | `GET/POST /api/messages` | `GET/PUT/DELETE /api/messages/:id` | `messages` |
 | Keyboards | `GET/POST /api/keyboards` | `GET/PUT/DELETE /api/keyboards/:id` | `keyboards` |
 | Carousels | `GET/POST /api/carousels` | `GET/PUT/DELETE /api/carousels/:id` | `carousels` |
+| Broadcasts | `GET/POST /api/broadcasts` | `GET/PUT/DELETE /api/broadcasts/:id` | `broadcasts` (create/update only; DELETE is cancel, no refresh) |
 | Bot settings | `GET/PUT /api/bot-settings` | — | `bot_settings` |
 
-List filters: messages (`hidden`, `type`, `search`); keyboards (`hidden`, `isBroadcast`, `isTemplate`, `search`); steps (`hidden`, `isAi`, `trigger`, `search`); carousels (`hidden`, `search`).
+List filters: messages (`hidden`, `type`, `search`); keyboards (`hidden`, `isBroadcast`, `isTemplate`, `search`); steps (`hidden`, `isAi`, `trigger`, `search`); carousels (`hidden`, `isTemplate`, `search`). Broadcast lists are pagination-only. DELETE on broadcasts returns **200** + DTO (`status: "canceled"`), not 204.
 
 Error codes from `mapError`: `VALIDATION_ERROR` (400), `NOT_FOUND` (404), `CONFLICT` (409), `INTERNAL_ERROR` (500). Auth uses `AUTH_001`.
 
@@ -424,7 +449,7 @@ Content mutations publish a fire-and-forget `RefreshEvent` to RabbitMQ. A failed
   type: "bot_data_refresh";
   timestamp: string;
   source: "admin_service";
-  dataType?: "all" | "steps" | "messages" | "keyboards" | "carousels" | "bot_settings";
+  dataType?: "all" | "steps" | "messages" | "keyboards" | "carousels" | "bot_settings" | "broadcasts";
 }
 ```
 
@@ -433,9 +458,9 @@ Content mutations publish a fire-and-forget `RefreshEvent` to RabbitMQ. A failed
 - Publisher: `lib/message-queue-publisher.ts` (`publishRefreshEvent`)
 - Wrapper: `notifyRefresh` in route helpers (content CRUD). Bot-settings PUT calls `publishRefreshEvent("bot_settings")` directly.
 
-Viber’s `RefreshConsumer` does **not** switch on `dataType`. Any event triggers `refreshAllData()` (steps → messages/keyboards → carousels) plus settings refresh.
+Viber’s `RefreshConsumer` reloads the content cache for every `dataType` **except** `"broadcasts"`. That value only calls `BroadcastWorker.triggerPoll()` (atomic claim makes a multi-instance nudge harmless).
 
-Auth, health, knowledge-base, and analytics routes do not publish.
+Auth, health, knowledge-base, prompts, and analytics routes do not publish.
 
 ---
 
@@ -491,6 +516,36 @@ Client types (`KnowledgeSource`, `IngestResult`) live in `entities/knowledge-bas
 
 ---
 
+## Prompts proxy
+
+Admin stores **nothing** for prompt templates. The `/prompts` UI talks only to admin `/api/prompts/*`; those routes forward to AI (`/api/prompts/*`) with `X-Service-Token`. Documents live in `ai.prompt_templates`.
+
+Same 503 / 502 proxy errors as knowledge-base. AI codes (`PROMPT_*`) pass through. Client types (`PromptDTO`, `CreatePromptInput`, `UpdatePromptInput`) live in `entities/prompt` and mirror the AI inbound port — they are **not** in `@vbar/shared`.
+
+`StepForm` loads the list when `isAi` is on so the operator can pick `aiPromptName`. One template can be `isActive` per `taskType`; activating one deactivates the others. AI-side rules and seeds: [ai.md](./ai.md#prompt-templates). HTTP contract: [api.md](./api.md#prompts-thin-proxy-to-ai).
+
+---
+
+## Broadcasts
+
+Admin is the source of truth for broadcast jobs. Viber never writes to this collection except through the claim / progress APIs.
+
+**Service:** `BroadcastService` — `list` / `get` / `create` / `update` / `cancel` / `claim` / `reportProgress`. Create/update validate that `stepId` exists and is **not hidden** (viber only caches visible steps). Audience: `sendToAll` or a non-empty `testViberIds` list. Omitted `scheduledAt` = send now.
+
+Lifecycle: `scheduled` → (atomic claim) → `sending` → `finished` | `failed`. `canceled` only from `scheduled`. Stale `sending` locks (`BROADCAST_STALE_MS`, default 5 min) can be reclaimed.
+
+Create and update publish `notifyRefresh("broadcasts")`. Cancel does not. DELETE returns the canceled DTO (`200`), not 204.
+
+Viber’s `BroadcastWorker` polls `POST /api/broadcasts/claim` `{ instanceId }` and heartbeats via `PATCH /api/broadcasts/:id/progress`. RabbitMQ is only the “send now” nudge — the job document stays in Mongo. Runtime: [viber.md](./viber.md#broadcasts). Schema: [databases.md](./databases.md#broadcasts).
+
+---
+
+## Locations map
+
+Public page `/locations` (middleware + dashboard layout exempt). Renders `widgets/location-map` with the pharmacy catalog from `@vbar/shared/locations`. Query `?lat=&lng=` (from viber `locationHandler` “Виж всички”) centers the map. Needs `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` (inlined at `next build`). Not a CMS domain — no admin Mongo collection. Regenerate the catalog with `services/admin/scripts/geocode-locations.mjs`.
+
+---
+
 ## AI keyboard builder
 
 Create-mode only (`/keyboards/new`). “Create with AI” (next to “Start from template”) opens a full-height right-side panel that squeezes the whole create page (title, form, and preview). Nothing overlays the page. The panel stays mounted when closed or when a button is opened for manual edit, so the conversation survives.
@@ -541,7 +596,10 @@ Admin proxy: `POST /api/ai/carousel-builder` → AI `POST /api/carousel-builder/
 | steps | `step` | `step-manage` | `step-list` | `steps`, `step-create`, `step-edit` |
 | bot-settings | `bot-settings` | `bot-settings-manage` | — | `settings` |
 | knowledge-base | `knowledge-base` | `knowledge-base-ingest` | `knowledge-base-sources` | `knowledge-base` |
+| prompts | `prompt` | `prompt-manage` | `prompt-list` | `prompts` |
+| broadcasts | `broadcast` | `broadcast-manage` | `broadcast-list` | `broadcasts` |
 | analytics | `analytics` | — | `step-usage-stats` | `analytics` |
+| locations | `location` | — | `location-map` | `locations` (public) |
 | dashboard | — | — | `dashboard-layout`, `side-menu` | `dashboard` (`/` → `/settings`) |
 
 List pages use `useResourceList` (pagination, filters, reload). Keyboard and carousel editors can reorder with dnd-kit; order is the array sent on POST/PUT. Keyboard create (`/keyboards/new`) and carousel create (`/carousels/new`) also expose “Create with AI”; the edit pages do not.
@@ -568,7 +626,10 @@ Server-component calls do **not** forward the browser session cookie, so `getSte
 | `/carousels`, `/carousels/new`, `/carousels/[id]` | carousel CRUD | yes |
 | `/steps`, `/steps/new`, `/steps/[id]/edit` | step CRUD | yes |
 | `/knowledge-base` | ingest + sources | yes |
+| `/prompts` | `PromptsView` | yes |
+| `/broadcasts` | `BroadcastsView` | yes |
 | `/analytics` | `AnalyticsView` | yes |
+| `/locations` | `LocationsView` (public map) | yes |
 | `/overview`, `/users` | side-menu entries only | **no `page.tsx`** |
 
 ---
@@ -586,9 +647,11 @@ Read by admin source:
 | `JWT_REFRESH_EXPIRES_IN` | no | `30d` |
 | `RABBITMQ_URI` | no | `amqp://admin:admin@localhost:5672` |
 | `AI_SERVICE_URL` | no | `http://localhost:3002` |
-| `AI_SERVICE_TOKEN` | for KB proxy | Empty → 503 |
+| `AI_SERVICE_TOKEN` | for KB / prompts / builder proxies | Empty → 503 |
 | `SERVICE_TOKEN` / `ADMIN_SERVICE_TOKEN` / `VIBER_SERVICE_TOKEN` | for inbound service auth | At least one |
 | `NEXT_PUBLIC_API_URL` | no | `http://localhost:${PORT\|\|3000}` |
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | for `/locations` | Inlined at `next build`. Production: GitHub repo secret |
+| `BROADCAST_STALE_MS` | no | `300000` (5 min). Claim route only |
 | `NODE_ENV` | no | Cookie `secure` when `production` |
 
 `npm run dev:admin` loads the **repo-root** `.env` via `services/admin/next.config.js` (`dotenv`). Do not put secrets in `services/admin/.env`.
@@ -624,15 +687,20 @@ Follow the existing content domains. Do not invent a second pattern.
 
 The **live** path is `app/api` + `*Service` + `*Repository` + FSD (`views` / `widgets` / `features` / `entities` / `shared`).
 
-Still on disk, **not imported by live routes or pages**:
+Removed from disk (do not recreate):
+
+| Removed leftover | Do this |
+|------------------|---------|
+| `domains/*/ports/`, `domains/*/application/use-cases/` | New logic goes on `*Service`. |
+| `domains/*/entities/`, `value-objects/` | Prefer the files at the domain root (`Message.ts`, `Keyboard.ts`, …). |
+| `domains/keyboard/services/` | Live imports are `domains/keyboard/lib/`. |
+| `src/components/` | New UI is FSD. |
+
+Still accurate leftovers:
 
 | Leftover | Location | Do this |
 |----------|----------|---------|
-| Ports + use-cases | `domains/*/ports/`, `domains/*/application/use-cases/` | Do not extend. New logic goes on `*Service`. |
-| Duplicate entities | `domains/*/entities/`, some `value-objects/` | Prefer the files at the domain root (`Message.ts`, `Keyboard.ts`, …). |
-| Old keyboard helpers | `domains/keyboard/services/` | Live imports are `domains/keyboard/lib/`. |
-| Old UI | `src/components/` | Dead. New UI is FSD. |
-| Phantom API list | middleware `PROTECTED_API_ROUTES` | `/api/users`, `/api/config` have no handlers. |
+| Phantom API list | middleware `PROTECTED_API_ROUTES` | `/api/users`, `/api/config` have no handlers. Real protection is the blanket `/api/` branch. |
 | Side-menu stubs | `/overview`, `/users` | No pages. |
 
 Comments on some auth routes still say “Hexagonal / use case”. Ignore those — the handlers call `AuthService`.
@@ -646,7 +714,7 @@ Comments on some auth routes still say “Hexagonal / use case”. Ignore those 
 - Overview page
 - Role-based authorization on CMS routes (roles exist on the user/JWT only)
 - Referential integrity on delete
-- Knowledge-base data in admin Mongo
+- Knowledge-base data or prompt templates in admin Mongo (both are AI-owned; admin is a proxy)
 
 ---
 

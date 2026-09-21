@@ -66,7 +66,9 @@ Edit `.env` and set at least:
 | `VIBER_BOT_TOKEN`, `VIBER_BOT_WEBHOOK_URL` | Needed for real Viber traffic |
 | `AI_MODEL_PROVIDER` | `ollama` (local) or a cloud provider (`openai` / `anthropic` / `google` / `deepseek`) + API key |
 
-`AI_THINKING_GIF_URL` is optional. Set it to a public HTTPS GIF (or JPEG/PNG as a Viber picture, max 500 KB) to show a thinking keyboard while the AI step waits on gRPC. SVG is not supported. Unset or empty disables the indicator.
+`AI_THINKING_GIF_URL` is optional. Set it to a public HTTPS GIF (or JPEG/PNG as a Viber picture, max 500 KB) to show a thinking keyboard while the AI step waits on gRPC. SVG is not supported. Unset or empty disables the indicator. Compose sets a default CDN GIF on the `viber` service if the env var is omitted.
+
+`NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` is required for the public `/locations` map (inlined at `next build`). Broadcast worker knobs (`BROADCAST_POLL_INTERVAL_MS`, `BROADCAST_USERS_PER_BATCH`, `BROADCAST_BATCH_INTERVAL_MS`, `BROADCAST_STALE_MS`) have defaults and are listed in `.env.example`.
 
 Compose overrides in-container values (`MONGODB_URI` host → `mongodb`, `RABBITMQ_URI` host → `rabbitmq`, gRPC host `ai`, etc.). Host/local npm keeps the localhost URIs from `.env`.
 
@@ -95,7 +97,7 @@ cp .env.example .env
 docker compose --env-file .env -f infrastructure/docker-compose.yml up -d --build
 ```
 
-Default containers: **admin, viber, ai, mongodb, rabbitmq**.
+Default containers: **admin, viber, ai, mongodb, rabbitmq, chromadb**.
 
 ```bash
 # Health
@@ -175,7 +177,7 @@ Ensure root `.env` (or each service env) points `MONGODB_URI` and `RABBITMQ_URI`
 ### Message queue notes
 
 - Management UI: http://127.0.0.1:15672 with `RABBITMQ_USER` / `RABBITMQ_PASS`
-- Queues are declared by services on startup (admin → viber refresh path)
+- Queues are declared by services on startup (`viber.refresh` and `analytics.step-usage`)
 
 ### Local Viber webhooks
 
@@ -235,7 +237,10 @@ Full service guide: [admin.md](./admin.md).
 - Next.js App Router on port 3000
 - Health: `GET /api/health`
 - Knowledge Base page: `/knowledge-base` (proxies to AI with `AI_SERVICE_URL` + `AI_SERVICE_TOKEN`)
-- Needs `JWT_SECRET`, `BOT_TOKEN_ENCRYPTION_KEY`, `MONGODB_URI`, service tokens
+- Prompts page: `/prompts` (same AI proxy; stores nothing in admin Mongo)
+- Broadcasts page: `/broadcasts` (admin Mongo `broadcasts`; viber claims via service token)
+- Public map: `/locations` (no JWT; needs `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`)
+- Needs `JWT_SECRET`, `MONGODB_URI`, service tokens
 - DB name in Compose: `admin_service`
 
 ### Viber (`services/viber`)
@@ -245,6 +250,7 @@ Full service guide: [viber.md](./viber.md).
 - Express on port 3001; must be reachable for webhooks (public or tunnel)
 - Health: `GET /health`
 - Needs `VIBER_BOT_TOKEN`, `VIBER_BOT_WEBHOOK_URL`, `RABBITMQ_URI`, `ADMIN_SERVICE_*`, `AI_SERVICE_GRPC_*`
+- Broadcast worker: `BROADCAST_POLL_INTERVAL_MS` (default 30000), `BROADCAST_USERS_PER_BATCH` (300), `BROADCAST_BATCH_INTERVAL_MS` (600)
 - DB name: `bot`
 
 ### AI (`services/ai`)
@@ -256,6 +262,7 @@ Full service guide: [viber.md](./viber.md).
 - RAG: explicit `AI_TASK_TYPE` wins over `RAG_ENABLED` (see [rag.md](./rag.md))
 - Persistent RAG store is Chroma (`RAG_VECTOR_STORE_TYPE=chroma`); Compose always starts `chromadb`
 - Knowledge-base ingest: HTTP `/api/knowledge-base/*` (`X-Service-Token` = `AI_SERVICE_TOKEN`)
+- Prompt templates: HTTP `/api/prompts/*` (same token; one active template per `taskType`)
 - DB name: `ai` (conversations + prompt templates only)
 
 ## Troubleshooting

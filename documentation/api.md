@@ -24,9 +24,9 @@ Only endpoints and queues that exist in the working tree are documented.
 | Viber platform → Viber | HTTPS webhook | `POST/GET /webhook/viber` |
 | Admin → Viber | RabbitMQ | `viber.refresh` cache invalidation |
 | Viber → Admin | RabbitMQ | `analytics.step-usage` (`StepUsageEvent`) |
-| Admin → AI | REST + `X-Service-Token` | Knowledge-base ingest / sources, keyboard-builder generate, and carousel-builder generate (`AI_SERVICE_TOKEN`) |
-| Viber → AI | gRPC | `AIProcessingService.ProcessMessage` |
-| Viber → Admin | REST | Content fetch with service token |
+| Admin → AI | REST + `X-Service-Token` | Knowledge-base ingest / sources, prompt-template CRUD, keyboard-builder generate, and carousel-builder generate (`AI_SERVICE_TOKEN`) |
+| Viber → AI | gRPC | `AIProcessingService.ProcessMessage` (`promptName` from `step.aiPromptName`) |
+| Viber → Admin | REST | Content fetch, `POST /api/broadcasts/claim`, `PATCH /api/broadcasts/:id/progress` |
 
 ### Base URLs (local / Compose)
 
@@ -56,7 +56,7 @@ X-Service-Token: <token>
 
 Configured via `SERVICE_TOKEN`, `ADMIN_SERVICE_TOKEN`, `VIBER_SERVICE_TOKEN`, and `AI_SERVICE_TOKEN` (see `.env.example`).
 
-`AI_SERVICE_TOKEN` must be the same value on admin (outbound proxy) and ai (inbound ingest, keyboard-builder, and carousel-builder). A mismatch returns `401 UNAUTHORIZED` from AI; an unset token on either side returns `503`.
+`AI_SERVICE_TOKEN` must be the same value on admin (outbound proxy) and ai (inbound ingest, prompts, keyboard-builder, and carousel-builder). A mismatch returns `401 UNAUTHORIZED` from AI; an unset token on either side returns `503`.
 
 ### Response envelope
 
@@ -119,7 +119,7 @@ Returns service health including Mongo connectivity (`HealthCheckResponse`-shape
 
 Update publishes a `viber.refresh` event (`dataType: bot_settings` when applicable). This is the config viber consumes.
 
-**DTO fields:** `id`, `avatarURL`, `botName`, `botViberName`, `status`, `buttonsBackground`, `buttonsTextColor`, `buttonsPrefix`, `welcomeStepId`, `GAKey`, `createdAt`, `updatedAt`.
+**DTO fields:** `id`, `avatarURL`, `botName`, `botViberName`, `status`, `buttonsBackground`, `buttonsTextColor`, `buttonsFrame` (`ButtonFrame` \| null), `buttonsPrefix`, `welcomeStepId`, `GAKey`, `createdAt`, `updatedAt`.
 
 ### Steps / messages / keyboards / carousels
 
@@ -131,8 +131,11 @@ Standard CRUD; mutations publish `viber.refresh` so viber reloads its cache. The
 | Messages | `GET/POST /api/messages` | `GET/PUT/DELETE /api/messages/:id` |
 | Keyboards | `GET/POST /api/keyboards` | `GET/PUT/DELETE /api/keyboards/:id` |
 | Carousels | `GET/POST /api/carousels` | `GET/PUT/DELETE /api/carousels/:id` |
+| Broadcasts | `GET/POST /api/broadcasts` | `GET/PUT/DELETE /api/broadcasts/:id` (DELETE cancels a scheduled broadcast) |
 
-List endpoints support pagination and resource-specific filters (see route handlers). Content routes use `route → service → repository` (`MessageService` / `KeyboardService` / `StepService` / `CarouselService`).
+List endpoints support pagination and resource-specific filters (see route handlers). Content routes use `route → service → repository` (`MessageService` / `KeyboardService` / `StepService` / `CarouselService` / `BroadcastService`). List pagination is returned **inside** `data` (`{ messages, total, page, limit, totalPages }`); the shared `ApiResponse.meta` field is unused.
+
+Step create/update also accept `aiPromptName`, `customHandler` (`"example"`), and `responseHandler` (`"example"` \| `"locationHandler"`). `content` may be empty when `customHandler` is set.
 
 Keyboard list filters: `hidden`, `isBroadcast`, `isTemplate`, `search`. Create/update bodies accept `isTemplate` (boolean, default `false`). A keyboard with `isTemplate: true` is a starter for new keyboards only (admin copies `Buttons` in the create form; no live link). Viber fetches `GET /api/keyboards?hidden=false&isTemplate=false`. Step and keyboard-message pickers use the same `isTemplate=false` filter.
 
@@ -142,8 +145,8 @@ Reusable Viber rich-media carousels. Cards are the editor source of truth; the s
 
 | Method | Endpoint | Description | Query / Body |
 |--------|----------|-------------|--------------|
-| GET | `/api/carousels` | List carousels (filters: `hidden`, `search`) | `page`, `limit` |
-| POST | `/api/carousels` | Create carousel | `humanReadableName`, `Cards[]`, `BgColor?`, `ButtonsGroupColumns?`, `ButtonsGroupRows?`, `hidden?` |
+| GET | `/api/carousels` | List carousels (filters: `hidden`, `isTemplate`, `search`) | `page`, `limit` |
+| POST | `/api/carousels` | Create carousel | `humanReadableName`, `Cards[]`, `BgColor?`, `ButtonsGroupColumns?`, `ButtonsGroupRows?`, `hidden?`, `isTemplate?` |
 | GET | `/api/carousels/:id` | Get carousel | |
 | PUT | `/api/carousels/:id` | Update carousel (partial) | same fields as create |
 | DELETE | `/api/carousels/:id` | Delete carousel | |
@@ -152,6 +155,7 @@ Notes:
 - `humanReadableName` and a non-empty `Cards` array are required on create.
 - On create/update the service validates cards and computes the flattened, Viber-shaped `Buttons` array stored alongside `Cards`. Clients send `Cards`; they do not send `Buttons`.
 - Mutations publish a refresh event with `dataType: "carousels"`.
+- `isTemplate: true` is a starter for new carousels only (same idea as keyboard templates). Viber fetches `GET /api/carousels?hidden=false&isTemplate=false`.
 - Messages of type `rich-media` use content `{ "carousel": { "id": "<carouselId>" } }`. Viber resolves that ID from its carousel cache, converts the stored `Buttons` via `CarouselConverter`, and sends `Message.RichMedia` (`min_api_version` ≥ 7).
 
 ### Knowledge Base (thin proxy to AI)
@@ -167,6 +171,38 @@ Same paths as the AI service under `/api/knowledge-base/*`. JWT via existing mid
 | `DELETE` | `/api/knowledge-base/sources` | — | `{ "cleared": true }` |
 
 Proxy-only error codes (admin, before the call reaches AI): `AI_SERVICE_NOT_CONFIGURED` (503, token unset on admin), `AI_SERVICE_UNAVAILABLE` (502, AI unreachable). AI error codes are passed through unchanged.
+
+### Prompts (thin proxy to AI)
+
+Same paths as the AI service under `/api/prompts/*`. JWT via existing middleware. Routes forward to AI with `X-Service-Token`; admin stores no prompt documents (they live in `ai.prompt_templates`).
+
+| Method | Path | Body / query | Returns |
+|--------|------|--------------|---------|
+| `GET` | `/api/prompts` | `?taskType=simple\|rag\|custom` | `PromptDTO[]` |
+| `POST` | `/api/prompts` | `{ name, template, taskType, description?, isActive? }` | `PromptDTO` (201) |
+| `GET` | `/api/prompts/:name` | — | `PromptDTO` |
+| `PUT` | `/api/prompts/:name` | `{ template?, taskType?, description?, isActive? }` | `PromptDTO` |
+| `DELETE` | `/api/prompts/:name` | — | `{ "deleted": true }` |
+
+`name` is 1–64 chars `[a-zA-Z0-9_-]` and immutable after create. Simple templates must not contain `{placeholders}`; RAG templates must include exactly `{context}` and `{question}`. Setting `isActive: true` deactivates the other template of the same `taskType`.
+
+Same proxy-only error codes as knowledge-base. AI error codes: `PROMPTS_NOT_CONFIGURED` (503), `UNAUTHORIZED` (401), `PROMPT_VALIDATION` (400), `PROMPT_NOT_FOUND` (404), `PROMPT_CONFLICT` (409), `PROMPT_FAILED` (500).
+
+### Broadcasts
+
+Schedule a cached step send to test Viber IDs or all subscribed users. Admin owns the document; viber’s `BroadcastWorker` claims and reports progress. `route → BroadcastService → BroadcastRepository`. Create/update publish `viber.refresh` with `dataType: "broadcasts"` (nudge, not a cache reload). DELETE **cancels** a `scheduled` broadcast and returns the DTO (`200`), not 204.
+
+| Method | Path | Auth | Body / notes |
+|--------|------|------|--------------|
+| `GET` | `/api/broadcasts` | JWT or service token | Pagination inside `data` |
+| `POST` | `/api/broadcasts` | JWT or service token | `{ name, stepId, sendToAll?, testViberIds?, scheduledAt? }`. Omitted `scheduledAt` = send now. Step must exist and not be hidden. `testViberIds` required when `sendToAll` is false. |
+| `GET` | `/api/broadcasts/:id` | JWT or service token | |
+| `PUT` | `/api/broadcasts/:id` | JWT or service token | Same body as create. Only while `status === "scheduled"`. |
+| `DELETE` | `/api/broadcasts/:id` | JWT or service token | Cancel scheduled only. History is kept (`status: "canceled"`). |
+| `POST` | `/api/broadcasts/claim` | JWT or service token | `{ instanceId }`. Atomic claim of one due or stale (`BROADCAST_STALE_MS`, default 5 min) broadcast. Returns `{ broadcast: BroadcastDTO \| null }`. |
+| `PATCH` | `/api/broadcasts/:id/progress` | JWT or service token | `BroadcastProgressUpdate`: `{ instanceId, totalCount?, successCount, failedList, status?: "finished"\|"failed", errorMessage?, lastProcessedId? }`. Rejected if the caller lost the lock. |
+
+`BroadcastDTO` fields: `id`, `name`, `stepId`, `sendToAll`, `testViberIds`, `scheduledAt`, `status` (`scheduled` \| `sending` \| `finished` \| `failed` \| `canceled`), `totalCount`, `successCount`, `failedList`, `startedAt`, `finishedAt`, `lockedBy`, `lastProcessedId`, `createdAt`, `updatedAt`. Stored `errorMessage` / lock timestamps are not on the DTO.
 
 ### AI keyboard builder (thin proxy to AI)
 
@@ -250,9 +286,10 @@ Viber events. Requires a public HTTPS URL (`VIBER_BOT_WEBHOOK_URL`).
 
 ### Outbound / internal
 
-- Loads bot content from Admin over REST using `ADMIN_SERVICE_URL` + `ADMIN_SERVICE_TOKEN`.
-- Calls AI via gRPC (`AI_SERVICE_GRPC_HOST` / `AI_SERVICE_GRPC_PORT`).
-- Consumes RabbitMQ queue `viber.refresh`.
+- Loads bot content from Admin over REST using `ADMIN_SERVICE_URL` + `ADMIN_SERVICE_TOKEN`. Keyboards and carousels are fetched with `hidden=false&isTemplate=false`.
+- Calls AI via gRPC (`AI_SERVICE_GRPC_HOST` / `AI_SERVICE_GRPC_PORT`). Sends `promptName` from `step.aiPromptName`; never sends `taskType`.
+- Consumes RabbitMQ queue `viber.refresh` (content reload, or `BroadcastWorker` nudge when `dataType === "broadcasts"`).
+- Claims broadcasts via `POST /api/broadcasts/claim` and reports via `PATCH /api/broadcasts/:id/progress`.
 - Publishes `StepUsageEvent` to RabbitMQ queue `analytics.step-usage` (`AnalyticsPublisher`) after a successful `StepSender.sendStep`.
 
 ### Not implemented
@@ -265,7 +302,7 @@ Viber events. Requires a public HTTPS URL (`VIBER_BOT_WEBHOOK_URL`).
 
 ## AI Service API
 
-HTTP port **3002** (Compose: localhost-only). Viber message processing is **gRPC**. Knowledge-base ingest (`/api/knowledge-base/*`), keyboard generation (`POST /api/keyboard-builder/generate`), and carousel generation (`POST /api/carousel-builder/generate`) are **REST**.
+HTTP port **3002** (Compose: localhost-only). Viber message processing is **gRPC**. Knowledge-base ingest (`/api/knowledge-base/*`), prompt-template CRUD (`/api/prompts/*`), keyboard generation (`POST /api/keyboard-builder/generate`), and carousel generation (`POST /api/carousel-builder/generate`) are **REST**.
 
 ### Health
 
@@ -294,6 +331,35 @@ Error codes: `RAG_DISABLED` (503), `INGEST_NOT_CONFIGURED` (503), `UNAUTHORIZED`
 `INGEST_VALIDATION` / `INVALID_URLS` / `NO_FILES` (400), `INGEST_FAILED` (500).
 
 Admin proxy: the same paths under the admin service `/api/knowledge-base/*` (JWT auth via middleware).
+
+### Prompt templates (AI service, REST)
+
+All endpoints require the `X-Service-Token` header (`AI_SERVICE_TOKEN`). Responses are `ApiResponse<T>`.
+
+| Method | Path | Body / query | Returns |
+|--------|------|--------------|---------|
+| `GET` | `/api/prompts` | `?taskType=simple\|rag\|custom` | `PromptDTO[]` |
+| `POST` | `/api/prompts` | `{ name, template, taskType, description?, isActive? }` | `PromptDTO` (201) |
+| `GET` | `/api/prompts/:name` | — | `PromptDTO` |
+| `PUT` | `/api/prompts/:name` | `{ template?, taskType?, description?, isActive? }` | `PromptDTO` |
+| `DELETE` | `/api/prompts/:name` | — | `{ "deleted": true }` |
+
+```typescript
+interface PromptDTO {
+  name: string;
+  template: string;
+  taskType: "simple" | "rag" | "custom";
+  variables: string[];
+  description?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+Error codes: `PROMPTS_NOT_CONFIGURED` (503), `UNAUTHORIZED` (401), `PROMPT_VALIDATION` (400), `PROMPT_NOT_FOUND` (404), `PROMPT_CONFLICT` (409), `PROMPT_FAILED` (500).
+
+Admin proxy: the same paths under the admin service `/api/prompts/*` (JWT). See [Prompts (thin proxy to AI)](#prompts-thin-proxy-to-ai).
 
 **`IngestResult`:**
 
@@ -539,7 +605,7 @@ interface RefreshEvent {
   type: "bot_data_refresh";
   timestamp: string;
   source: "admin_service";
-  dataType?: "all" | "steps" | "messages" | "keyboards" | "carousels" | "bot_settings";
+  dataType?: "all" | "steps" | "messages" | "keyboards" | "carousels" | "bot_settings" | "broadcasts";
 }
 ```
 
@@ -557,7 +623,7 @@ interface StepUsageEvent {
 }
 ```
 
-Durable queue, persistent messages. Viber asserts/binds the queue on first publish so events are retained if admin is down. Admin persists each event in `admin_service.stepusageevents`.
+Durable queue, persistent messages. Viber asserts/binds the analytics queue on first publish so events are retained if admin is down. Admin persists each event in `admin_service.stepusageevents`. A refresh event with `dataType: "broadcasts"` does not reload the content cache — viber’s `RefreshConsumer` calls `BroadcastWorker.triggerPoll()`.
 
 ### Named in shared types but unused
 
@@ -581,7 +647,8 @@ message ProcessMessageRequest {
   string userId = 3;
   string stepId = 4;
   UserProfile userProfile = 5;
-  string taskType = 6; // "simple" | "rag" | "custom"
+  string taskType = 6; // "simple" | "rag" | "custom" (optional)
+  string promptName = 7; // per-step prompt override (optional)
 }
 
 message ProcessMessageResponse {
@@ -592,7 +659,7 @@ message ProcessMessageResponse {
 **Client:** Viber (`AiServiceGrpcClient`).  
 There is no separate intent-detection RPC.
 
-**Task type vs RAG:** if `taskType` is set on the request (or `AI_TASK_TYPE` is set in the environment), that value wins. Otherwise `RAG_ENABLED=true` selects the RAG chain. Ingest and source management are REST (`/api/knowledge-base/*`), not gRPC. See [rag.md](./rag.md).
+**Task type vs RAG:** if `taskType` is set on the request (or `AI_TASK_TYPE` is set in the environment), that value wins. Else if `promptName` is set, the named template’s `taskType` is used. Otherwise `RAG_ENABLED=true` selects the RAG chain. Viber always omits `taskType` and sends `promptName` from `step.aiPromptName`. Ingest, prompts, and builders are REST, not gRPC. See [rag.md](./rag.md).
 
 ---
 
@@ -602,7 +669,7 @@ Import from `@vbar/shared`:
 
 - `ApiResponse<T>`, `PaginationParams`, `HealthCheckResponse`
 - `RefreshEvent`, `MessageQueueName`, `MessageQueueEvent`
-- Admin content DTOs: `StepDTO`, `MessageDTO`, `KeyboardDTO`, `ButtonDTO`, `CarouselDTO`, `CarouselCardDTO`, `CarouselCtaDTO`, `User`
+- Admin content DTOs: `StepDTO`, `MessageDTO`, `KeyboardDTO`, `ButtonDTO`, `CarouselDTO`, `CarouselCardDTO`, `CarouselCtaDTO`, `BroadcastDTO`, `BroadcastProgressUpdate`, `User`
 - AI↔admin builder contracts (`types/ai.ts`): `AiChatTurn`, `AvailableStep`, `KeyboardDraft`, `KeyboardDraftButton`, `KeyboardButtonDefaults`, `GenerateKeyboardInput`, `GenerateKeyboardResult`, `CarouselDraft`, `CarouselDraftCard`, `CarouselCtaDefaults`, `GenerateCarouselInput`, `GenerateCarouselResult` — implemented by AI, consumed by admin; not mirrored per service
 
 Admin application input types (`CreateMessageInput`, etc.) live on the domain services and are re-exported to the client through `entities/*/model/types.ts`.

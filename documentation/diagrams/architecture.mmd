@@ -2,7 +2,7 @@
 flowchart TB
     ViberAPI[Viber API]
     Users[Admin users]
-    ExternalAI[Cloud LLMs<br/>OpenAI / Anthropic / Google]
+    ExternalAI[Cloud LLMs<br/>OpenAI / Anthropic / Google / DeepSeek]
     Ollama[Ollama<br/>profile local-llm]
     SharedPackage["@vbar/shared<br/>types, config, infra"]
 
@@ -22,7 +22,7 @@ flowchart TB
 
     subgraph AIService["AI :3002 / gRPC 50051"]
         AIIn[gRPC ProcessMessage]
-        AIHttp[HTTP /api/knowledge-base]
+        AIHttp[HTTP ingest / prompts / builders]
         AIApp[LangChain / providers]
         AIOut[Mongo + Chroma + LLM]
         AIIn --> AIApp --> AIOut
@@ -31,7 +31,7 @@ flowchart TB
 
     Mongo[(Shared MongoDB<br/>admin_service / bot / ai)]
     Chroma[(Chroma embeddings)]
-    RabbitMQ[RabbitMQ<br/>exchange viber-bot<br/>queue viber.refresh]
+    RabbitMQ[RabbitMQ<br/>exchange viber-bot<br/>viber.refresh + analytics.step-usage]
 
     Users -->|HTTPS/HTTP| AdminIn
     ViberAPI -->|POST/GET /webhook/viber| ViberIn
@@ -42,7 +42,9 @@ flowchart TB
     AIOut -->|RAG vectors| Chroma
 
     AdminOut -->|publish viber.refresh| RabbitMQ
-    RabbitMQ -->|consume| ViberOut
+    RabbitMQ -->|consume refresh / broadcast nudge| ViberOut
+    ViberOut -->|publish analytics.step-usage| RabbitMQ
+    RabbitMQ -->|consume analytics| AdminOut
 
     ViberOut -->|REST + service token| AdminIn
     ViberOut -->|gRPC ProcessMessage| AIIn
