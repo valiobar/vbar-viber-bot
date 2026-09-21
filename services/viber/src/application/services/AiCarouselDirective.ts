@@ -32,6 +32,14 @@ const MAX_CARDS = 6;
 /** Viber rich_media hard limit on rows per card */
 const MAX_GROUP_ROWS = 7;
 const IMAGE_ROWS = 3;
+const TITLE_ROWS = 1;
+/**
+ * Rows reserved for the description cell. This MUST match the height the cell
+ * actually emits: Viber requires every card to fill the group block exactly
+ * (sum of cell rows === ButtonsGroupRows), otherwise cards bleed into each
+ * other and the multi-card carousel fails to render on device.
+ */
+const DESCRIPTION_ROWS = 1;
 const CARD_COLUMNS = 6;
 
 const TITLE_COLOR = "#131313";
@@ -207,11 +215,11 @@ const imageCell = (image: string | undefined): Record<string, unknown> => {
 
 const titleCell = (title: string | undefined): Record<string, unknown> => {
   if (!title) {
-    return fillerCell();
+    return fillerCell(TITLE_ROWS);
   }
   return {
     Columns: CARD_COLUMNS,
-    Rows: 1,
+    Rows: TITLE_ROWS,
     Text: `<font color="${TITLE_COLOR}"><b>${escapeText(title)}</b></font>`,
     ActionType: "none",
     ActionBody: "none",
@@ -226,11 +234,11 @@ const descriptionCell = (
   description: string | undefined
 ): Record<string, unknown> => {
   if (!description) {
-    return fillerCell();
+    return fillerCell(DESCRIPTION_ROWS);
   }
   return {
     Columns: CARD_COLUMNS,
-    Rows: 2,
+    Rows: DESCRIPTION_ROWS,
     Text: `<font color="${DESCRIPTION_COLOR}">${escapeText(
       description
     )}</font>`,
@@ -279,8 +287,8 @@ export const buildRichMediaFromCards = (cards: AiCarouselCard[]): object => {
   const hasDescription = cards.some((card) => card.description);
 
   const imageRows = hasImage ? IMAGE_ROWS : 0;
-  const titleRows = hasTitle ? 1 : 0;
-  const descriptionRows = hasDescription ? 1 : 0;
+  const titleRows = hasTitle ? TITLE_ROWS : 0;
+  const descriptionRows = hasDescription ? DESCRIPTION_ROWS : 0;
 
   const rowsLeftForButtons =
     MAX_GROUP_ROWS - imageRows - titleRows - descriptionRows;
