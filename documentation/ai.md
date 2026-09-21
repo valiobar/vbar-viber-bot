@@ -34,10 +34,10 @@ It exposes two inbound surfaces:
 
 | Surface | Port | Used by | Purpose |
 |---------|------|---------|---------|
-| gRPC `ai.AIProcessingService` | `50051` (`GRPC_PORT`) | Viber service | `ProcessMessage` — the primary API |
-| HTTP (Express) | `3002` (`PORT`) | Admin service, health checks | `GET /api/health`, `/api/knowledge-base/*` ingest, `POST /api/keyboard-builder/generate`, `POST /api/carousel-builder/generate` |
+| gRPC `ai.AIProcessingService` | `50051` (`GRPC_PORT`) | Viber service | `ProcessMessage` — the primary API (`promptName` optional) |
+| HTTP (Express) | `3002` (`PORT`) | Admin service, health checks | `GET /api/health`, `/api/knowledge-base/*` ingest, `/api/prompts/*` CRUD, `POST /api/keyboard-builder/generate`, `POST /api/carousel-builder/generate` |
 
-The service does **not** connect to RabbitMQ and has no REST message-processing endpoint. It does not read admin Mongo (steps, messages, keyboards, carousels). Admin may attach a request-scoped `availableSteps` catalog (`{ name, triggers[] }[]`) when calling the keyboard / carousel builders. Viber sends gRPC `ProcessMessage`; admin sends HTTP for ingest, keyboard generation (`description`, optional `history` / `templateButtons` / `buttonDefaults` / `currentDraft` / `availableSteps`), and carousel generation (`description`, optional `history` / `currentDraft` / `ctaDefaults` / `buttonDefaults` / `availableSteps`).
+The service does **not** connect to RabbitMQ and has no REST message-processing endpoint. It does not read admin Mongo (steps, messages, keyboards, carousels). Admin may attach a request-scoped `availableSteps` catalog (`{ name, triggers[] }[]`) when calling the keyboard / carousel builders. Viber sends gRPC `ProcessMessage`; admin sends HTTP for ingest, prompt-template CRUD, keyboard generation (`description`, optional `history` / `templateButtons` / `buttonDefaults` / `currentDraft` / `availableSteps`), and carousel generation (`description`, optional `history` / `currentDraft` / `ctaDefaults` / `buttonDefaults` / `availableSteps`).
 
 Stack: Node 20, Express, `@grpc/grpc-js`, LangChain (`langchain` + `@langchain/*`), MongoDB via `@vbar/shared/infra`, Chroma for vectors, optional LangSmith tracing.
 
@@ -49,7 +49,7 @@ Startup:
 
 1. Load the monorepo-root `.env` through `resolveRootEnvPath()` (from `@vbar/shared/infra`), falling back to a local `.env`.
 2. Register Express middleware and routes at module scope. The vector store is created here — `createVectorStore(logger)` is synchronous and returns `null` when `RAG_ENABLED=false`. The same instance is shared by the HTTP ingest routes and the gRPC chain executor.
-3. `initialize()` then runs: LangSmith init → MongoDB connect → `initBulgarianCulturePrompt()` (upserts the default system prompt; failures are logged and ignored) → gRPC `bindAsync` on `0.0.0.0:GRPC_PORT` → `app.listen(PORT)`.
+3. `initialize()` then runs: LangSmith init → MongoDB connect → `initPromptTemplates()` (indexes, `bulgarian_culture_system`, `default_rag`, activate one template per `simple` / `rag` only when none is active; failures are logged and ignored) → gRPC `bindAsync` on `0.0.0.0:GRPC_PORT` → `app.listen(PORT)`.
 
 Shutdown on `SIGTERM` / `SIGINT` / uncaught exception: `grpcServer.tryShutdown()` (force shutdown on error), then `closeMongoConnection()`, then `process.exit(0)`.
 
@@ -69,9 +69,9 @@ adapters/in/routes/*        ├─→ application/use-cases/* ─→ ports/out/*
 
 | Layer | Path | Contents |
 |-------|------|----------|
-| Inbound adapters | `src/adapters/in/` | `grpc/server.ts` (ProcessMessage), `routes/health.ts`, `routes/knowledgeBase.ts`, `routes/keyboardBuilder.ts`, `routes/carouselBuilder.ts` |
-| Inbound ports | `src/ports/in/` | `ProcessMessageUseCase`, `IngestKnowledgeUseCase`, `BuildKeyboardUseCase`, `BuildCarouselUseCase` (interfaces only; builder contract types live in `@vbar/shared`) |
-| Application | `src/application/use-cases/` | `ProcessMessageUseCaseImpl`, `IngestKnowledgeUseCaseImpl`, `BuildKeyboardUseCaseImpl`, `BuildCarouselUseCaseImpl` (orchestrators only) |
+| Inbound adapters | `src/adapters/in/` | `grpc/server.ts` (ProcessMessage), `routes/health.ts`, `routes/knowledgeBase.ts`, `routes/prompts.ts`, `routes/keyboardBuilder.ts`, `routes/carouselBuilder.ts` |
+| Inbound ports | `src/ports/in/` | `ProcessMessageUseCase`, `IngestKnowledgeUseCase`, `ManagePromptsUseCase`, `BuildKeyboardUseCase`, `BuildCarouselUseCase` (interfaces only; builder contract types live in `@vbar/shared`; prompt DTO types live on the inbound port) |
+| Application | `src/application/use-cases/` | `ProcessMessageUseCaseImpl`, `IngestKnowledgeUseCaseImpl`, `ManagePromptsUseCaseImpl`, `BuildKeyboardUseCaseImpl`, `BuildCarouselUseCaseImpl` (orchestrators only) |
 | Application | `src/application/prompts/` | LLM prompt builders for the keyboard/carousel builders: system prompts + few-shots, user-prompt assembly, history serializers (`keyboardBuilderPrompt`, `carouselBuilderPrompt`, `availableStepsPrompt`) |
 | Domain | `src/domains/ai/` | Entities (`MessageRequest`, `MessageResponse`, `ConversationContext`, `AITask`, `PromptTemplate`), value objects (`AIProvider`, `AITaskType`), services (`PromptTemplateService`, `CultureDetectionService`) |
 | Domain | `src/domains/builder/services/` | Pure draft business rules: `keyboardDraftNormalizer`, `carouselDraftNormalizer`, `normalizerPrimitives`, `stepTriggerResolver`, plus the reduced LLM output Zod schemas (`llmOutputSchemas`) |
@@ -111,11 +111,12 @@ Three task types exist (`AITaskType`): `simple`, `rag`, `custom`. The effective 
 
 1. An explicit value wins — gRPC `ProcessMessageRequest.taskType` first, then env `AI_TASK_TYPE`.
 2. An unparseable explicit value logs a warning and falls back to `simple`.
-3. If no explicit value is set, `RAG_ENABLED=true` selects `rag`, otherwise `simple`.
+3. If no explicit value is set and the request has `promptName`, that template’s `taskType` is used.
+4. If still unset, `RAG_ENABLED=true` selects `rag`, otherwise `simple`.
 
 `ragEnabled` on the task is `aiConfig.rag.enabled || explicitTaskType === "rag"`.
 
-Because `.env.example` ships `AI_TASK_TYPE=simple`, setting `RAG_ENABLED=true` alone does not engage retrieval — you must unset `AI_TASK_TYPE` or set it to `rag`. Viber never sends `taskType` today, so the AI service environment decides the chain for all bot traffic.
+Because `.env.example` ships `AI_TASK_TYPE=simple`, setting `RAG_ENABLED=true` alone does not engage retrieval — you must unset `AI_TASK_TYPE` or set it to `rag`. Viber never sends `taskType` today; it does send `promptName` from `step.aiPromptName`. With `AI_TASK_TYPE=simple` that override still wins, so a per-step RAG prompt will not switch the chain until the env override is unset.
 
 If the RAG chain is selected but throws (no vector store, Chroma down, embedding failure), the executor logs a warning and **falls back to the simple chain** rather than failing the request.
 
@@ -125,12 +126,12 @@ If the RAG chain is selected but throws (no vector store, Chroma down, embedding
 
 `executeSimpleChain` builds a system prompt before calling the provider:
 
-1. Load the template named by `BULGARIAN_CULTURE_PROMPT_TEMPLATE` (default `bulgarian_culture_system`) from Mongo.
-2. If `CultureDetectionService.isBulgarianCultureRelated(prompt)` matches (keyword list, Cyrillic and Latin), try `<name>_enhanced` and use it when present; otherwise use the base template.
+1. `resolvePromptTemplate(simple, promptName)` — per-step override if its `taskType` is `simple`, else the **active** simple template.
+2. If nothing resolved, legacy fallback: load `BULGARIAN_CULTURE_PROMPT_TEMPLATE` (default `bulgarian_culture_system`). If `CultureDetectionService.isBulgarianCultureRelated(prompt)` matches, try `<name>_enhanced` when present.
 3. Append a hard instruction: keep the answer under 700 characters, do not reveal chain-of-thought. If no template was found, that instruction alone becomes the system prompt.
 4. After generation, `<think>` and `<thinking>` blocks are stripped from the answer — relevant for reasoning-style local models.
 
-The reasoning strip and the template lookup apply to the simple chain **only**. RAG and custom answers are returned as produced by the model.
+The reasoning strip and the template lookup apply to the simple chain **only**. RAG and custom answers are returned as produced by the model. RAG uses the same `resolvePromptTemplate` (override → active RAG template → built-in fallback wrapper).
 
 ### RAG
 
@@ -174,11 +175,11 @@ Only the last `CONVERSATION_MAX_HISTORY` messages (default 15) are loaded, store
 
 ## Prompt templates
 
-`MongoPromptTemplateRepository` (collection `prompt_templates`) implements get / getDefault / save / list / delete. Documents are `{ name, template, taskType, variables, description, createdAt, updatedAt }`, keyed by `name`.
+`MongoPromptTemplateRepository` (collection `prompt_templates`) implements get / getActive / getDefault / save / list / delete / deactivateAll. Documents are `{ name, template, taskType, variables, description, isActive, createdAt, updatedAt }`, keyed by `name`. At most one template is `isActive` per `taskType`.
 
-`initBulgarianCulturePrompt()` runs at startup and upserts the base `bulgarian_culture_system` template from `src/scripts/bulgarianCulturePromptTemplate.ts`. It is idempotent. The `_enhanced` variant used for culture-related questions is **not** seeded — create it manually if you want the enhanced path to trigger.
+`initPromptTemplates()` runs at startup: ensures indexes, upserts `bulgarian_culture_system` (`initBulgarianCulturePrompt`, isActive-preserving), upserts `default_rag` when missing, then activates one `simple` and one `rag` template **only when none is active**. The `_enhanced` Bulgarian variant is **not** seeded.
 
-There is no admin UI or API for prompt templates; they are managed directly in Mongo or through the seed script.
+HTTP CRUD is `routes/prompts.ts` over `ManagePromptsUseCaseImpl` (`X-Service-Token`, same as ingest). Admin `/prompts` is a thin proxy. Simple templates must not contain `{placeholders}`; RAG templates must include exactly `{context}` and `{question}`; `custom` is free-form. `name` is 1–64 chars `[a-zA-Z0-9_-]` and immutable after create. Setting `isActive: true` deactivates the other template of that `taskType`. Types live on `ports/in/ManagePromptsUseCase.ts` and are mirrored in admin `entities/prompt` — not `@vbar/shared`.
 
 ## Keyboard builder
 
@@ -276,7 +277,7 @@ Full limits, chunk metadata, and enablement recipes: [rag.md](./rag.md).
 
 ## Consumers
 
-There are two consumers, and neither shares a database with the AI service. Viber uses gRPC; admin uses REST (knowledge-base ingest, keyboard-builder generate, and carousel-builder generate).
+There are two consumers, and neither shares a database with the AI service. Viber uses gRPC; admin uses REST (knowledge-base ingest, prompt-template CRUD, keyboard-builder generate, and carousel-builder generate).
 
 ### Viber service — gRPC (message processing)
 
@@ -334,6 +335,10 @@ Caveat: `executeSimpleChain` appends a hard "under 700 characters" instruction, 
 
 Proxy-level errors added by admin: `AI_SERVICE_NOT_CONFIGURED` (503, token unset on admin) and `AI_SERVICE_UNAVAILABLE` (502, AI unreachable). `AI_SERVICE_TOKEN` must be identical on both services.
 
+### Admin service — REST (prompts)
+
+`services/admin/src/app/api/prompts/**` are thin proxies over `forwardToAiService`. Same `AI_SERVICE_URL` / `X-Service-Token` pattern as ingest. Admin `/prompts` is the operator UI; `StepForm` uses the list for `aiPromptName`. Prompt DTO types are mirrored in `entities/prompt` from `ports/in/ManagePromptsUseCase.ts`.
+
 ### Admin service — REST (keyboard builder)
 
 Admin is the intended caller of `POST /api/keyboard-builder/generate` (same `X-Service-Token` / `AI_SERVICE_URL` pattern as ingest). The admin proxy (`POST /api/ai/keyboard-builder`) attaches `availableSteps` and the chat UI is documented in [admin.md](./admin.md#ai-keyboard-builder); this service only exposes the generate contract. Admin imports the generate types (`GenerateKeyboardInput`, `KeyboardDraft`, `GenerateKeyboardResult`, `AvailableStep`, `AiChatTurn`) from `@vbar/shared` — no per-service mirrors.
@@ -364,6 +369,7 @@ message ProcessMessageRequest {
   string stepId = 4;
   UserProfile userProfile = 5;  // { id, name, avatar }
   string taskType = 6;          // "simple" | "rag" | "custom" (optional)
+  string promptName = 7;        // per-step prompt override (optional)
 }
 
 message ProcessMessageResponse {
@@ -371,7 +377,7 @@ message ProcessMessageResponse {
 }
 ```
 
-Required by the domain entity: `messageContent`, `messageType`, `userId`, `stepId`. `userProfile` is mapped but currently unused by the use case. `taskType` is optional.
+Required by the domain entity: `messageContent`, `messageType`, `userId`, `stepId`. `userProfile` is mapped but currently unused by the use case. `taskType` and `promptName` are optional.
 
 gRPC status codes are derived from substring matching on the error message in `adapters/in/grpc/server.ts`:
 
@@ -403,6 +409,18 @@ Knowledge base — all paths require `X-Service-Token`, responses are `ApiRespon
 | `DELETE` | `/api/knowledge-base/sources` | — | `{ "cleared": true }` |
 
 Error codes: `INGEST_NOT_CONFIGURED` / `RAG_DISABLED` (503), `UNAUTHORIZED` (401), `NO_FILES` / `INVALID_URLS` / `INGEST_VALIDATION` (400), `INGEST_FAILED` (500). Outside the knowledge-base router, unhandled errors return `SVC_002` (500) and unknown paths `SVC_001` (404).
+
+Prompt templates — `X-Service-Token` required, `ApiResponse<PromptDTO>`:
+
+| Method | Path | Body / query | Returns |
+|--------|------|--------------|---------|
+| `GET` | `/api/prompts` | `?taskType=simple\|rag\|custom` | `PromptDTO[]` |
+| `POST` | `/api/prompts` | `{ name, template, taskType, description?, isActive? }` | `PromptDTO` (201) |
+| `GET` | `/api/prompts/:name` | — | `PromptDTO` |
+| `PUT` | `/api/prompts/:name` | `{ template?, taskType?, description?, isActive? }` | `PromptDTO` |
+| `DELETE` | `/api/prompts/:name` | — | `{ "deleted": true }` |
+
+Error codes: `PROMPTS_NOT_CONFIGURED` (503), `UNAUTHORIZED` (401), `PROMPT_VALIDATION` (400), `PROMPT_NOT_FOUND` (404), `PROMPT_CONFLICT` (409), `PROMPT_FAILED` (500). See [Prompt templates](#prompt-templates).
 
 Keyboard builder — `X-Service-Token` required, `ApiResponse<GenerateKeyboardResult>`:
 
@@ -485,7 +503,7 @@ All env parsing and validation is centralised in `src/config/aiConfig.ts` via `C
 | `CONVERSATION_MEMORY_TYPE` / `CONVERSATION_MAX_HISTORY` | `buffer` / `15` | Memory type unused; max history limits Mongo and the model prompt |
 | `PROMPT_TEMPLATES_ENABLED` / `PROMPT_TEMPLATE_STORAGE` / `PROMPT_TEMPLATE_DEFAULT` | `true` / `mongodb` / unset | Template storage and custom-chain template |
 | `BULGARIAN_CULTURE_PROMPT_TEMPLATE` | `bulgarian_culture_system` | System-prompt template name for the simple chain |
-| `AI_SERVICE_TOKEN` | unset | Inbound ingest, keyboard-builder, and carousel-builder auth; must match admin |
+| `AI_SERVICE_TOKEN` | unset | Inbound ingest, prompts, keyboard-builder, and carousel-builder auth; must match admin |
 | `RAG_*`, `CHROMA_URL`, `INGEST_*` | see [rag.md](./rag.md) | Retrieval and ingest |
 | `LANGSMITH_TRACING` / `LANGSMITH_API_KEY` / `LANGSMITH_PROJECT` / `LANGSMITH_ENDPOINT` | `false` / — | Optional tracing |
 
@@ -526,7 +544,7 @@ Local development: `npm run dev:ai` (tsx watch). Start Chroma with `docker compo
 ## Security notes
 
 - The gRPC server uses `ServerCredentials.createInsecure()` and performs **no authentication**. Anything that can reach port 50051 can spend LLM budget and read nothing but its own answers. Keeping the port off the host bind is the only control today.
-- Ingest, keyboard-builder, and carousel-builder routes are protected by a shared static token (`X-Service-Token`), compared with a plain string equality check.
+- Ingest, prompts, keyboard-builder, and carousel-builder routes are protected by a shared static token (`X-Service-Token`), compared with a plain string equality check.
 - User messages are stored in Mongo verbatim and forwarded to whichever provider is configured; there is no redaction or retention policy.
 
 ## Known gaps
@@ -537,7 +555,7 @@ Local development: `npm run dev:ai` (tsx watch). Start Chroma with `docker compo
 - `tokensUsed`, `model`, and `processingTimeMs` never cross the gRPC boundary.
 - No REST process / intent / batch endpoints (use gRPC), no streaming responses, no async ingest jobs.
 - `local` embedding provider throws; only `openai` and `ollama` work.
-- Prompt templates have no management UI or API.
+- Prompt templates are managed over REST + admin `/prompts`; there is still no gRPC prompt API.
 
 ## Related documentation
 
@@ -545,7 +563,7 @@ Local development: `npm run dev:ai` (tsx watch). Start Chroma with `docker compo
 - [API](./api.md) — full API reference across services
 - [RAG](./rag.md) — retrieval, ingest limits, and enablement
 - [Databases](./databases.md) — collections, fields, and Chroma metadata
-- [Admin service](./admin.md) — the knowledge-base UI and proxy
+- [Admin service](./admin.md) — the knowledge-base UI, prompts UI, and proxies
 - [Viber service](./viber.md) — when and how ProcessMessage is called
 - [Setup](./setup.md) / [Deployment](./deployment.md)
 - [AI service README](../services/ai/README.md)

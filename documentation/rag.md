@@ -31,8 +31,9 @@ Default Compose always starts Chroma (`vbar-chromadb`).
 Chain selection (in `ProcessMessageUseCase` → `LangChainExecutor.executeTask`):
 
 1. **Explicit `taskType` wins.** gRPC `ProcessMessageRequest.taskType` or env `AI_TASK_TYPE` (`simple` / `rag` / `custom`).
-2. If that value is **unset**, `RAG_ENABLED=true` selects the RAG chain.
-3. `.env.example` sets `AI_TASK_TYPE=simple`, so `RAG_ENABLED=true` alone does **not** engage RAG until you unset `AI_TASK_TYPE` or set it to `rag`.
+2. If that value is **unset** and the request has `promptName`, the named template’s `taskType` is used (`step.aiPromptName` → `ai.prompt_templates.taskType`).
+3. If still unset, `RAG_ENABLED=true` selects the RAG chain.
+4. `.env.example` sets `AI_TASK_TYPE=simple`, so `RAG_ENABLED=true` alone does **not** engage RAG until you unset `AI_TASK_TYPE` or set it to `rag`.
 
 The vector store is created only when `RAG_ENABLED=true`. To actually retrieve context you need both:
 
@@ -134,7 +135,7 @@ The built-in RAG fallback wrapper in `LangChainExecutor.executeRAGChain` adds tw
 - If the user asks where a place is, for an address, or how to get there, and the context contains a Google Maps URL for it, include that URL **verbatim on its own line**. Never construct or alter Maps URLs.
 - If the user asks for a recommendation or comparison, suggest only items that appear in the context, using their exact names and a one-line reason. If nothing fits, say so — never invent products.
 
-**Operational note:** an **active managed RAG prompt in Mongo overrides this fallback**. The same Maps / recommendation rules must be present on the active RAG template (admin Prompts UI) or the feature regresses silently even though ingest still writes the URLs into the chunks. Viber sends answers as `Message.Text`; clients auto-linkify `https://` URLs, so a copied Maps link is tappable with no Viber-service change.
+**Operational note:** an **active managed RAG prompt in Mongo overrides this fallback** (`resolvePromptTemplate`: per-step `promptName` if its `taskType` is `rag`, else the active RAG template). The same Maps / recommendation rules must be present on that template (admin `/prompts`, task type `rag`) or the feature regresses silently even though ingest still writes the URLs into the chunks. Startup seeds `default_rag` and activates it only when no RAG prompt is active. Viber sends answers as `Message.Text`; clients auto-linkify `https://` URLs, so a copied Maps link is tappable with no Viber-service change.
 
 ### Chunk metadata
 

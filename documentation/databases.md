@@ -18,7 +18,7 @@ RabbitMQ is the refresh event bus, not a database. Mongo’s built-in `admin` da
 
 | Database | Service | Owner | What is stored |
 |----------|---------|-------|----------------|
-| `admin_service` | admin | CMS | Dashboard users, JWT sessions, messages, keyboards, carousels, steps, singleton bot settings, step-usage events |
+| `admin_service` | admin | CMS | Dashboard users, JWT sessions, messages, keyboards, carousels, steps, broadcasts, singleton bot settings, step-usage events |
 | `bot` | viber | Runtime | Viber subscribers and per-user conversation position |
 | `ai` | ai | LLM | Per-user chat history and prompt templates only |
 
@@ -95,7 +95,7 @@ Viber keyboards. Buttons are **embedded** in `Buttons` — there is no `buttons`
 | `humanReadableName` | string | Admin label |
 | `title` | string \| null | |
 | `isBroadcast` | boolean | |
-| `isTemplate` | boolean | Default `false`. When true, starter-only: buttons are copied into a new keyboard on create. Not attachable to steps/messages and not fetched by Viber. |
+| `isTemplate` | boolean | Default `false`. When true, starter-only: buttons are copied into a new keyboard on create. Not attachable to steps/messages. Viber fetches `GET /api/keyboards?hidden=false&isTemplate=false`. |
 | `createdAt` / `updatedAt` | Date | |
 
 Indexes: `hidden`, `isBroadcast`, `isTemplate`, `humanReadableName`, compound `{ hidden, isBroadcast }`, compound `{ hidden, isTemplate }`.
@@ -109,6 +109,7 @@ Viber rich-media carousels. `Cards` is the editor source of truth; `Buttons` is 
 | `Type` | string | Always `"rich_media"` |
 | `humanReadableName` | string | Required, max 100 |
 | `hidden` | boolean | Indexed |
+| `isTemplate` | boolean | Default `false`. Starter-only: selectable in the create form, never sent by the bot. Viber fetches `GET /api/carousels?hidden=false&isTemplate=false`. Indexed; compound `{ hidden, isTemplate }`. |
 | `BgColor` | string? | Hex `#RRGGBB` / `#RRGGBBAA` or null |
 | `ButtonsGroupColumns` | number | 1–6, default 6 |
 | `ButtonsGroupRows` | number | 1–7, default 7 |
@@ -132,6 +133,9 @@ Conversation-flow nodes. `content` and `keyboard` are IDs into this same databas
 | `keyboard` | ObjectId \| null | Ref `keyboards` |
 | `hidden` | boolean | |
 | `isAi` | boolean | When true, viber sends the user text to the AI service |
+| `aiPromptName` | string \| null | Optional AI `prompt_templates.name` (max 64). Null = use the active prompt for the selected chain. |
+| `customHandler` | string \| null | Optional custom step handler (`CUSTOM_STEP_HANDLER_NAMES` in `@vbar/shared`; currently `"example"`). Replaces the normal send path. Content may be empty when set. |
+| `responseHandler` | string \| null | Optional inbound handler (`CUSTOM_RESPONSE_HANDLER_NAMES`; `"example"` \| `"locationHandler"`). Runs on the user's reply to this step. |
 | `createdAt` / `updatedAt` | Date | |
 
 Index: `hidden`.
@@ -148,6 +152,7 @@ Singleton bot config (one document). Viber fetches this over admin REST.
 | `status` | `"active"` \| `"inactive"` \| `"maintenance"` | Default `"active"` |
 | `buttonsBackground` | hex \| null | |
 | `buttonsTextColor` | hex \| null | |
+| `buttonsFrame` | `ButtonFrame` \| null | Viber API level 6 frame (`BorderWidth` 0–10, `BorderColor`, `CornerRadius` 0–10). Null means “do not send Frame”. Used as the default theme for new keyboard / carousel buttons. |
 | `buttonsPrefix` | string \| null | |
 | `welcomeStepId` | ObjectId \| null | Ref `steps` |
 | `GAKey` | string \| null | |
@@ -171,6 +176,32 @@ One document per step execution in the viber service (written by the RabbitMQ co
 Indexes: `{ stepId: 1, timestamp: -1 }`, TTL `{ timestamp: 1 }` with `expireAfterSeconds = 8,640,000` (100 days).
 
 Retention: events are kept for **100 days**; MongoDB’s TTL monitor deletes older documents automatically (no cron job needed). Changing retention later requires `collMod` (or drop + recreate) — `ensureIndexes()` will not alter an existing index’s `expireAfterSeconds`.
+
+### `broadcasts`
+
+Scheduled or in-flight step sends. Admin is the source of truth; viber claims and reports progress over REST (no broadcast payload on RabbitMQ). Collection name is `"broadcasts"`.
+
+| Field | Type | Notes |
+|-------|------|--------|
+| `name` | string | Required, max 100 |
+| `stepId` | ObjectId → `steps` | Must exist and must **not** be hidden (viber only caches visible steps) |
+| `sendToAll` | boolean | Default `false`. When false, `testViberIds` is required |
+| `testViberIds` | string[] | Explicit Viber user ids for a test send |
+| `scheduledAt` | Date | Required. Omitted on create = send now |
+| `status` | `"scheduled"` \| `"sending"` \| `"finished"` \| `"failed"` \| `"canceled"` | `canceled` only from `scheduled` |
+| `totalCount` | number | Set on first worker progress report |
+| `successCount` | number | Recipients accepted by Viber |
+| `failedList` | `{ viberId, reason }[]` | Per-recipient failures |
+| `startedAt` / `finishedAt` | Date \| null | |
+| `errorMessage` | string \| null | Stored on worker failure; **not** exposed on `BroadcastDTO` |
+| `lockedBy` | string \| null | Worker `instanceId` |
+| `lockedAt` / `lastHeartbeatAt` | Date \| null | Stale lock recovery (`BROADCAST_STALE_MS`, default 5 min) |
+| `lastProcessedId` | string \| null | Cursor: Mongo `_id` (send-to-all) or last test Viber id |
+| `createdAt` / `updatedAt` | Date | |
+
+Indexes: `{ status: 1, scheduledAt: 1 }` (due claim), `{ status: 1, lastHeartbeatAt: 1 }` (stale recovery).
+
+`BroadcastDTO` (`@vbar/shared`) omits `errorMessage`, `lockedAt`, and `lastHeartbeatAt`.
 
 ## bot
 
@@ -220,14 +251,15 @@ Named prompt strings. Used when `PROMPT_TEMPLATES_ENABLED` is true and `PROMPT_T
 
 | Field | Type | Notes |
 |-------|------|--------|
-| `name` | string | Lookup key (e.g. `default`, `bulgarian_culture_system`) |
-| `template` | string | Body with `{variable}` placeholders |
-| `taskType` | string | `simple` / `rag` / `custom` (and other `AITaskType` values) |
-| `variables` | string[] | Placeholder names |
+| `name` | string | Lookup key (e.g. `bulgarian_culture_system`, `default_rag`). 1–64 chars `[a-zA-Z0-9_-]` |
+| `template` | string | Body. Simple prompts must not contain `{placeholders}`; RAG prompts must include exactly `{context}` and `{question}` |
+| `taskType` | string | `simple` / `rag` / `custom` |
+| `variables` | string[] | Placeholder names (auto-extracted) |
 | `description` | string? | |
+| `isActive` | boolean | Default `false`. At most one active template per `taskType` (activating one deactivates the others) |
 | `createdAt` / `updatedAt` | Date | |
 
-Default template name: `PROMPT_TEMPLATE_DEFAULT` (fallback `"default"`).
+Startup (`initPromptTemplates`) upserts `bulgarian_culture_system` and `default_rag`, then activates one template per `simple` / `rag` only when none is active. Operators manage templates through admin `/prompts` (proxy to AI `/api/prompts`). `PROMPT_TEMPLATE_DEFAULT` is the fallback name for a `custom` task with no `promptName` (fallback `"default"`).
 
 ## Chroma
 

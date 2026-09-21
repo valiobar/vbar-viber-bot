@@ -31,7 +31,10 @@ flowchart TB
     Viber -->|gRPC| AI
     Viber -->|REST| Admin
     Admin -->|publish viber.refresh| Rabbit
-    Rabbit -->|consume refresh| Viber
+    Rabbit -->|consume refresh / broadcast nudge| Viber
+    Viber -->|publish analytics.step-usage| Rabbit
+    Rabbit -->|consume analytics| Admin
+    Viber -->|claim / progress REST| Admin
     Admin --> Mongo
     Viber --> Mongo
     AI --> Mongo

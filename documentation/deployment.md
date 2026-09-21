@@ -93,7 +93,7 @@ Use the root `.env` (copy from `.env.example`). Compose and `deploy.sh` read thi
 |----------------------------|------------------------------------------------------|
 | `MONGO_ROOT_USER`          | MongoDB root username                                |
 | `MONGO_ROOT_PASSWORD`      | MongoDB root password                                |
-| `RABBITMQ_URI`             | AMQP URI (host/local form; Compose overrides in containers) |
+| `RABBITMQ_URI`             | AMQP URI (host/local form; Compose overrides in containers) | 
 | `RABBITMQ_USER`            | RabbitMQ user (no insecure defaults)                 |
 | `RABBITMQ_PASS`            | RabbitMQ password                                    |
 | `VIBER_BOT_TOKEN`          | Viber bot token                                      |
@@ -124,7 +124,9 @@ Use the root `.env` (copy from `.env.example`). Compose and `deploy.sh` read thi
 | `RAG_VECTOR_STORE_COLLECTION` | Chroma collection name (default `embeddings`) |
 | `RAG_RETRIEVER_K` / `RAG_SIMILARITY_THRESHOLD` | Retriever count and score filter (defaults 4 / 0.7) |
 | `AI_SERVICE_URL` | Admin → AI HTTP base. Host npm: `http://localhost:3002`. Compose sets `http://ai:3002` on `admin` |
-| `AI_SERVICE_TOKEN` | Shared ingest token. **Must match** on admin (outbound) and ai (inbound) |
+| `AI_SERVICE_TOKEN` | Shared ingest / prompts / builder token. **Must match** on admin (outbound) and ai (inbound) |
+| `BROADCAST_POLL_INTERVAL_MS` / `BROADCAST_USERS_PER_BATCH` / `BROADCAST_BATCH_INTERVAL_MS` | Viber worker (defaults 30000 / 300 / 600) |
+| `BROADCAST_STALE_MS` | Admin claim stale-lock window (default 300000) |
 | `RAG_CHUNK_SIZE` / `RAG_CHUNK_OVERLAP` | Ingest chunking (defaults 1000 / 200) |
 | `INGEST_MAX_URLS` / `INGEST_MAX_FILE_SIZE_MB` | Ingest limits (defaults 20 / 10). Optional `INGEST_URL_TIMEOUT_MS` (default 15000) |
 
@@ -272,7 +274,7 @@ Do not automate this blindly on production without a backup.
 - Image: `rabbitmq:3-management-alpine`
 - Credentials: `RABBITMQ_USER` / `RABBITMQ_PASS` (required; no `admin/admin` fallback)
 - Apps use `RABBITMQ_URI` (not `RABBITMQ_URL`)
-- Primary use today: admin → viber cache-refresh events
+- Live queues: admin → viber `viber.refresh` (cache invalidation + broadcast nudge); viber → admin `analytics.step-usage`
 - AI does not connect to the broker
 - Management UI: `127.0.0.1:15672` via SSH tunnel
 
