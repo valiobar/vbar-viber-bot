@@ -69,7 +69,7 @@ Express, MongoDB (`bot`), RabbitMQ consumer, Viber webhook.
 - `GET /health` — Mongo + RabbitMQ
 - In-memory content cache loaded from admin REST (`ADMIN_SERVICE_URL` + service token)
 - Cache fetch/refresh order: steps → messages + keyboards (in parallel) → carousels (after messages, because rich-media content holds carousel IDs)
-- `StepSender` resolves `rich-media` messages via `BotDataService.getCarouselById`, converts with `CarouselConverter`, injects `content.richMedia`, then `MessageConverter` builds `Message.RichMedia` (`min_api_version` is the user's `apiVersion`, or 8 when it is missing)
+- `StepSender` resolves `rich-media` messages via `BotDataService.getCarouselById`, converts with `CarouselConverter`, injects `content.richMedia`, then `MessageConverter` builds `Message.RichMedia` (`min_api_version` 7)
 - Step routing; AI steps call gRPC `ProcessMessage`
 - Reloads the full in-memory cache (`refreshAllData`, including carousels) when a `RefreshEvent` arrives
 - Publishes fire-and-forget `StepUsageEvent` messages (`AnalyticsPublisher`) when `StepSender.sendStep` succeeds (trigger / welcome / subscribe; broadcasts and AI turns are not tracked)

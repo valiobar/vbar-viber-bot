@@ -1,14 +1,11 @@
 /**
- * min_api_version for an outgoing Viber message.
- * Prefer the recipient's client apiVersion. Use 8 when it is missing.
- * Viber requires an integer.
+ * Fixed min_api_version for every outgoing Viber message.
+ * Viber requires an integer. 7 covers InputFieldState and carousel layout.
  */
-export const FALLBACK_MIN_API_VERSION = 8;
+export const MIN_API_VERSION = 7;
 
-export function resolveUserMinApiVersion(apiVersion: unknown): number {
-  const parsed = typeof apiVersion === "number" ? apiVersion : Number(apiVersion);
-  if (!Number.isFinite(parsed) || parsed < 1) {
-    return FALLBACK_MIN_API_VERSION;
-  }
-  return Math.floor(parsed);
+export const FALLBACK_MIN_API_VERSION = MIN_API_VERSION;
+
+export function resolveUserMinApiVersion(_apiVersion?: unknown): number {
+  return MIN_API_VERSION;
 }
