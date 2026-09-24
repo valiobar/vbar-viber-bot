@@ -10,23 +10,7 @@
 import { Message } from "viber-bot";
 import { MessageDTO } from "../types/DTOs";
 import { Logger, ConsoleLogger } from "@vbar/shared";
-
-/** InputFieldState is API level 4; Viber docs require an integer min_api_version. */
-const KEYBOARD_MIN_API_VERSION = 7;
-
-const resolveMinApiVersion = (
-  keyboard: unknown,
-  requested?: number
-): number => {
-  const requestedInt =
-    typeof requested === "number" && Number.isFinite(requested)
-      ? Math.floor(requested)
-      : 1;
-  if (!keyboard) {
-    return Math.max(1, requestedInt);
-  }
-  return Math.max(KEYBOARD_MIN_API_VERSION, requestedInt);
-};
+import { resolveUserMinApiVersion } from "./resolveUserMinApiVersion";
 
 /**
  * Message Converter Service
@@ -46,7 +30,7 @@ export class MessageConverter {
    *
    * @param messageDTO - MessageDTO to convert
    * @param keyboard - Optional keyboard object to attach to the message
-   * @param minApiVersion - Optional minimum API version (required for InputFieldState support)
+   * @param minApiVersion - Recipient apiVersion. Missing or invalid values become 8.
    * @returns Viber Message instance
    * @throws Error if message type is not supported or content is invalid
    */
@@ -65,9 +49,8 @@ export class MessageConverter {
     | Message.Url
     | Message.RichMedia {
     const content = messageDTO.content as any;
-    // Viber requires an integer min_api_version. InputFieldState is API level 4;
-    // send at least 7 whenever a keyboard is attached so hidden/minimized is honored.
-    const apiVersionParam = resolveMinApiVersion(keyboard, minApiVersion);
+    // Callers pass the user's apiVersion. Missing values fall back to 8.
+    const apiVersionParam = resolveUserMinApiVersion(minApiVersion);
 
     try {
       let message:
@@ -224,7 +207,7 @@ export class MessageConverter {
               "rich-media message requires a resolved 'richMedia' object in content (carousel missing?)"
             );
           }
-          const richMediaApiVersion = Math.max(apiVersionParam, 7);
+          const richMediaApiVersion = apiVersionParam;
           // viber-bot: RichMedia(richMedia, keyboard, trackingData, timestamp, token, altText, minApiVersion)
           // The 6th argument is altText. Passing minApiVersion there leaves it
           // undefined, toJson() falls back to min_api_version 2, and Viber
@@ -263,7 +246,7 @@ export class MessageConverter {
    *
    * @param messageDTOs - Array of MessageDTOs to convert
    * @param keyboard - Optional keyboard to attach to the last message
-   * @param minApiVersion - Optional minimum API version (required for InputFieldState support)
+   * @param minApiVersion - Recipient apiVersion. Missing or invalid values become 8.
    * @returns Array of Viber Message instances
    */
   convertToViberMessages(

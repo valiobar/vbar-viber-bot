@@ -25,8 +25,8 @@ import {
 } from "@vbar/shared/locations";
 import { CustomResponseContext, CustomResponseHandler } from "../types";
 import { KeyboardConverter } from "../../services/KeyboardConverter";
+import { resolveUserMinApiVersion } from "../../services/resolveUserMinApiVersion";
 
-const MIN_API_VERSION = 7;
 const MAIN_KEYBOARD_NAME = "main";
 const CLOSEST_COUNT = 3;
 const CARD_COLUMNS = 6;
@@ -249,11 +249,7 @@ export const locationHandler: CustomResponseHandler = async (ctx) => {
     CLOSEST_COUNT
   );
   const keyboard = resolveNamedKeyboard(ctx, MAIN_KEYBOARD_NAME);
-  const userApiVersion = Number(ctx.userProfile.apiVersion);
-  const minApiVersion = Math.max(
-    MIN_API_VERSION,
-    Number.isFinite(userApiVersion) ? Math.floor(userApiVersion) : MIN_API_VERSION
-  );
+  const minApiVersion = resolveUserMinApiVersion(ctx.userProfile.apiVersion);
 
   const messages: unknown[] = [
     new (Message.RichMedia as any)(

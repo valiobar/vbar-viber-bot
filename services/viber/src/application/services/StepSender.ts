@@ -10,6 +10,7 @@
 import { Bot } from "viber-bot";
 import { BotDataService } from "./BotDataService";
 import { MessageConverter } from "./MessageConverter";
+import { resolveUserMinApiVersion } from "./resolveUserMinApiVersion";
 import { KeyboardConverter } from "./KeyboardConverter";
 import { CarouselConverter } from "./CarouselConverter";
 import { Logger, ConsoleLogger, type StepUsageSource } from "@vbar/shared";
@@ -216,15 +217,8 @@ export class StepSender {
         }
       }
 
-      // Convert messages to Viber format
-      // Integer min_api_version; 7 covers InputFieldState (API level 4)
-      const userApiVersion = Number(userProfile.apiVersion);
-      const userApiVersionInt = Number.isFinite(userApiVersion)
-        ? Math.floor(userApiVersion)
-        : 0;
-      const minApiVersion = keyboard
-        ? Math.max(7, userApiVersionInt || 7)
-        : userApiVersionInt || 1;
+      // User's client version, or 8 when Viber did not send one.
+      const minApiVersion = resolveUserMinApiVersion(userProfile.apiVersion);
 
       const viberMessages = this.messageConverter.convertToViberMessages(
         resolvedMessageDTOs,

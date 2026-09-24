@@ -15,8 +15,7 @@ import {
   buildRichMediaFromCards,
   parseAiCarouselDirective,
 } from "./AiCarouselDirective";
-
-const MIN_API_VERSION = 7;
+import { resolveUserMinApiVersion } from "./resolveUserMinApiVersion";
 
 export class ViberAiService {
   constructor(
@@ -50,6 +49,7 @@ export class ViberAiService {
   ): Promise<void> {
     const gifUrl = ConfigHelper.getEnv("AI_THINKING_GIF_URL", "").trim();
     const followUpKeyboard = restoreKeyboard ?? buildDismissKeyboard();
+    const minApiVersion = resolveUserMinApiVersion(userProfile?.apiVersion);
     let thinkingSent = false;
 
     if (gifUrl) {
@@ -59,7 +59,7 @@ export class ViberAiService {
           null,
           null,
           null,
-          MIN_API_VERSION
+          minApiVersion
         );
         await bot.sendMessage(userProfile, [thinking]);
         thinkingSent = true;
@@ -111,7 +111,12 @@ export class ViberAiService {
         });
         if (thinkingSent) {
           try {
-            await this.sendRestoreKeyboard(bot, userProfile, followUpKeyboard);
+            await this.sendRestoreKeyboard(
+              bot,
+              userProfile,
+              followUpKeyboard,
+              minApiVersion
+            );
           } catch (sendError) {
             this.logger.error("ViberAiService - failed to send AI fallback", {
               error:
@@ -149,7 +154,7 @@ export class ViberAiService {
               null,
               null,
               null,
-              MIN_API_VERSION
+              minApiVersion
             )
           );
         }
@@ -162,7 +167,7 @@ export class ViberAiService {
             null,
             null,
             null,
-            MIN_API_VERSION
+            minApiVersion
           )
         );
         await bot.sendMessage(userProfile, messages);
@@ -180,7 +185,7 @@ export class ViberAiService {
         null,
         null,
         null,
-        MIN_API_VERSION
+        minApiVersion
       );
       await bot.sendMessage(userProfile, [reply]);
       this.logger.info("ViberAiService - AI response sent to user", {
@@ -196,7 +201,12 @@ export class ViberAiService {
       });
       if (thinkingSent) {
         try {
-          await this.sendRestoreKeyboard(bot, userProfile, followUpKeyboard);
+          await this.sendRestoreKeyboard(
+            bot,
+            userProfile,
+            followUpKeyboard,
+            minApiVersion
+          );
         } catch (sendError) {
           this.logger.error("ViberAiService - failed to send AI fallback", {
             error:
@@ -214,14 +224,15 @@ export class ViberAiService {
   private async sendRestoreKeyboard(
     bot: Bot,
     userProfile: any,
-    keyboard: object
+    keyboard: object,
+    minApiVersion: number
   ): Promise<void> {
     const restore = new (Message.Keyboard as any)(
       keyboard,
       null,
       null,
       null,
-      MIN_API_VERSION
+      minApiVersion
     );
     await bot.sendMessage(userProfile, [restore]);
   }

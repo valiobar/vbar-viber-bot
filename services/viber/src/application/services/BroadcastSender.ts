@@ -13,6 +13,7 @@ import { BotDataService } from "./BotDataService";
 import { MessageConverter } from "./MessageConverter";
 import { KeyboardConverter } from "./KeyboardConverter";
 import { CarouselConverter } from "./CarouselConverter";
+import { FALLBACK_MIN_API_VERSION } from "./resolveUserMinApiVersion";
 import { getViberConfig } from "../../config/viber";
 import { getBroadcastConfig } from "../../config/broadcast";
 
@@ -88,10 +89,11 @@ export class BroadcastSender {
     }
 
     // Same converter StepSender uses; keyboard is attached to the last message.
+    // One payload for every recipient, so there is no single user apiVersion.
     const sdkMessages = this.messageConverter.convertToViberMessages(
       messageDTOs,
       keyboard,
-      7
+      FALLBACK_MIN_API_VERSION
     );
     if (sdkMessages.length === 0) {
       throw new Error(`Broadcast step ${stepId} has no sendable messages`);

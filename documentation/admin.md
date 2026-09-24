@@ -248,7 +248,7 @@ carousels
 
 1. Fetch/cache order: steps → messages + keyboards (parallel) → carousels (after messages, because rich-media content holds carousel IDs).
 2. `StepSender` loads the step’s messages. For `rich-media`, it looks up the carousel, runs `CarouselConverter`, injects `content.richMedia`.
-3. `MessageConverter` builds `Message.RichMedia` (`min_api_version` ≥ 7).
+3. `MessageConverter` builds `Message.RichMedia` (`min_api_version` is the user's `apiVersion`, or 8 when it is missing).
 4. Step keyboard (if any) is converted by `KeyboardConverter` and attached to the last message.
 5. Reply `ActionBody`s get `buttonsPrefix` from bot settings (carousel converter prefixes **reply** only, so open-url bodies stay URLs).
 

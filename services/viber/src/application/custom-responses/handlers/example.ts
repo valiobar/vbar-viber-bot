@@ -14,6 +14,18 @@
 
 import { Message } from "viber-bot";
 import { CustomResponseHandler } from "../types";
+import { resolveUserMinApiVersion } from "../../services/resolveUserMinApiVersion";
+
+function textMessage(text: string, apiVersion: unknown): Message.Text {
+  return new (Message.Text as any)(
+    text,
+    null,
+    null,
+    null,
+    null,
+    resolveUserMinApiVersion(apiVersion)
+  );
+}
 
 /**
  * Example custom response handler: captures location/contact/picture replies
@@ -28,8 +40,9 @@ export const exampleResponseHandler: CustomResponseHandler = async (ctx) => {
       location: { lat: message.latitude, lng: message.longitude },
     });
     await bot.sendMessage(userProfile, [
-      new Message.Text(
-        `Location received: ${message.latitude}, ${message.longitude}`
+      textMessage(
+        `Location received: ${message.latitude}, ${message.longitude}`,
+        userProfile.apiVersion
       ),
     ]);
   } else if (messageType === "contact") {
@@ -37,8 +50,9 @@ export const exampleResponseHandler: CustomResponseHandler = async (ctx) => {
       contact: { name: message.contactName, phone: message.contactPhoneNumber },
     });
     await bot.sendMessage(userProfile, [
-      new Message.Text(
-        `Contact received: ${message.contactName ?? ""} ${message.contactPhoneNumber ?? ""}`
+      textMessage(
+        `Contact received: ${message.contactName ?? ""} ${message.contactPhoneNumber ?? ""}`,
+        userProfile.apiVersion
       ),
     ]);
   } else if (messageType === "picture") {
@@ -46,12 +60,15 @@ export const exampleResponseHandler: CustomResponseHandler = async (ctx) => {
       pictureUrl: message.url,
     });
     await bot.sendMessage(userProfile, [
-      new Message.Text("Picture received, thanks!"),
+      textMessage("Picture received, thanks!", userProfile.apiVersion),
     ]);
   } else {
     // Re-prompt: any other type (including plain text) is not what we expect
     await bot.sendMessage(userProfile, [
-      new Message.Text("Please share a location, contact, or picture."),
+      textMessage(
+        "Please share a location, contact, or picture.",
+        userProfile.apiVersion
+      ),
     ]);
   }
 
