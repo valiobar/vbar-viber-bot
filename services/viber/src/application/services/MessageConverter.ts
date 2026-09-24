@@ -30,7 +30,7 @@ export class MessageConverter {
    *
    * @param messageDTO - MessageDTO to convert
    * @param keyboard - Optional keyboard object to attach to the message
-   * @param minApiVersion - Recipient apiVersion. Missing or invalid values become 8.
+   * @param minApiVersion - Ignored. Every message is sent at min_api_version 7.
    * @returns Viber Message instance
    * @throws Error if message type is not supported or content is invalid
    */
@@ -49,7 +49,7 @@ export class MessageConverter {
     | Message.Url
     | Message.RichMedia {
     const content = messageDTO.content as any;
-    // Callers pass the user's apiVersion. Missing values fall back to 8.
+    // Fixed at 7 for every recipient, including Viber Desktop.
     const apiVersionParam = resolveUserMinApiVersion(minApiVersion);
 
     try {
@@ -246,7 +246,7 @@ export class MessageConverter {
    *
    * @param messageDTOs - Array of MessageDTOs to convert
    * @param keyboard - Optional keyboard to attach to the last message
-   * @param minApiVersion - Recipient apiVersion. Missing or invalid values become 8.
+   * @param minApiVersion - Ignored. Every message is sent at min_api_version 7.
    * @returns Array of Viber Message instances
    */
   convertToViberMessages(

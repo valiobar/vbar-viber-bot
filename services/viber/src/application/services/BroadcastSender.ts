@@ -89,7 +89,6 @@ export class BroadcastSender {
     }
 
     // Same converter StepSender uses; keyboard is attached to the last message.
-    // One payload for every recipient, so there is no single user apiVersion.
     const sdkMessages = this.messageConverter.convertToViberMessages(
       messageDTOs,
       keyboard,

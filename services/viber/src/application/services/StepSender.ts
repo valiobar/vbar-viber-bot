@@ -217,7 +217,7 @@ export class StepSender {
         }
       }
 
-      // User's client version, or 8 when Viber did not send one.
+      // Fixed min_api_version for every recipient.
       const minApiVersion = resolveUserMinApiVersion(userProfile.apiVersion);
 
       const viberMessages = this.messageConverter.convertToViberMessages(
