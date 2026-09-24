@@ -270,7 +270,7 @@ Behaviour:
 
 - `parseAiCarouselDirective` strips markdown code fences, then requires `type: "carousel"` and at least one renderable card (a card needs a `title` or an `image`; invalid cards/buttons are dropped, max 6 cards). Anything else — including a directive that validates to zero cards — falls back to the plain-text send, so a malformed model answer never silences the bot.
 - `buildRichMediaFromCards` emits a `rich_media` payload (`ButtonsGroupColumns: 6`) with a uniform per-card layout: image (3 rows, when any card has one), title, description, then one row per action button — padded with filler cells and capped at Viber's 7-row limit.
-- The send is `[optional Message.Text intro] + Message.RichMedia` with the restore keyboard attached to the rich-media message (`minApiVersion` 7.2).
+- The send is `[optional Message.Text intro] + Message.RichMedia` with the restore keyboard attached to the rich-media message. `min_api_version` is the user's `apiVersion`, or 8 when Viber did not send one.
 - `reply` buttons carry **no** `buttonsPrefix`, so a tap routes the `actionBody` text back to the AI as a normal user message (follow-up questions). `open-url` buttons open the URL. Other action types are not allowed.
 - The directive contract and the prompt instructions that produce it are documented in [ai.md](./ai.md).
 

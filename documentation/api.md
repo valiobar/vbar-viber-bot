@@ -152,7 +152,7 @@ Notes:
 - `humanReadableName` and a non-empty `Cards` array are required on create.
 - On create/update the service validates cards and computes the flattened, Viber-shaped `Buttons` array stored alongside `Cards`. Clients send `Cards`; they do not send `Buttons`.
 - Mutations publish a refresh event with `dataType: "carousels"`.
-- Messages of type `rich-media` use content `{ "carousel": { "id": "<carouselId>" } }`. Viber resolves that ID from its carousel cache, converts the stored `Buttons` via `CarouselConverter`, and sends `Message.RichMedia` (`min_api_version` ≥ 7).
+- Messages of type `rich-media` use content `{ "carousel": { "id": "<carouselId>" } }`. Viber resolves that ID from its carousel cache, converts the stored `Buttons` via `CarouselConverter`, and sends `Message.RichMedia` (`min_api_version` is the user's `apiVersion`, or 8 when it is missing).
 
 ### Knowledge Base (thin proxy to AI)
 

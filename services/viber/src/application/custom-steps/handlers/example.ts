@@ -14,6 +14,7 @@
 
 import { Message } from "viber-bot";
 import { CustomStepHandler } from "../types";
+import { resolveUserMinApiVersion } from "../../services/resolveUserMinApiVersion";
 
 /**
  * Sends a runtime-built text message greeting the user by name.
@@ -27,7 +28,16 @@ export const exampleHandler: CustomStepHandler = async (ctx) => {
   const userName = userProfile.name || "there";
   const text = `Hello ${userName}! This is the "example" custom step handler (step: ${step.humanReadableName}).`;
 
-  await bot.sendMessage(userProfile, [new Message.Text(text)]);
+  await bot.sendMessage(userProfile, [
+    new (Message.Text as any)(
+      text,
+      null,
+      null,
+      null,
+      null,
+      resolveUserMinApiVersion(userProfile.apiVersion)
+    ),
+  ]);
 
   logger.info("Example custom step handler executed", {
     stepId: step.id,
