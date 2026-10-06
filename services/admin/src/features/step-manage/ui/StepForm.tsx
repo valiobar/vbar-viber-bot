@@ -77,8 +77,21 @@ export const StepForm = ({
     const loadMessages = async () => {
       setIsLoadingMessages(true);
       try {
-        const data = await listMessages({ hidden: false }, { limit: 1000 });
-        setMessages(data.messages);
+        // The API caps `limit` at 100 (larger values silently fall back to 10),
+        // so page through every result to populate the full dropdown.
+        const all: MessageDTO[] = [];
+        let page = 1;
+        let totalPages = 1;
+        do {
+          const data = await listMessages(
+            { hidden: false },
+            { page, limit: 100 }
+          );
+          all.push(...data.messages);
+          totalPages = data.totalPages;
+          page += 1;
+        } while (page <= totalPages);
+        setMessages(all);
       } catch (err) {
         console.error("Error fetching messages:", err);
       } finally {
@@ -96,11 +109,21 @@ export const StepForm = ({
     const loadKeyboards = async () => {
       setIsLoadingKeyboards(true);
       try {
-        const data = await listKeyboards(
-          { hidden: false, isTemplate: false },
-          { limit: 1000 }
-        );
-        let options = data.keyboards;
+        // The API caps `limit` at 100 (larger values silently fall back to 10),
+        // so page through every result to populate the full dropdown.
+        const all: KeyboardDTO[] = [];
+        let page = 1;
+        let totalPages = 1;
+        do {
+          const data = await listKeyboards(
+            { hidden: false, isTemplate: false },
+            { page, limit: 100 }
+          );
+          all.push(...data.keyboards);
+          totalPages = data.totalPages;
+          page += 1;
+        } while (page <= totalPages);
+        let options = all;
         const currentId = initialData?.keyboard;
         if (currentId && !options.some((kb) => kb.id === currentId)) {
           const current = await getKeyboard(currentId);
