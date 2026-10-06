@@ -81,11 +81,16 @@ export class MessageConverter {
 
         case "picture": {
           const media = content?.media || "";
-          const text = content?.text;
-          // Message.Picture(media, text, keyboard, trackingData, timestamp, token, minApiVersion)
+          const text = content?.text || "";
+          const thumbnail =
+            typeof content?.thumbnail === "string" && content.thumbnail !== ""
+              ? content.thumbnail
+              : null;
+          // Picture(url, text, thumbnail, keyboard, trackingData, timestamp, token, minApiVersion)
           message = new (Message.Picture as any)(
             media,
             text,
+            thumbnail,
             keyboard,
             null,
             null,
@@ -98,12 +103,18 @@ export class MessageConverter {
         case "video": {
           const media = content?.media || "";
           const size = content?.size;
-          const text = content?.text;
-          // Message.Video(media, size, text, keyboard, trackingData, timestamp, token, minApiVersion)
+          const text = content?.text || "";
+          const thumbnail =
+            typeof content?.thumbnail === "string" && content.thumbnail !== ""
+              ? content.thumbnail
+              : null;
+          // Video(url, size, text, thumbnail, duration, keyboard, trackingData, timestamp, token, minApiVersion)
           message = new (Message.Video as any)(
             media,
             size,
             text,
+            thumbnail,
+            content?.duration ?? null,
             keyboard,
             null,
             null,

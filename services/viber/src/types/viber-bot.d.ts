@@ -105,7 +105,16 @@ declare module "viber-bot" {
     }
 
     export class Picture {
-      constructor(pictureUrl: string, text?: string, keyboard?: any);
+      constructor(
+        pictureUrl: string,
+        text?: string,
+        thumbnail?: string | null,
+        keyboard?: any,
+        trackingData?: any,
+        timestamp?: any,
+        token?: any,
+        minApiVersion?: number
+      );
       url: string;
       text?: string;
       thumbnail?: string;
@@ -116,7 +125,13 @@ declare module "viber-bot" {
         videoUrl: string,
         size?: number,
         text?: string,
-        keyboard?: any
+        thumbnail?: string | null,
+        duration?: number | null,
+        keyboard?: any,
+        trackingData?: any,
+        timestamp?: any,
+        token?: any,
+        minApiVersion?: number
       );
       url: string;
       size?: number;
