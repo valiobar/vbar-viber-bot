@@ -228,6 +228,47 @@ export const MessageForm = ({
   }, [initialData]);
 
   /**
+   * Reset all type-specific content state back to blank defaults.
+   * Used when the user switches the message type so the form starts
+   * with an empty message of the newly selected type.
+   */
+  const resetTypeSpecificFields = () => {
+    setUrl(null);
+    setTextContent("");
+    setPictureMedia("");
+    setPictureText("");
+    setPictureThumbnail("");
+    setVideoMedia("");
+    setVideoText("");
+    setVideoThumbnail("");
+    setVideoSize(null);
+    setVideoDuration(null);
+    setFileMedia("");
+    setFileSize(null);
+    setFileName("");
+    setLocationLat(null);
+    setLocationLon(null);
+    setContactName("");
+    setContactPhone("");
+    setStickerId(null);
+    setKeyboardId(null);
+    setCarouselId(null);
+  };
+
+  /**
+   * Handle a message type change. Switching the type starts a blank
+   * message of the new type and clears any validation errors.
+   */
+  const handleTypeChange = (newType: MessageType) => {
+    if (newType === type) {
+      return;
+    }
+    setType(newType);
+    resetTypeSpecificFields();
+    setErrors({});
+  };
+
+  /**
    * Build content object based on message type
    */
   const buildContent = (): object => {
@@ -423,9 +464,8 @@ export const MessageForm = ({
             <select
               id="type"
               value={type}
-              onChange={(e) => setType(e.target.value as MessageType)}
+              onChange={(e) => handleTypeChange(e.target.value as MessageType)}
               className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-              disabled={!!initialData} // Don't allow type change when editing
             >
               {messageTypes.map((t) => (
                 <option key={t} value={t}>
