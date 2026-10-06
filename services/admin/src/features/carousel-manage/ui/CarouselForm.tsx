@@ -363,6 +363,10 @@ export const CarouselForm = ({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showAiChat, setShowAiChat] = useState(false);
   const [submitMissingFields, setSubmitMissingFields] = useState<string[]>([]);
+  // Server-side save error (e.g. an invalid hex color rejected by the API).
+  // The API returns the specific validation message; we surface it verbatim.
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const formColumnRef = useRef<HTMLDivElement>(null);
   const settings = useBotSettingsStore((state) => state.settings);
   const loadBotSettings = useBotSettingsStore((state) => state.load);
@@ -597,13 +601,23 @@ export const CarouselForm = ({
         ),
       })),
     };
-    await onSubmit(formData);
+    setSubmitError(null);
+    setIsSubmitting(true);
+    try {
+      await onSubmit(formData);
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error ? err.message : "Failed to save carousel"
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const editingCard =
     editingCardIndex !== null ? cards[editingCardIndex] : undefined;
   let submitLabel = "Create Carousel";
-  if (isLoading) {
+  if (isLoading || isSubmitting) {
     submitLabel = "Saving...";
   } else if (initialData) {
     submitLabel = "Update Carousel";
@@ -884,13 +898,26 @@ export const CarouselForm = ({
         </div>
       </div>
 
+      {/* Server-side save error (e.g. invalid color format rejected by API) */}
+      {submitError && (
+        <div
+          role="alert"
+          className="rounded-md border border-red-300 bg-red-50 p-4 text-sm dark:border-red-700 dark:bg-red-900/20"
+        >
+          <p className="font-medium text-red-800 dark:text-red-200">
+            Could not save carousel:
+          </p>
+          <p className="mt-1 text-red-700 dark:text-red-300">{submitError}</p>
+        </div>
+      )}
+
       <div className="flex items-center justify-end space-x-4">
         {onCancel && (
           <button
             type="button"
             onClick={onCancel}
             className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
-            disabled={isLoading}
+            disabled={isLoading || isSubmitting}
           >
             Cancel
           </button>
@@ -898,7 +925,7 @@ export const CarouselForm = ({
         <button
           type="submit"
           className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 dark:bg-blue-700 dark:hover:bg-blue-800"
-          disabled={isLoading}
+          disabled={isLoading || isSubmitting}
         >
           {submitLabel}
         </button>
