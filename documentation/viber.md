@@ -220,7 +220,7 @@ AI receives a string, not Viber binary payloads.
 
 | Viber type | String sent to AI |
 |------------|-------------------|
-| Text | `message.text` |
+| Text | `message.text` (*skipped if the text is a bare URL — see below*) |
 | Picture | URL, plus optional ` \| Text: ...` |
 | Video | URL + optional text / size / duration |
 | File | URL + optional filename / size |
@@ -229,7 +229,7 @@ AI receives a string, not Viber binary payloads.
 | Sticker | `Sticker ID: …` |
 | URL | *skipped — not sent to AI* |
 
-`url`-type messages are **not** forwarded to the AI on an AI step. They are produced by carousel `open-url` taps (notably the location map button's in-app browser), which would otherwise re-run the AI and re-send the same carousel. `MessageHandler` logs `Skipping AI processing for URL message` and returns.
+`url`-type messages are **not** forwarded to the AI on an AI step, and neither are text messages whose entire content is a single URL. Tapping a carousel `open-url` button (notably the location map/navigate buttons) delivers the button's `ActionBody` URL to the bot as a **text** message — `Silent: true` only hides it in the chat — which would otherwise re-run the AI and re-send the same carousel. `MessageHandler` logs `Skipping AI processing for URL message` / `Skipping AI processing for URL-only text message` and returns.
 
 Viber does not download files or images for the model. If you need vision or file ingest, that work is not in this path.
 
@@ -393,7 +393,7 @@ Local: `npm run dev:viber` plus ngrok (or similar) for the webhook. AI must be r
 - Webhook registration failure does not fail startup.
 - Custom step handlers are in-repo code (`custom-steps/`), not CMS-editable logic.
 - Duplicate webhook deliveries of the same Viber `message_token` are dropped in-process (`MessageDedup` in `MessageHandler`, 5-minute TTL). This assumes a single `viber` container. Scaling out would need a shared store.
-- `url`-type messages are ignored on AI steps (carousel `open-url` taps would otherwise re-trigger the AI); a genuinely user-pasted link while on an AI step therefore gets no AI reply.
+- `url`-type messages and URL-only text messages are ignored on AI steps (carousel `open-url` taps deliver their `ActionBody` URL as a text message and would otherwise re-trigger the AI); a genuinely user-pasted bare link while on an AI step therefore gets no AI reply.
 
 ## Related documentation
 
