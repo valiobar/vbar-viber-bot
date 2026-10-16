@@ -227,7 +227,9 @@ AI receives a string, not Viber binary payloads.
 | Location | `latitude,longitude` |
 | Contact | `Contact: name (phone)` |
 | Sticker | `Sticker ID: …` |
-| URL | `message.url` |
+| URL | *skipped — not sent to AI* |
+
+`url`-type messages are **not** forwarded to the AI on an AI step. They are produced by carousel `open-url` taps (notably the location map button's in-app browser), which would otherwise re-run the AI and re-send the same carousel. `MessageHandler` logs `Skipping AI processing for URL message` and returns.
 
 Viber does not download files or images for the model. If you need vision or file ingest, that work is not in this path.
 
@@ -391,6 +393,7 @@ Local: `npm run dev:viber` plus ngrok (or similar) for the webhook. AI must be r
 - Webhook registration failure does not fail startup.
 - Custom step handlers are in-repo code (`custom-steps/`), not CMS-editable logic.
 - Duplicate webhook deliveries of the same Viber `message_token` are dropped in-process (`MessageDedup` in `MessageHandler`, 5-minute TTL). This assumes a single `viber` container. Scaling out would need a shared store.
+- `url`-type messages are ignored on AI steps (carousel `open-url` taps would otherwise re-trigger the AI); a genuinely user-pasted link while on an AI step therefore gets no AI reply.
 
 ## Related documentation
 
