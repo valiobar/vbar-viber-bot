@@ -223,7 +223,7 @@ Admin persists consumed events in `admin_service.stepusageevents` (100-day TTL).
 - **Utils:** `Logger` / `ConsoleLogger`, `PathUtils`
 - **Config:** `ConfigHelper`, `EnvironmentConfig`, `resolveRootEnvPath`
 - **Infra:** `createMongoConnection`, `createQueueChannel` — mandated for new connections in viber/ai. Admin `lib/mongodb.ts` stays Next.js-specific.
-- **Locations:** `@vbar/shared/locations` — `Location` / `LatLng` types, `getNearbyLocations` / `haversineKm`, `getDestinationUrl`, and `locations.json`. Admin `/locations` and viber `locationHandler` import this subpath. Regenerate the catalog with `services/admin/scripts/geocode-locations.mjs` (writes `packages/shared/src/locations/locations.json`).
+- **Locations:** `@vbar/shared/locations` — `Location` / `LatLng` types, `getNearbyLocations` / `haversineKm`, `getDestinationUrl`, `DEFAULT_RADIUS_KM` (2), and `locations.json`. Admin `/locations` and viber `locationHandler` import this subpath. Regenerate the catalog with `services/admin/scripts/geocode-locations.mjs` (writes `packages/shared/src/locations/locations.json`).
 
 ## Infrastructure
 

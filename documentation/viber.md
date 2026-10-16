@@ -121,7 +121,7 @@ Scripted replies go through `TextMessageHandler` + `StepSender`.
 
 **Custom response handlers** (`application/custom-responses/`): when the user is already on a step with `responseHandler` set, `MessageHandler` runs that handler **before** AI and before per-type handlers. Prefixed keyboard taps still go through normal trigger navigation. Names are synced with `CUSTOM_RESPONSE_HANDLER_NAMES` in `@vbar/shared`.
 
-`locationHandler` reads lat/lng from a location message, calls `getNearbyLocations` from `@vbar/shared/locations`, and sends one `rich_media` carousel: up to 3 closest pharmacies (name, address, distance, Google Maps directions via `getDestinationUrl`) plus a **Виж на картата** card that opens the public admin `/locations?lat=&lng=` page. It also attaches the named admin keyboard `"hui"` and a follow-up `Message.Keyboard` so the client replaces the previous keyboard.
+`locationHandler` reads lat/lng from a location message, calls `getNearbyLocations` from `@vbar/shared/locations` with `DEFAULT_RADIUS_KM` (2 km), and sends one `rich_media` carousel: a **Виж на картата** card first (opens `/locations?lat=&lng=`), then up to 3 pharmacies within that radius (name, address, distance, Google Maps directions via `getDestinationUrl`). If none are inside the radius, the closest 3 are shown instead. It also attaches the named admin keyboard `"main"` and a follow-up `Message.Keyboard` so the client replaces the previous keyboard.
 
 **Analytics instrumentation** (`AnalyticsPublisher`): `sendStep` accepts an optional `{ source, trigger? }` context from the call site. Sources:
 

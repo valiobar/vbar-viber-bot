@@ -3,9 +3,10 @@
  *
  * When a step has `responseHandler: "locationHandler"`, reads latitude and
  * longitude from a location message, then sends the admin keyboard named
- * "hui" plus a rich-media carousel: up to 3 closest pharmacies (name,
- * address, distance, Google Maps directions) and a "Виж всички" card
- * that opens the public /locations map at the shared coordinates.
+ * "main" plus a rich-media carousel: a "Виж на картата" card first, then
+ * up to 3 pharmacies within DEFAULT_RADIUS_KM (name, address, distance,
+ * Google Maps directions). The map card opens the public /locations page
+ * at the shared coordinates.
  *
  * Reuse other admin content the same way:
  *   ctx.botDataService.getKeyboardByName("hui")
@@ -17,6 +18,7 @@
 import { Message } from "viber-bot";
 import { ConfigHelper } from "@vbar/shared";
 import {
+  DEFAULT_RADIUS_KM,
   getDestinationUrl,
   getNearbyLocations,
   locations,
@@ -34,7 +36,7 @@ const CARD_ROWS = 6;
 const ADDRESS_ROWS = 4;
 const MAP_IMAGE_ROWS = 5;
 const NAV_BUTTON_TEXT = "Навигация";
-const MAP_BUTTON_TEXT = "Виж всички";
+const MAP_BUTTON_TEXT = "Виж на картата";
 const MAP_BG_MEDIA = "https://cdn.kvaba.xyz/bodrost/map.png";
 const MAP_BUTTON_BG = "#0f766e";
 const MAP_BUTTON_TEXT_COLOR = "#FFFFFF";
@@ -120,6 +122,31 @@ const buildNearbyCarousel = (
   mapUrl: string
 ): object => {
   const buttons: Record<string, unknown>[] = [];
+  const openMapPage = mapPageAction(mapUrl);
+
+  buttons.push(
+    {
+      Columns: CARD_COLUMNS,
+      Rows: MAP_IMAGE_ROWS,
+      Text: "",
+      ...openMapPage,
+      BgMedia: MAP_BG_MEDIA,
+      BgMediaType: "picture",
+      BgMediaScaleType: "crop",
+      Silent: true,
+    },
+    {
+      Columns: CARD_COLUMNS,
+      Rows: 1,
+      Text: `<font color="${MAP_BUTTON_TEXT_COLOR}"><b>${MAP_BUTTON_TEXT}</b></font>`,
+      ...openMapPage,
+      BgColor: MAP_BUTTON_BG,
+      TextSize: "large",
+      TextVAlign: "middle",
+      TextHAlign: "center",
+      Silent: true,
+    }
+  );
 
   for (const item of closest) {
     const openDestination = destinationAction(item, origin);
@@ -160,31 +187,6 @@ const buildNearbyCarousel = (
       }
     );
   }
-
-  const openMapPage = mapPageAction(mapUrl);
-  buttons.push(
-    {
-      Columns: CARD_COLUMNS,
-      Rows: MAP_IMAGE_ROWS,
-      Text: "",
-      ...openMapPage,
-      BgMedia: MAP_BG_MEDIA,
-      BgMediaType: "picture",
-      BgMediaScaleType: "crop",
-      Silent: true,
-    },
-    {
-      Columns: CARD_COLUMNS,
-      Rows: 1,
-      Text: `<font color="${MAP_BUTTON_TEXT_COLOR}"><b>${MAP_BUTTON_TEXT}</b></font>`,
-      ...openMapPage,
-      BgColor: MAP_BUTTON_BG,
-      TextSize: "large",
-      TextVAlign: "middle",
-      TextHAlign: "center",
-      Silent: true,
-    }
-  );
 
   return {
     Type: "rich_media",
@@ -244,10 +246,11 @@ export const locationHandler: CustomResponseHandler = async (ctx) => {
   }
 
   const mapUrl = buildMapUrl(coords.lat, coords.lng);
-  const closest = getNearbyLocations(locations, coords).items.slice(
-    0,
-    CLOSEST_COUNT
-  );
+  const closest = getNearbyLocations(
+    locations,
+    coords,
+    DEFAULT_RADIUS_KM
+  ).items.slice(0, CLOSEST_COUNT);
   const keyboard = resolveNamedKeyboard(ctx, MAIN_KEYBOARD_NAME);
   const minApiVersion = resolveUserMinApiVersion(ctx.userProfile.apiVersion);
 
