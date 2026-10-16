@@ -278,6 +278,19 @@ export class MessageHandler implements IEventHandler {
               });
             }
             if (step && step.isAi === true && !isMessageContainsPrefix) {
+              // URL messages on an AI step are not prompts: they are produced
+              // by carousel open-url taps (e.g. the location map button's
+              // in-app browser), which would otherwise re-run the AI and
+              // re-send the same carousel. Skip them.
+              if (message instanceof Message.Url) {
+                this.logger.info("Skipping AI processing for URL message", {
+                  userId,
+                  stepId: user.currentStepId,
+                  url: message.url,
+                });
+                return;
+              }
+
               // Extract message content based on message typea
               let messageContent: string = "";
               const messageType = this.getMessageType(message);
