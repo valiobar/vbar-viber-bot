@@ -250,7 +250,7 @@ When the AI reply is `{"type":"locations","place":"..."}`, `ViberAiService` (`sr
 
 1. Geocodes the place via `GoogleGeocodingClient` (`IGeocodingClient` port) — `", Bulgaria"` appended, `region=bg`, in-memory cache; key `GOOGLE_MAPS_GEOCODING_API_KEY` (falls back to `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`).
 2. Calls `getNearbyLocations(locations, origin, 10)` — nearest-few fallback when nothing is within 10 km — and takes the closest 3.
-3. Sends the same `rich_media` carousel as `locationHandler` (shared builders in `src/application/services/LocationCarousel.ts`) with the named admin keyboard `"main"` plus a follow-up `Message.Keyboard`.
+3. Sends the same `rich_media` carousel as `locationHandler` (shared builders in `src/application/services/LocationCarousel.ts`) with the named admin keyboard `"ai keyboard"` plus a follow-up `Message.Keyboard`. If that name is missing, the restored step keyboard (or the dismiss keyboard) is attached instead.
 4. If geocoding fails (missing key, no result, or network error), sends a short Bulgarian clarification message with the restored step keyboard instead: "Не успях да намеря това място. Моля, уточнете града, квартала или адреса."
 
 The gRPC contract is unchanged. The model emits the directive only when the prompt template tells it to. See [ai.md](./ai.md).

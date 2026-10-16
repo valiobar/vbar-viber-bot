@@ -19,6 +19,7 @@ import { BotDataService } from "./BotDataService";
 import { KeyboardConverter } from "./KeyboardConverter";
 
 export const MAIN_KEYBOARD_NAME = "main";
+export const AI_KEYBOARD_NAME = "ai keyboard";
 export const CLOSEST_COUNT = 3;
 const CARD_COLUMNS = 6;
 const CARD_ROWS = 6;
