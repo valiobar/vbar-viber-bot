@@ -328,6 +328,16 @@ Rules:
 
 Caveat: `executeSimpleChain` appends a hard "under 700 characters" instruction, which pushes the model toward fewer cards. Acceptable for now; relaxing the cap for carousel prompts would be an AI-side change. Viber's parser strips code fences defensively, and any reply that is not a valid directive (or validates to zero cards) is sent as plain text.
 
+#### Locations directive (viber-side interpretation)
+
+The reply is still one string. When the prompt instructs it, the model answers location questions with:
+
+```json
+{"type":"locations","place":"Асеновград, ул. Демокрация"}
+```
+
+Viber (`services/viber/src/application/services/AiLocationsDirective.ts`) parses this, geocodes the place (Google Geocoding API, `region=bg`, 10 km radius), and renders the same map + nearby-pharmacies carousel as the GPS `locationHandler` (render details in [viber.md](./viber.md)). The AI service needs no code change — the directive is prompt-template content. Directive detection order on the Viber side: locations → carousel → text.
+
 ### Admin service — REST (knowledge base)
 
 `services/admin/src/app/api/knowledge-base/**` are thin proxies over `forwardToAiService` (`src/lib/aiService.ts`). Each route forwards to `AI_SERVICE_URL` (default `http://localhost:3002`) with an `X-Service-Token` header and passes the AI body and status through unchanged. Admin owns no knowledge-base data.

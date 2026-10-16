@@ -85,7 +85,7 @@ const stripCodeFences = (text: string): string => {
  * tries the whole (fence-stripped) text first, then the substring between
  * the first "{" and the last "}" (LLMs often add words around the JSON).
  */
-const parseJsonObjectLoose = (text: string): unknown | null => {
+export const parseJsonObjectLoose = (text: string): unknown | null => {
   const cleaned = stripCodeFences(text);
   const candidates = [cleaned];
   const start = cleaned.indexOf("{");
@@ -103,7 +103,7 @@ const parseJsonObjectLoose = (text: string): unknown | null => {
   return null;
 };
 
-const asNonEmptyString = (value: unknown): string | undefined => {
+export const asNonEmptyString = (value: unknown): string | undefined => {
   return typeof value === "string" && value.trim() !== ""
     ? value.trim()
     : undefined;

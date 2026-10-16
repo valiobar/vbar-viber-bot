@@ -59,6 +59,7 @@ Default profile starts **6 containers**:
 - Admin → AI REST (`AI_SERVICE_URL=http://ai:3002`, `AI_SERVICE_TOKEN`)
 - Viber → AI over gRPC (`AI_SERVICE_GRPC_HOST=ai`, `AI_SERVICE_GRPC_PORT=50051`; no host publish of 50051)
 - Viber → Admin REST (`ADMIN_SERVICE_URL=http://admin:3000`)
+- Viber → Google Geocoding API (`https://maps.googleapis.com`) for the AI locations directive. Outbound HTTPS from the viber container; no Compose network change.
 - All apps → shared Mongo with distinct `MONGODB_DB_NAME` values
 
 `AI_SERVICE_TOKEN` must be the same value on admin (outbound) and ai (inbound). A mismatch or unset token breaks knowledge-base ingest (401 / 503), not silently.
@@ -115,9 +116,10 @@ Use the root `.env` (copy from `.env.example`). Compose and `deploy.sh` read thi
 | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_AI_API_KEY`, `DEEPSEEK_API_KEY` | Cloud LLM keys as needed |
 | `AI_SERVICE_GRPC_HOST` / `AI_SERVICE_GRPC_PORT` | Set by Compose for viber (`ai` / `50051`) |
 | `AI_THINKING_GIF_URL` | Optional. Public HTTPS GIF (or JPEG/PNG as Viber picture, max 500 KB) for the AI thinking keyboard. SVG is not supported. Unset/empty = no thinking indicator |
+| `GOOGLE_MAPS_GEOCODING_API_KEY` | Optional server-only Google key. Used by `services/admin/scripts/geocode-locations.mjs` and, at runtime, by the viber service AI locations directive. Falls back to `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` when unset. Without either key, a locations directive degrades to a Bulgarian clarification message. The viber container calls `maps.googleapis.com` outbound |
 | `JWT_EXPIRES_IN`, `JWT_REFRESH_EXPIRES_IN` | Optional JWT TTLs |
 | `NEXT_PUBLIC_APP_URL` | Admin public URL |
-| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Inlined into the admin image at build. Local Compose build reads `.env`. Production must set the **GitHub repo secret** of the same name — the VPS `.env` value is ignored |
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Inlined into the admin image at build. Local Compose build reads `.env`. Production must set the **GitHub repo secret** of the same name — the VPS `.env` value is ignored for the admin client. Compose also passes it into the viber container as the runtime fallback for `GOOGLE_MAPS_GEOCODING_API_KEY` |
 | `RAG_ENABLED` / `AI_TASK_TYPE` | RAG stays off unless enabled; explicit `AI_TASK_TYPE` wins. See [rag.md](./rag.md) |
 | `RAG_VECTOR_STORE_TYPE` | `chroma` (default) or `memory`. `mongodb` is rejected |
 | `CHROMA_URL` | Host npm: `http://localhost:8000`. Compose hardcodes `http://chromadb:8000` on `ai` |

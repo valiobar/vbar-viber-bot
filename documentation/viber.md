@@ -121,7 +121,7 @@ Scripted replies go through `TextMessageHandler` + `StepSender`.
 
 **Custom response handlers** (`application/custom-responses/`): when the user is already on a step with `responseHandler` set, `MessageHandler` runs that handler **before** AI and before per-type handlers. Prefixed keyboard taps still go through normal trigger navigation. Names are synced with `CUSTOM_RESPONSE_HANDLER_NAMES` in `@vbar/shared`.
 
-`locationHandler` reads lat/lng from a location message, calls `getNearbyLocations` from `@vbar/shared/locations` with `DEFAULT_RADIUS_KM` (2 km), and sends one `rich_media` carousel: a **Виж на картата** card first (opens `/locations?lat=&lng=`), then up to 3 pharmacies within that radius (name, address, distance, Google Maps directions via `getDestinationUrl`). If none are inside the radius, the closest 3 are shown instead. It also attaches the named admin keyboard `"main"` and a follow-up `Message.Keyboard` so the client replaces the previous keyboard.
+`locationHandler` reads lat/lng from a location message, calls `getNearbyLocations` from `@vbar/shared/locations` with `DEFAULT_RADIUS_KM` (2 km), and sends one `rich_media` carousel: a **Виж на картата** card first (opens `/locations?lat=&lng=`), then up to 3 pharmacies within that radius (name, address, distance, Google Maps directions via `getDestinationUrl`). If none are inside the radius, the closest 3 are shown instead. It also attaches the named admin keyboard `"main"` and a follow-up `Message.Keyboard` so the client replaces the previous keyboard. The carousel and keyboard are built by `src/application/services/LocationCarousel.ts` (`buildNearbyCarousel`, `buildMapUrl`, `resolveNamedKeyboard`). The AI locations directive reuses those builders.
 
 **Analytics instrumentation** (`AnalyticsPublisher`): `sendStep` accepts an optional `{ source, trigger? }` context from the call site. Sources:
 
@@ -238,11 +238,22 @@ The proto response is a single field: `response` (string). AI also computes `mod
 `ViberAiService`:
 
 - If `AI_THINKING_GIF_URL` is a non-empty public HTTPS URL, first sends a keyboard-only `Message.Keyboard` (no chat bubble) with one button (6 columns × 2 rows, `BgMediaType: gif`, `ActionType: none`, `InputFieldState: hidden`). SVG is not a valid Viber `BgMediaType`.
-- On a non-empty `response`, first tries to parse it as a **carousel directive** (see below); otherwise sends the AI text with the step keyboard restored (converted via `KeyboardConverter` + `buttonsPrefix`). If the step has no keyboard, a dismiss keyboard (`InputFieldState: regular`, one silent `none` button) replaces the GIF.
+- On a non-empty `response`, parses directives in order: **locations** (see below), then **carousel** (see below), then plain text with the step keyboard restored (converted via `KeyboardConverter` + `buttonsPrefix`). If the step has no keyboard, a dismiss keyboard (`InputFieldState: regular`, one silent `none` button) replaces the GIF.
 - On an empty/missing `response`, or on gRPC / network errors: if a thinking keyboard was sent, sends another keyboard-only message with the same restore keyboard so the GIF does not persist. If no thinking keyboard was sent, behaviour is unchanged (log only).
 - Errors are still swallowed; the type-specific handler is not run.
 
 There is no deadline on the gRPC call. A hung AI process holds the webhook handler until Node or a proxy times out.
+
+### AI locations directive (geocoded carousel)
+
+When the AI reply is `{"type":"locations","place":"..."}`, `ViberAiService` (`src/application/services/AiLocationsDirective.ts`):
+
+1. Geocodes the place via `GoogleGeocodingClient` (`IGeocodingClient` port) — `", Bulgaria"` appended, `region=bg`, in-memory cache; key `GOOGLE_MAPS_GEOCODING_API_KEY` (falls back to `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`).
+2. Calls `getNearbyLocations(locations, origin, 10)` — nearest-few fallback when nothing is within 10 km — and takes the closest 3.
+3. Sends the same `rich_media` carousel as `locationHandler` (shared builders in `src/application/services/LocationCarousel.ts`) with the named admin keyboard `"main"` plus a follow-up `Message.Keyboard`.
+4. If geocoding fails (missing key, no result, or network error), sends a short Bulgarian clarification message with the restored step keyboard instead: "Не успях да намеря това място. Моля, уточнете града, квартала или адреса."
+
+The gRPC contract is unchanged. The model emits the directive only when the prompt template tells it to. See [ai.md](./ai.md).
 
 ### AI carousel directive
 
@@ -303,7 +314,7 @@ User on step isAi=true
       → bot.sendMessage(thinking keyboard only)   # when AI_THINKING_GIF_URL is set
       → AiServiceGrpcClient.ProcessMessage
       → AI ProcessMessageUseCase (history + chain + save)
-      → bot.sendMessage(AI text, restored keyboard)
+      → bot.sendMessage(locations carousel | carousel | AI text)
 ```
 
 ## Storage
@@ -342,6 +353,8 @@ Root `.env` (Compose and `deploy.sh`). Relevant keys:
 | `VIBER_BOT_WEBHOOK_URL` | Public `https://…/webhook/viber` |
 | `PUBLIC_URL` | Fallback only: `${PUBLIC_URL}/webhook/viber` if webhook URL is empty |
 | `AI_THINKING_GIF_URL` | Optional public HTTPS GIF for the AI thinking keyboard. Empty disables it |
+| `GOOGLE_MAPS_GEOCODING_API_KEY` | Optional server-only key for the AI locations directive. Falls back to `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`. Without either, geocoding fails and the user gets the clarification message |
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Runtime fallback for the locations directive when the server-only key is unset |
 | `ADMIN_SERVICE_URL` | Admin base (Compose: `http://admin:3000`) |
 | `ADMIN_SERVICE_TOKEN` / `VIBER_SERVICE_TOKEN` / `SERVICE_TOKEN` | Token sent to admin |
 | `AI_SERVICE_GRPC_HOST` / `AI_SERVICE_GRPC_PORT` | AI gRPC (`ai` / `50051` in Compose) |
