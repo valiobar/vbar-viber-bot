@@ -291,6 +291,25 @@ export class MessageHandler implements IEventHandler {
                 return;
               }
 
+              // Open-url button taps (carousel map/navigate buttons) also
+              // arrive as *text* messages whose content is the button's
+              // ActionBody URL — Silent:true only hides them in the chat.
+              // A bare URL is never a real user prompt, so skip it too.
+              if (
+                message instanceof Message.Text &&
+                /^https?:\/\/\S+$/i.test(message.text.trim())
+              ) {
+                this.logger.info(
+                  "Skipping AI processing for URL-only text message",
+                  {
+                    userId,
+                    stepId: user.currentStepId,
+                    url: message.text.trim(),
+                  }
+                );
+                return;
+              }
+
               // Extract message content based on message typea
               let messageContent: string = "";
               const messageType = this.getMessageType(message);
