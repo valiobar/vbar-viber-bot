@@ -31,6 +31,7 @@ import {
   getCustomResponseHandler,
   InboundMessageType,
 } from "../custom-responses";
+import { MessageDedup } from "./messageDedup";
 
 export class MessageHandler implements IEventHandler {
   private logger: Logger;
@@ -47,6 +48,7 @@ export class MessageHandler implements IEventHandler {
   private urlHandler: UrlMessageHandler;
   private viberAiService: ViberAiService;
   private keyboardConverter: KeyboardConverter;
+  private dedup = new MessageDedup();
 
   constructor(
     userRepository: IUserRepository,
@@ -99,6 +101,15 @@ export class MessageHandler implements IEventHandler {
   }
 
   private async handleMessage(message: any, response: any): Promise<void> {
+    const token = message?.token;
+    if (token && this.dedup.seen(String(token))) {
+      this.logger.info("Duplicate webhook delivery ignored", {
+        token,
+        userId: response?.userProfile?.id,
+      });
+      return;
+    }
+
     try {
       // Extract user profile
       const userProfile = response.userProfile;

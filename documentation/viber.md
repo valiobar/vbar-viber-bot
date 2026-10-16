@@ -390,6 +390,7 @@ Local: `npm run dev:viber` plus ngrok (or similar) for the webhook. AI must be r
 - `DeliveryHandler` does not persist delivery state.
 - Webhook registration failure does not fail startup.
 - Custom step handlers are in-repo code (`custom-steps/`), not CMS-editable logic.
+- Duplicate webhook deliveries of the same Viber `message_token` are dropped in-process (`MessageDedup` in `MessageHandler`, 5-minute TTL). This assumes a single `viber` container. Scaling out would need a shared store.
 
 ## Related documentation
 
