@@ -26,6 +26,7 @@ import { StepSender } from "../services/StepSender";
 import { ViberAiService } from "../services/ViberAiService";
 import { KeyboardConverter } from "../services/KeyboardConverter";
 import { IAiServiceClient } from "../../ports/out/IAiServiceClient";
+import { GoogleGeocodingClient } from "../../adapters/out/GoogleGeocodingClient";
 import {
   getCustomResponseHandler,
   InboundMessageType,
@@ -75,7 +76,11 @@ export class MessageHandler implements IEventHandler {
     if (!aiServiceClient) {
       throw new Error("AI Service client is required for MessageHandler");
     }
-    this.viberAiService = new ViberAiService(this.logger, aiServiceClient);
+    this.viberAiService = new ViberAiService(
+      this.logger,
+      aiServiceClient,
+      new GoogleGeocodingClient(this.logger)
+    );
   }
 
   getName(): string {
@@ -364,7 +369,8 @@ export class MessageHandler implements IEventHandler {
                 userProfile,
                 undefined,
                 step.aiPromptName ?? undefined,
-                restoreKeyboard
+                restoreKeyboard,
+                { botDataService, buttonsPrefix }
               );
 
               // Return early - don't route to specific handler
