@@ -22,10 +22,10 @@ import {
 } from "./AiCarouselDirective";
 import { parseAiLocationsDirective } from "./AiLocationsDirective";
 import {
+  AI_KEYBOARD_NAME,
   buildMapUrl,
   buildNearbyCarousel,
   CLOSEST_COUNT,
-  MAIN_KEYBOARD_NAME,
   resolveNamedKeyboard,
 } from "./LocationCarousel";
 import { BotDataService } from "./BotDataService";
@@ -59,7 +59,7 @@ export class ViberAiService {
    * @param taskType - Task type: "simple", "rag", or "custom" (optional)
    * @param promptName - Per-step prompt override (optional)
    * @param restoreKeyboard - Converted Viber keyboard to attach after the AI reply
-   * @param context - Bot data and button prefix used to resolve the "main" keyboard
+   * @param context - Bot data and button prefix used to resolve the "ai keyboard" keyboard
    */
   async handleMessage(
     messageContent: string,
@@ -306,7 +306,7 @@ export class ViberAiService {
     const mapUrl = buildMapUrl(origin.lat, origin.lng);
     const keyboard = resolveNamedKeyboard(
       context.botDataService,
-      MAIN_KEYBOARD_NAME,
+      AI_KEYBOARD_NAME,
       context.buttonsPrefix,
       this.logger
     );
@@ -338,7 +338,7 @@ export class ViberAiService {
       lat: origin.lat,
       lng: origin.lng,
       closestCount: closest.length,
-      keyboardName: keyboard ? MAIN_KEYBOARD_NAME : null,
+      keyboardName: keyboard ? AI_KEYBOARD_NAME : null,
     });
   }
 
