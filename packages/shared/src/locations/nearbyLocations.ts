@@ -1,6 +1,6 @@
 import type { LatLng, NearbyLocationsResult, Location } from "./types";
 
-export const DEFAULT_RADIUS_KM = 10;
+export const DEFAULT_RADIUS_KM = 2;
 export const FALLBACK_COUNT = 15;
 export const RADIUS_OPTIONS_KM = [2, 5, 10, 15, 25, 50] as const;
 export type RadiusKm = (typeof RADIUS_OPTIONS_KM)[number];
