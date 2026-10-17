@@ -6,9 +6,122 @@
  * Table component for displaying steps with selection, actions, and pagination.
  */
 
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Pagination } from "@/shared";
 import type { StepDTO } from "../model/types";
+
+const VISIBLE_TRIGGER_COUNT = 2;
+
+const triggerBadgeClassName =
+  "inline-flex shrink-0 whitespace-nowrap rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-800 dark:bg-blue-900 dark:text-blue-200";
+
+interface TriggerListProps {
+  triggers: string[];
+}
+
+/**
+ * Shows the first triggers inline. Extra triggers stay behind a menu so a
+ * long list does not stretch the table row.
+ */
+const TriggerList = ({ triggers }: TriggerListProps) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLUListElement>(null);
+  const visibleTriggers = triggers.slice(0, VISIBLE_TRIGGER_COUNT);
+  const hiddenTriggers = triggers.slice(VISIBLE_TRIGGER_COUNT);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const placeMenu = () => {
+      const rect = buttonRef.current?.getBoundingClientRect();
+      if (!rect) {
+        return;
+      }
+      setMenuPosition({ top: rect.bottom + 4, left: rect.left });
+    };
+
+    placeMenu();
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsOpen(false);
+      }
+    };
+    const handleScroll = (event: Event) => {
+      const target = event.target;
+      if (target instanceof Node && menuRef.current?.contains(target)) {
+        return;
+      }
+      setIsOpen(false);
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("scroll", handleScroll, true);
+    window.addEventListener("resize", placeMenu);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("scroll", handleScroll, true);
+      window.removeEventListener("resize", placeMenu);
+    };
+  }, [isOpen]);
+
+  if (triggers.length === 0) {
+    return <span className="text-sm text-gray-500 dark:text-gray-400">—</span>;
+  }
+
+  const handleToggle = () => {
+    setIsOpen((open) => !open);
+  };
+
+  return (
+    <div ref={containerRef} className="relative flex items-center gap-1">
+      {visibleTriggers.map((trigger) => (
+        <span key={trigger} className={triggerBadgeClassName}>
+          {trigger}
+        </span>
+      ))}
+      {hiddenTriggers.length > 0 && (
+        <button
+          ref={buttonRef}
+          type="button"
+          aria-expanded={isOpen}
+          aria-label={`Show ${hiddenTriggers.length} more triggers`}
+          onClick={handleToggle}
+          className="inline-flex shrink-0 whitespace-nowrap rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+        >
+          +{hiddenTriggers.length}
+        </button>
+      )}
+      {isOpen && hiddenTriggers.length > 0 && (
+        <ul
+          ref={menuRef}
+          aria-label="More triggers"
+          style={{ top: menuPosition.top, left: menuPosition.left }}
+          className="fixed z-30 flex max-h-60 w-max max-w-xs flex-col gap-1 overflow-y-auto rounded-md border border-gray-200 bg-white p-2 shadow-lg dark:border-gray-600 dark:bg-gray-800"
+        >
+          {hiddenTriggers.map((trigger) => (
+            <li key={trigger}>
+              <span className={triggerBadgeClassName}>{trigger}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+};
 
 interface StepsTableProps {
   steps: StepDTO[];
@@ -181,17 +294,8 @@ export const StepsTable = ({
                       {step.humanReadableName}
                     </Link>
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="flex flex-wrap gap-1">
-                      {step.trigger.map((trigger, index) => (
-                        <span
-                          key={index}
-                          className="inline-flex rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-800 dark:bg-blue-900 dark:text-blue-200"
-                        >
-                          {trigger}
-                        </span>
-                      ))}
-                    </div>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <TriggerList triggers={step.trigger} />
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className="text-sm text-gray-900 dark:text-white">
