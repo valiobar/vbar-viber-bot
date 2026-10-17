@@ -36,6 +36,11 @@ export interface CustomStepContext {
   userRepository: IUserRepository;
   /** Button prefix from bot settings, if configured */
   buttonPrefix?: string | null;
+  /**
+   * Inbound viber-bot message that caused this step to be sent, when there
+   * is one (a button tap or other text trigger). Absent for subscribe.
+   */
+  message?: any;
   /** Logger scoped to the step sender */
   logger: Logger;
 }

@@ -184,7 +184,8 @@ export class MessageHandler implements IEventHandler {
               userProfile,
               botDataService,
               settings.buttonsPrefix,
-              { source: "welcome" }
+              { source: "welcome" },
+              message
             );
             this.logger.info("Welcome step sent on first message", {
               userId,

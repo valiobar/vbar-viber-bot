@@ -12,6 +12,7 @@ import { CustomStepHandlerName } from "@vbar/shared";
 import { CustomStepHandler } from "./types";
 import { exampleHandler } from "./handlers/example";
 import { stateRouterHandler } from "./handlers/stateRouter";
+import { triggerCarouselHandler } from "./handlers/triggerCarousel";
 
 export type { CustomStepContext, CustomStepHandler } from "./types";
 
@@ -21,6 +22,7 @@ export type { CustomStepContext, CustomStepHandler } from "./types";
 export const customStepHandlers = {
   example: exampleHandler,
   stateRouter: stateRouterHandler,
+  triggerCarousel: triggerCarouselHandler,
 } satisfies Record<CustomStepHandlerName, CustomStepHandler>;
 
 /**
