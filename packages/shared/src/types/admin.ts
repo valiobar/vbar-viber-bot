@@ -116,7 +116,7 @@ export interface ButtonFrame {
  * the viber registry are both typed against this list, so they stay in sync
  * at compile time.
  */
-export const CUSTOM_STEP_HANDLER_NAMES = ["example", "stateRouter"] as const;
+export const CUSTOM_STEP_HANDLER_NAMES = ["example", "stateRouter", "triggerCarousel"] as const;
 
 export type CustomStepHandlerName = (typeof CUSTOM_STEP_HANDLER_NAMES)[number];
 

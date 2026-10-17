@@ -132,7 +132,8 @@ export class TextMessageHandler {
               userProfile,
               botDataService,
               buttonsPrefix,
-              { source: "trigger", trigger: trigger.trim() }
+              { source: "trigger", trigger: trigger.trim() },
+              message
             );
           } else {
             this.logger.warn("No step found matching JSON payload trigger", {
@@ -170,7 +171,8 @@ export class TextMessageHandler {
           userProfile,
           botDataService,
           buttonsPrefix,
-          { source: "trigger", trigger: cleanedText }
+          { source: "trigger", trigger: cleanedText },
+          message
         );
       } else {
         this.logger.warn("No step found matching trigger", {

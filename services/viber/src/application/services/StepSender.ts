@@ -60,6 +60,7 @@ export class StepSender {
    * @param botDataService - BotDataService instance for retrieving step data
    * @param buttonPrefix - Optional button prefix from bot settings
    * @param analytics - Optional usage-tracking context (source + matched trigger)
+   * @param message - Optional inbound viber-bot message that caused this send
    * @returns Promise that resolves when messages are sent
    */
   async sendStep(
@@ -68,7 +69,8 @@ export class StepSender {
     userProfile: any,
     botDataService: BotDataService,
     buttonPrefix?: string | null,
-    analytics?: StepAnalyticsContext
+    analytics?: StepAnalyticsContext,
+    message?: any
   ): Promise<void> {
     try {
       // Retrieve step from BotDataService
@@ -101,6 +103,7 @@ export class StepSender {
           botDataService,
           userRepository: this.userRepository,
           buttonPrefix,
+          message,
           logger: this.logger,
         });
 
