@@ -4,7 +4,7 @@
  * When a step has `customHandler: "triggerCarousel"`, reads the inbound
  * message, strips the button prefix, and treats the remainder as the trigger
  * (e.g. "product-1"). Sends an intro text, then that named carousel as a
- * rich-media message, together with the admin keyboard named "main".
+ * rich-media message, a short disclaimer, and the admin keyboard named "main".
  */
 import { Message } from "viber-bot";
 import { CustomStepHandler } from "../types";
@@ -17,6 +17,9 @@ import { resolveUserMinApiVersion } from "../../services/resolveUserMinApiVersio
 
 const INTRO_TEXT =
   "💚 *Ти избираш. Ние ти помагаме да откриеш подходящия продукт.*\n\nСпоред отговорите ти нашето предложение е:";
+
+const DISCLAIMER_TEXT =
+  "Препоръката е с информативен характер и не замества консултация с лекар или фармацевт.";
 
 /** Remove the button prefix the same way TextMessageHandler does. */
 const triggerFromMessage = (
@@ -101,14 +104,15 @@ export const triggerCarouselHandler: CustomStepHandler = async (ctx) => {
       null,
       minApiVersion
     ),
+    new (Message.Text as any)(
+      DISCLAIMER_TEXT,
+      keyboard,
+      null,
+      null,
+      null,
+      minApiVersion
+    ),
   ];
-
-  // Rich media alone often keeps the previous keyboard on the client.
-  if (keyboard) {
-    messages.push(
-      new (Message.Keyboard as any)(keyboard, null, null, null, minApiVersion)
-    );
-  }
 
   await bot.sendMessage(userProfile, messages);
 
