@@ -3,8 +3,8 @@
  *
  * When a step has `customHandler: "triggerCarousel"`, reads the inbound
  * message, strips the button prefix, and treats the remainder as the trigger
- * (e.g. "product-1"). Sends that named carousel as a rich-media message
- * together with the admin keyboard named "main".
+ * (e.g. "product-1"). Sends an intro text, then that named carousel as a
+ * rich-media message, together with the admin keyboard named "main".
  */
 import { Message } from "viber-bot";
 import { CustomStepHandler } from "../types";
@@ -14,6 +14,9 @@ import {
   resolveNamedKeyboard,
 } from "../../services/LocationCarousel";
 import { resolveUserMinApiVersion } from "../../services/resolveUserMinApiVersion";
+
+const INTRO_TEXT =
+  "💚 *Ти избираш. Ние ти помагаме да откриеш подходящия продукт.*\n\nСпоред отговорите ти нашето предложение е:";
 
 /** Remove the button prefix the same way TextMessageHandler does. */
 const triggerFromMessage = (
@@ -88,6 +91,7 @@ export const triggerCarouselHandler: CustomStepHandler = async (ctx) => {
   const minApiVersion = resolveUserMinApiVersion(userProfile.apiVersion);
 
   const messages: unknown[] = [
+    new (Message.Text as any)(INTRO_TEXT, null, null, null, null, minApiVersion),
     new (Message.RichMedia as any)(
       richMedia,
       keyboard,
