@@ -91,6 +91,7 @@ export interface IUserRepository {
   /**
    * Shallow-merge a patch into the user's flow state.
    * Existing keys not present in the patch are preserved.
+   * A `null` value removes that key from state.
    * @param viberId - The Viber user ID
    * @param statePatch - Key/value pairs to merge into state
    * @returns The updated user entity or null if not found

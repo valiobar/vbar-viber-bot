@@ -51,7 +51,8 @@ export interface CustomResponseContext {
   botDataService: BotDataService;
   /**
    * User persistence. Use `findByViberId` to read `user.state`,
-   * `updateState` to shallow-merge keys into it, `clearState` to wipe it,
+   * `updateState` to shallow-merge keys into it (`null` removes a key),
+   * `clearState` to wipe it,
    * `updateCurrentStep` for the step pointer.
    */
   userRepository: IUserRepository;

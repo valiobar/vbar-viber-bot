@@ -119,6 +119,7 @@ export interface ButtonFrame {
 export const CUSTOM_STEP_HANDLER_NAMES = [
   "example",
   "recordLastVisited",
+  "saveLastVisited",
   "stateRouter",
   "triggerCarousel",
 ] as const;
