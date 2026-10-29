@@ -18,11 +18,24 @@ Cross-service types, utils, and config belong in `@vbar/shared` (`packages/share
 Implementation plans typically follow this structure:
 
 - **Overview**: High-level description of what needs to be implemented
+- **How It Works — In Plain Words**: A mandatory plain-language explanation of the end-to-end flow (see below)
 - **Current State Analysis**: What exists (✅) and what's missing (❌)
 - **Implementation Steps**: Numbered, sequential steps with specific file locations, code changes, and **mandatory pseudo-code** for each step; the **last step must always be documentation** (update existing docs and/or add new ones)
 - **UI/UX Considerations**: Design and user experience guidelines
 - **Files to Modify**: List of files that will be changed
 - **Implementation Order**: Recommended sequence for executing steps
+
+### "How It Works — In Plain Words" Section (Mandatory)
+
+Every plan **MUST** include a `## How It Works — In Plain Words` section, placed right after the **Overview**. Its job is to let a non-expert (or a future reader skimming the plan) understand the end-to-end flow before diving into code-level steps.
+
+Requirements:
+
+- **Plain language, no jargon**: explain it like you would to a teammate who does not know this codebase. Avoid class names, file paths, and type names in the narrative itself (keep those for the steps). Where a real identifier helps, add it in parentheses, e.g. "a little phone book of products (the `productsByTrigger` index)".
+- **Describe the flow as moments/stages**: walk through what happens and when (e.g. "when the bot starts", "when the user taps X", "when the user opens Y"), in order, as a short numbered list.
+- **Explain the "why"**: include a brief "why this shape" note covering the key design decisions and what makes the approach robust (edge cases it handles gracefully).
+- **Include a Mermaid diagram**: add a `flowchart` (or `sequenceDiagram`) that visualizes the flow. Follow the project's Mermaid syntax conventions (no spaces in node ids, quote labels with special characters, no custom colors/styling).
+- **Keep it proportional**: a few short paragraphs plus the list and diagram — not a re-statement of every implementation step.
 
 ## Plan File Management
 
@@ -42,6 +55,7 @@ When creating a new implementation plan:
 4. **Create Folder if Needed**: If it doesn't exist, create the `plans/` directory
 5. **Create Plan File**: Create a new `.md` file in the `plans/` folder with a descriptive name (e.g., `FEATURE_NAME_IMPLEMENTATION_PLAN.md`)
 6. **Follow Plan Structure**: Use the standard plan structure (Overview, Current State, Steps, etc.). **Every step must include a Pseudo-code block** — no exceptions
+6a. **Add a "How It Works — In Plain Words" Section**: Every plan **MUST** include a `## How It Works — In Plain Words` section right after the Overview — a jargon-free, stage-by-stage explanation of the flow, a short "why this shape" note, and a Mermaid diagram (see the section spec above). Do not finalize a plan without it.
 7. **Base Pseudo-code on Real Code**: Read the actual target files before writing the plan, so pseudo-code reflects the real current code (existing imports, class/function names, `@vbar/shared` usage) rather than an imagined version of it
 8. **Reference Shared Resources**: In the plan, explicitly reference which types from `@vbar/shared` should be used, which utilities are available, and which configuration patterns to follow
 9. **Always Add a Documentation Step as the Last Step**: Every plan **MUST** end with an explicit final step for updating existing documentation and/or adding new documentation under `documentation/` (e.g. `architecture.md`, `api.md`, `deployment.md`, `setup.md`, or a new doc when needed). Do not finalize a plan without this last step.
