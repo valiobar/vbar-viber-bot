@@ -2,13 +2,14 @@
  * Rewrite product-card reply triggers to JSON action bodies.
  *
  * For every carousel card whose second button has a BgMedia in the product
- * image list below, the second button's reply becomes:
+ * image list below, each reply button on that card (not the image button,
+ * which stays ActionType "none") becomes:
  *
  *   {
- *     "trigger": "<current trigger>",
+ *     "trigger": "<that button's current trigger>",
  *     "lastTitle": "<first button Text>",
  *     "lastImage": "<second button BgMedia>",
- *     "lastTrigger": "<current trigger>"
+ *     "lastTrigger": "<that button's current trigger>"
  *   }
  *
  * `isJson` is set true. The same change is written on the card (source of
@@ -118,18 +119,17 @@ const buildActionBody = (trigger, lastTitle, lastImage) =>
   });
 
 /**
+ * Rewrite a reply button. `lastImage` is the card's image button, not this one.
+ *
  * @returns {{ status: "patched" | "unchanged" | "skipped", reason?: string, previous?: string, next?: string, trigger?: string }}
  */
-const patchButton = (button, lastTitle) => {
-  if (!button) return { status: "skipped", reason: "missing second button" };
+const patchReply = (button, lastTitle, lastImage) => {
+  if (!button) return { status: "skipped", reason: "missing button" };
   if (button.ActionType !== "reply") {
-    return {
-      status: "skipped",
-      reason: `ActionType is ${button.ActionType || "empty"}, not reply`,
-    };
+    return { status: "skipped", reason: "not reply" };
   }
   const trigger = readTrigger(button.ActionBody);
-  const next = buildActionBody(trigger, lastTitle ?? "", bgUrl(button));
+  const next = buildActionBody(trigger, lastTitle ?? "", lastImage);
   if (button.isJson === true && button.ActionBody === next) {
     return { status: "unchanged", trigger, next };
   }
@@ -201,36 +201,48 @@ try {
 
       if (custom && isTargetImage(card.Buttons?.[1])) {
         matched += 1;
-        const firstText = card.Buttons[0]?.Text ?? "";
-        const result = patchButton(card.Buttons[1], firstText);
-        const label = `${name} / card ${cardIndex + 1} / ${bgUrl(card.Buttons[1])}`;
+        const buttons = card.Buttons;
+        const lastImage = bgUrl(buttons[1]);
+        const lastTitle = buttons[0]?.Text ?? "";
+        const label = `${name} / card ${cardIndex + 1} / ${lastImage}`;
+        const replies = buttons
+          .map((button, index) => ({ button, index }))
+          .filter(({ index, button }) => index !== 1 && button?.ActionType === "reply");
 
-        const flatButton = flat[offset + 1];
-        const flatAligned =
-          flatButton && bgUrl(flatButton) === bgUrl(card.Buttons[1]);
-        const flatResult =
-          flatAligned && result.status !== "skipped"
-            ? patchButton(flatButton, firstText)
-            : null;
+        if (replies.length === 0) {
+          skipped += 1;
+          console.log(`SKIP ${label} — no reply button on the card`);
+          offset += sliceLength;
+          continue;
+        }
 
-        if (result.status === "patched" || flatResult?.status === "patched") {
+        let cardPatched = false;
+        for (const { button, index } of replies) {
+          const result = patchReply(button, lastTitle, lastImage);
+          const flatButton = flat[offset + index];
+          const flatResult =
+            flatButton && result.status !== "skipped"
+              ? patchReply(flatButton, lastTitle, lastImage)
+              : null;
+
+          if (result.status === "patched" || flatResult?.status === "patched") {
+            cardPatched = true;
+            const shown = result.status === "patched" ? result : flatResult;
+            console.log(`PATCH ${label} / button ${index + 1}`);
+            console.log(`  trigger: ${shorten(shown.trigger)}`);
+            console.log(`  lastTitle: ${shorten(lastTitle)}`);
+            console.log(`  before: ${shorten(shown.previous)}`);
+            console.log(`  after:  ${shown.next}`);
+          } else if (result.status === "unchanged") {
+            console.log(`UNCHANGED ${label} / button ${index + 1}`);
+          }
+        }
+
+        if (cardPatched) {
           patched += 1;
           carouselChanged = true;
-          if (!flatAligned) {
-            console.warn(`  flattened button not aligned, card copy only: ${label}`);
-          }
-          const shown = result.status === "patched" ? result : flatResult;
-          console.log(`PATCH ${label}`);
-          console.log(`  trigger: ${shorten(shown.trigger)}`);
-          console.log(`  lastTitle: ${shorten(firstText)}`);
-          console.log(`  before: ${shorten(shown.previous)}`);
-          console.log(`  after:  ${shown.next}`);
-        } else if (result.status === "unchanged") {
-          unchanged += 1;
-          console.log(`UNCHANGED ${label}`);
         } else {
-          skipped += 1;
-          console.log(`SKIP ${label} — ${result.reason}`);
+          unchanged += 1;
         }
       }
 
