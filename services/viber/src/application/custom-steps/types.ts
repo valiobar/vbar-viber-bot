@@ -1,8 +1,9 @@
 /**
  * Custom Step Handler Types
  *
- * A custom step handler is a code-defined function that fully replaces the
- * normal step sending (messages/keyboard) when a step has `customHandler` set.
+ * A custom step handler runs first when a step has `customHandler` set.
+ * Calling `bot.sendMessage` owns the reply; returning without sending lets
+ * the normal step path send messages, keyboard, and carousel.
  *
  * Handlers receive everything StepSender.sendStep has, so they can send any
  * messages, look up bot data, or update users as needed.

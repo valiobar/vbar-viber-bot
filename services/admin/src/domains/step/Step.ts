@@ -23,7 +23,7 @@ export class Step {
   public readonly hidden: boolean;
   public readonly isAi: boolean;
   public readonly aiPromptName: string | null; // Optional AI prompt name (null = use the active prompt)
-  public readonly customHandler: string | null; // Optional custom handler name (replaces normal sending)
+  public readonly customHandler: string | null; // Optional custom handler name (runs before normal sending; normal sending continues if the handler does not message the user)
   public readonly responseHandler: string | null; // Optional custom response handler name (inbound replies)
   public readonly createdAt: string;
   public readonly updatedAt: string;
@@ -56,7 +56,7 @@ export class Step {
     this.trigger = this.validateTrigger(params.trigger);
     this.customHandler = params.customHandler ?? null;
     this.responseHandler = params.responseHandler ?? null;
-    // Steps with a custom handler don't need messages (handler replaces sending)
+    // Steps with a custom handler don't need messages (handler may own the reply)
     this.content = this.validateContent(
       params.content,
       this.customHandler !== null

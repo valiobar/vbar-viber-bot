@@ -442,8 +442,8 @@ export const StepForm = ({
             </select>
             {customHandler && (
               <p className="mt-1 text-sm text-amber-600 dark:text-amber-400">
-                The custom function replaces normal sending — messages and
-                keyboard below will be ignored when this step runs.
+                The custom function runs first. Messages, keyboard, and carousel
+                below are sent only when that function does not message the user.
               </p>
             )}
           </div>
@@ -533,7 +533,8 @@ export const StepForm = ({
           Messages{" "}
           {customHandler ? (
             <span className="text-sm font-normal text-gray-500 dark:text-gray-400">
-              (optional — ignored by the custom function)
+              (optional — sent when the custom function does not message the
+              user)
             </span>
           ) : (
             <span className="text-red-500">*</span>

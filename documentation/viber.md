@@ -117,7 +117,7 @@ Scripted replies go through `TextMessageHandler` + `StepSender`.
 5. The first matching step is sent: resolve message IDs → optional carousel → optional keyboard → `bot.sendMessage`.
 6. On success, `user.currentStepId` is updated in Mongo and a `StepUsageEvent` is published (fire-and-forget).
 
-`StepSender` also runs a **custom handler** when `step.customHandler` is set (`application/custom-steps/`). That replaces the normal send path; a successful custom handler still publishes analytics (with `customHandler` set).
+`StepSender` runs a **custom handler** when `step.customHandler` is set (`application/custom-steps/`). The handler runs first. If it calls `bot.sendMessage`, that is the reply and the step content is not sent. If it returns without sending, or the name is not registered, the normal path sends the step messages, optional carousel, and optional keyboard. Analytics includes `customHandler` either way.
 
 **Custom response handlers** (`application/custom-responses/`): when the user is already on a step with `responseHandler` set, `MessageHandler` runs that handler **before** AI and before per-type handlers. Prefixed keyboard taps still go through normal trigger navigation. Names are synced with `CUSTOM_RESPONSE_HANDLER_NAMES` in `@vbar/shared`.
 
