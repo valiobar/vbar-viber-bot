@@ -7,7 +7,8 @@
  *
  * A repeat of the same trigger is moved to the front instead of duplicated.
  * Only the first 6 entries are kept. Those entries are then sent as a
- * product-card carousel with the main keyboard.
+ * product-card carousel with the main keyboard. With no visits yet, a short
+ * Bulgarian notice is sent with the same keyboard.
  */
 import { Message } from "viber-bot";
 import { CustomStepHandler } from "../types";
@@ -31,6 +32,7 @@ const IMAGE_BG = "#b1c6d2";
 const CTA_BG = "#a6bac6";
 const CTA_COLOR = "#ffffff";
 const CTA_TEXT = "Информация за продукта";
+const EMPTY_VISITS_TEXT = "Все още нямате разгледани продукти.";
 
 interface LastVisitedEntry {
   title: string;
@@ -148,28 +150,21 @@ export const recordLastVisitedHandler: CustomStepHandler = async (ctx) => {
   const image = asString(state[IMAGE_PROP]).trim();
   const trigger = asString(state[TRIGGER_PROP]).trim();
 
-  if (!title || !image || !trigger) {
-    logger.warn("recordLastVisited: lastTitle, lastImage, or lastTrigger is empty, skipping", {
-      stepId: step.id,
-      userId: userProfile.id,
-      hasLastTitle: Boolean(title),
-      hasLastImage: Boolean(image),
-      hasLastTrigger: Boolean(trigger),
-    });
-    return;
-  }
-
-  const entry: LastVisitedEntry = { title, image, trigger };
   const existing = Array.isArray(state[VISITED_PROP]) ? state[VISITED_PROP] : [];
-  const lastVisited = [
-    entry,
-    ...existing.filter((item) => {
-      if (!item || typeof item !== "object") return true;
-      return asString((item as { trigger?: unknown }).trigger).trim() !== trigger;
-    }),
-  ].slice(0, MAX_VISITED);
+  let lastVisited = existing;
 
-  await userRepository.updateState(userProfile.id, { [VISITED_PROP]: lastVisited });
+  if (title && image && trigger) {
+    const entry: LastVisitedEntry = { title, image, trigger };
+    lastVisited = [
+      entry,
+      ...existing.filter((item) => {
+        if (!item || typeof item !== "object") return true;
+        return asString((item as { trigger?: unknown }).trigger).trim() !== trigger;
+      }),
+    ].slice(0, MAX_VISITED);
+
+    await userRepository.updateState(userProfile.id, { [VISITED_PROP]: lastVisited });
+  }
 
   const visits = lastVisited.filter(isVisit);
   const keyboard = resolveNamedKeyboard(
@@ -178,12 +173,31 @@ export const recordLastVisitedHandler: CustomStepHandler = async (ctx) => {
     buttonPrefix,
     logger
   );
-  const richMedia = visitedCarousel(visits, buttonPrefix);
   const minApiVersion = resolveUserMinApiVersion(userProfile.apiVersion);
+
+  if (visits.length === 0) {
+    await bot.sendMessage(userProfile, [
+      new (Message.Text as any)(
+        EMPTY_VISITS_TEXT,
+        keyboard ?? null,
+        null,
+        null,
+        null,
+        minApiVersion
+      ),
+    ]);
+
+    logger.info("recordLastVisited sent empty-visits notice", {
+      stepId: step.id,
+      userId: userProfile.id,
+      keyboardName: keyboard ? MAIN_KEYBOARD_NAME : null,
+    });
+    return;
+  }
 
   await bot.sendMessage(userProfile, [
     new (Message.RichMedia as any)(
-      richMedia,
+      visitedCarousel(visits, buttonPrefix),
       keyboard ?? null,
       null,
       null,
