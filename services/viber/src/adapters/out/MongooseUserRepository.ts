@@ -294,7 +294,8 @@ export class MongooseUserRepository implements IUserRepository {
   }
 
   /**
-   * Shallow-merge a patch into the user's flow state
+   * Shallow-merge a patch into the user's flow state.
+   * `null` values are removed from state instead of stored.
    */
   async updateState(
     viberId: string,
@@ -310,15 +311,29 @@ export class MongooseUserRepository implements IUserRepository {
         return this.findByViberId(viberId);
       }
 
-      // Dotted paths: atomic shallow merge, preserves other state keys
+      // Dotted paths: atomic shallow merge, preserves other state keys.
+      // null removes the key so temporary fields do not linger.
       const setOps: Record<string, any> = {};
+      const unsetOps: Record<string, ""> = {};
       for (const [key, value] of Object.entries(statePatch)) {
-        setOps[`state.${key}`] = value;
+        if (value === null) {
+          unsetOps[`state.${key}`] = "";
+        } else {
+          setOps[`state.${key}`] = value;
+        }
+      }
+
+      const update: Record<string, unknown> = {};
+      if (Object.keys(setOps).length > 0) {
+        update.$set = setOps;
+      }
+      if (Object.keys(unsetOps).length > 0) {
+        update.$unset = unsetOps;
       }
 
       const doc = await ViberUserModel.findOneAndUpdate(
         { viberId },
-        { $set: setOps },
+        update,
         { new: true }
       ).exec();
 

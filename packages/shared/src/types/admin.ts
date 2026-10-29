@@ -119,6 +119,7 @@ export interface ButtonFrame {
 export const CUSTOM_STEP_HANDLER_NAMES = [
   "example",
   "recordLastVisited",
+  "saveLastVisited",
   "stateRouter",
   "triggerCarousel",
 ] as const;
@@ -151,7 +152,7 @@ export interface StepDTO extends BaseEntity {
   keyboard: string | null; // Optional Keyboard ID
   hidden: boolean;
   isAi: boolean;
-  customHandler: string | null; // Optional custom step handler name (replaces normal sending)
+  customHandler: string | null; // Optional custom step handler name (runs before normal sending; normal sending continues if the handler does not message the user)
   /** Optional custom response handler name (handles the user's reply to this step, any message type) */
   responseHandler: string | null;
   /** Optional AI prompt name (AI service prompt_templates.name); null = use the active prompt */

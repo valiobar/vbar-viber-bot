@@ -2,8 +2,9 @@
  * Example Custom Step Handler
  *
  * Template for writing custom step handlers. When a step has
- * `customHandler: "example"`, this function runs INSTEAD of the normal
- * message/keyboard sending.
+ * `customHandler: "example"`, this function runs first. Calling
+ * `bot.sendMessage` owns the reply; returning without sending lets the
+ * step's messages, keyboard, and carousel go out.
  *
  * To add a new custom step handler:
  * 1. Create a file in this folder exporting a CustomStepHandler function

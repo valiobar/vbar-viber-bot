@@ -3,7 +3,8 @@
  *
  * When a step has `customHandler: "recordLastVisited"`, reads lastTitle,
  * lastImage, and lastTrigger from user state (written by a JSON button
- * action body) and prepends `{ title, image, trigger }` to state.lastVisited.
+ * action body), prepends `{ title, image, trigger }` to state.lastVisited,
+ * then removes those three fields from state.
  *
  * A repeat of the same trigger is moved to the front instead of duplicated.
  * Only the first 6 entries are kept. Those entries are then sent as a
@@ -17,13 +18,12 @@ import {
   resolveNamedKeyboard,
 } from "../../services/LocationCarousel";
 import { resolveUserMinApiVersion } from "../../services/resolveUserMinApiVersion";
+import {
+  LastVisitedEntry,
+  isLastVisitedEntry,
+  saveLastVisitedToState,
+} from "./lastVisitedState";
 
-const TITLE_PROP = "lastTitle";
-const IMAGE_PROP = "lastImage";
-const TRIGGER_PROP = "lastTrigger";
-const VISITED_PROP = "lastVisited";
-
-const MAX_VISITED = 6;
 const CARD_COLUMNS = 6;
 const CARD_ROWS = 7;
 const TITLE_BG = "#b1c6d2";
@@ -34,36 +34,11 @@ const CTA_COLOR = "#ffffff";
 const CTA_TEXT = "Информация за продукта";
 const EMPTY_VISITS_TEXT = "Все още нямате разгледани продукти.";
 
-interface LastVisitedEntry {
-  title: string;
-  image: string;
-  trigger: string;
-}
-
-const asString = (value: unknown): string => {
-  if (typeof value === "string") return value;
-  if (value == null) return "";
-  return String(value);
-};
-
 const escapeText = (text: string): string =>
   text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 const font = (color: string, text: string): string =>
   `<font color="${color}">${escapeText(text)}</font>`;
-
-const isVisit = (item: unknown): item is LastVisitedEntry => {
-  if (!item || typeof item !== "object") return false;
-  const candidate = item as Partial<LastVisitedEntry>;
-  return (
-    typeof candidate.title === "string" &&
-    candidate.title.trim() !== "" &&
-    typeof candidate.image === "string" &&
-    candidate.image.trim() !== "" &&
-    typeof candidate.trigger === "string" &&
-    candidate.trigger.trim() !== ""
-  );
-};
 
 /** Same JSON body the product-card patch writes onto "Информация за продукта". */
 const visitActionBody = (visit: LastVisitedEntry, buttonPrefix?: string | null): string => {
@@ -145,28 +120,13 @@ export const recordLastVisitedHandler: CustomStepHandler = async (ctx) => {
     return;
   }
 
-  const state = user.state ?? {};
-  const title = asString(state[TITLE_PROP]).trim();
-  const image = asString(state[IMAGE_PROP]).trim();
-  const trigger = asString(state[TRIGGER_PROP]).trim();
+  const { trigger, lastVisited } = await saveLastVisitedToState(
+    userRepository,
+    userProfile.id,
+    user.state
+  );
 
-  const existing = Array.isArray(state[VISITED_PROP]) ? state[VISITED_PROP] : [];
-  let lastVisited = existing;
-
-  if (title && image && trigger) {
-    const entry: LastVisitedEntry = { title, image, trigger };
-    lastVisited = [
-      entry,
-      ...existing.filter((item) => {
-        if (!item || typeof item !== "object") return true;
-        return asString((item as { trigger?: unknown }).trigger).trim() !== trigger;
-      }),
-    ].slice(0, MAX_VISITED);
-
-    await userRepository.updateState(userProfile.id, { [VISITED_PROP]: lastVisited });
-  }
-
-  const visits = lastVisited.filter(isVisit);
+  const visits = lastVisited.filter(isLastVisitedEntry);
   const keyboard = resolveNamedKeyboard(
     botDataService,
     MAIN_KEYBOARD_NAME,

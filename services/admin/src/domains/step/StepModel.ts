@@ -22,7 +22,7 @@ export interface IStepDocument extends mongoose.Document {
   hidden: boolean;
   isAi: boolean;
   aiPromptName?: string | null; // Optional AI prompt name (AI service prompt_templates.name)
-  customHandler?: string | null; // Optional custom step handler name (replaces normal sending)
+  customHandler?: string | null; // Optional custom step handler name (runs before normal sending; normal sending continues if the handler does not message the user)
   responseHandler?: string | null; // Optional custom response handler name (inbound replies)
   createdAt: Date;
   updatedAt: Date;
@@ -74,7 +74,7 @@ const stepSchema = new Schema<IStepDocument>(
           if (!Array.isArray(value)) {
             return false;
           }
-          // Steps with a custom handler don't need messages (handler replaces sending).
+          // Steps with a custom handler don't need messages (handler may own the reply).
           // On update validation `this` is not the document, so allow empty there —
           // the Step domain entity enforces the rule before persistence.
           if (value.length === 0) {

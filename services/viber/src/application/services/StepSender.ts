@@ -83,60 +83,95 @@ export class StepSender {
         return;
       }
 
-      // Custom handler steps: run the registered function INSTEAD of the
-      // normal message/keyboard sending (full replacement)
+      // Custom handler: run first. If it calls sendMessage it owns the reply;
+      // otherwise fall through to the normal message/keyboard/carousel path.
+      let messageSent = false;
+      const trackingBot = new Proxy(bot, {
+        get(target, prop, receiver) {
+          if (prop === "sendMessage") {
+            return (...args: unknown[]) => {
+              messageSent = true;
+              return (target.sendMessage as Function).apply(target, args);
+            };
+          }
+          const value = Reflect.get(target, prop, receiver);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+
       if (step.customHandler) {
         const handler = getCustomStepHandler(step.customHandler);
         if (!handler) {
-          this.logger.warn("Custom step handler not registered, skipping step", {
-            stepId,
-            customHandler: step.customHandler,
-            userId: userProfile.id,
-          });
-          return;
+          this.logger.warn(
+            "Custom step handler not registered, sending step content",
+            {
+              stepId,
+              customHandler: step.customHandler,
+              userId: userProfile.id,
+            }
+          );
+        } else {
+          try {
+            await handler({
+              step,
+              bot: trackingBot,
+              userProfile,
+              botDataService,
+              userRepository: this.userRepository,
+              buttonPrefix,
+              message,
+              logger: this.logger,
+            });
+
+            this.logger.info("Custom step handler executed successfully", {
+              stepId,
+              customHandler: step.customHandler,
+              userId: userProfile.id,
+              messageSent,
+            });
+          } catch (error) {
+            const errorMessage =
+              error instanceof Error ? error.message : String(error);
+            this.logger.error("Custom step handler failed", {
+              stepId,
+              customHandler: step.customHandler,
+              userId: userProfile.id,
+              messageSent,
+              error: errorMessage,
+            });
+          }
+
+          if (messageSent) {
+            if (analytics) {
+              this.analyticsPublisher.publishStepUsage({
+                stepId,
+                userId: userProfile.id,
+                source: analytics.source,
+                trigger: analytics.trigger,
+                customHandler: step.customHandler,
+              });
+            }
+
+            try {
+              await this.userRepository.updateCurrentStep(
+                userProfile.id,
+                stepId
+              );
+            } catch (error) {
+              const errorMessage =
+                error instanceof Error ? error.message : String(error);
+              this.logger.error(
+                "Failed to update user current step in database",
+                {
+                  stepId,
+                  userId: userProfile.id,
+                  error: errorMessage,
+                }
+              );
+            }
+            return;
+          }
         }
-
-        await handler({
-          step,
-          bot,
-          userProfile,
-          botDataService,
-          userRepository: this.userRepository,
-          buttonPrefix,
-          message,
-          logger: this.logger,
-        });
-
-        this.logger.info("Custom step handler executed successfully", {
-          stepId,
-          customHandler: step.customHandler,
-          userId: userProfile.id,
-        });
-
-        if (analytics) {
-          this.analyticsPublisher.publishStepUsage({
-            stepId,
-            userId: userProfile.id,
-            source: analytics.source,
-            trigger: analytics.trigger,
-            customHandler: step.customHandler,
-          });
-        }
-
-        // Update user's current step in database after successful execution
-        try {
-          await this.userRepository.updateCurrentStep(userProfile.id, stepId);
-        } catch (error) {
-          // Log error but don't throw - handler executed successfully
-          const errorMessage =
-            error instanceof Error ? error.message : String(error);
-          this.logger.error("Failed to update user current step in database", {
-            stepId,
-            userId: userProfile.id,
-            error: errorMessage,
-          });
-        }
-        return;
       }
 
       // Retrieve messages referenced in step.content
@@ -254,7 +289,7 @@ export class StepSender {
             userId: userProfile.id,
             source: analytics.source,
             trigger: analytics.trigger,
-            customHandler: null,
+            customHandler: step.customHandler,
           });
         }
 
