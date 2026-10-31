@@ -13,10 +13,11 @@
  * Location: Application Layer (Hexagonal Architecture)
  */
 import { Message } from "viber-bot";
-import { Logger, StepDTO } from "@vbar/shared";
+import { Logger } from "@vbar/shared";
 import { ViberBotService } from "../../services/ViberBotService";
-import { BotDataService } from "../../services/BotDataService";
 import { StepSender } from "../../services/StepSender";
+import { matchStepsByTrigger } from "../../services/matchStepsByTrigger";
+import { parseButtonTap } from "../../services/parseButtonTap";
 import { IUserRepository } from "../../../ports/out/IUserRepository";
 
 export class TextMessageHandler {
@@ -70,11 +71,8 @@ export class TextMessageHandler {
         return;
       }
 
-      // Check if message contains prefix (case-insensitive)
-      const normalizedPrefix = buttonsPrefix.toLowerCase();
-      const normalizedMessageText = messageText.toLowerCase();
-
-      if (!normalizedMessageText.includes(normalizedPrefix)) {
+      const tap = parseButtonTap(messageText, buttonsPrefix);
+      if (!tap) {
         this.logger.debug(
           "Message does not contain prefix, skipping step trigger",
           {
@@ -85,29 +83,19 @@ export class TextMessageHandler {
         return;
       }
 
-      // Remove prefix from message text (case-insensitive removal)
-      let cleanedText = messageText;
-      const prefixIndex = normalizedMessageText.indexOf(normalizedPrefix);
-      if (prefixIndex !== -1) {
-        // Remove prefix from original text (preserving original case)
-        cleanedText =
-          messageText.substring(0, prefixIndex) +
-          messageText.substring(prefixIndex + buttonsPrefix.length);
-        cleanedText = cleanedText.trim();
-      }
-
-      if (!cleanedText) {
+      if (!tap.text) {
         this.logger.debug("Cleaned text is empty after prefix removal", {
           userId: userProfile.id,
         });
         return;
       }
 
+      const cleanedText = tap.text;
       const botDataService = this.viberBotService.getBotDataService();
       const bot = this.viberBotService.getBot();
 
       // --- JSON payload path (palms-style button replies) ---
-      const jsonPayload = this.parseJsonPayload(cleanedText);
+      const jsonPayload = tap.payload;
       if (jsonPayload) {
         const { trigger, ...statePatch } = jsonPayload;
 
@@ -121,7 +109,7 @@ export class TextMessageHandler {
         }
 
         if (typeof trigger === "string" && trigger.trim() !== "") {
-          const matchingSteps = this.matchStepsByTrigger(
+          const matchingSteps = matchStepsByTrigger(
             trigger.trim().toLowerCase(),
             botDataService
           );
@@ -151,7 +139,7 @@ export class TextMessageHandler {
 
       // --- Existing plain trigger path ---
       const normalizedCleanedText = cleanedText.toLowerCase();
-      const matchingSteps = this.matchStepsByTrigger(
+      const matchingSteps = matchStepsByTrigger(
         normalizedCleanedText,
         botDataService
       );
@@ -188,46 +176,5 @@ export class TextMessageHandler {
         userId: userProfile.id,
       });
     }
-  }
-
-  /**
-   * Parse text as a JSON object payload (palms IsJsonString equivalent).
-   * Returns the object or null if not valid JSON / not a plain object.
-   */
-  private parseJsonPayload(text: string): Record<string, any> | null {
-    try {
-      const parsed = JSON.parse(text);
-      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-        return parsed as Record<string, any>;
-      }
-      return null;
-    } catch {
-      return null;
-    }
-  }
-
-  /**
-   * Find steps whose trigger[] matches the given normalized (lowercase) text.
-   * Exact map lookup first, then a case-insensitive scan of all steps.
-   */
-  private matchStepsByTrigger(
-    normalizedTrigger: string,
-    botDataService: BotDataService
-  ): StepDTO[] {
-    let matchingSteps = botDataService.getStepsByTrigger(normalizedTrigger);
-    if (matchingSteps.length === 0) {
-      const stepsData = botDataService.getStepsData();
-      if (stepsData) {
-        for (const step of stepsData.steps.values()) {
-          for (const trigger of step.trigger) {
-            if (trigger.toLowerCase() === normalizedTrigger) {
-              matchingSteps.push(step);
-              break;
-            }
-          }
-        }
-      }
-    }
-    return matchingSteps;
   }
 }

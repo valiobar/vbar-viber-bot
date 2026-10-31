@@ -14,8 +14,10 @@ import { exampleResponseHandler } from "./handlers/example";
 import { locationHandler } from "./handlers/location";
 
 export type {
+  CustomResponseAction,
   CustomResponseContext,
   CustomResponseHandler,
+  CustomResponseResult,
   InboundMessageType,
 } from "./types";
 
