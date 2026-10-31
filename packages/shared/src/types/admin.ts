@@ -119,7 +119,6 @@ export interface ButtonFrame {
 export const CUSTOM_STEP_HANDLER_NAMES = [
   "example",
   "recordLastVisited",
-  "saveLastVisited",
   "stateRouter",
   "triggerCarousel",
 ] as const;
@@ -134,7 +133,11 @@ export type CustomStepHandlerName = (typeof CUSTOM_STEP_HANDLER_NAMES)[number];
  * with `responseHandler` set routes every user reply on that step (any
  * message type, except prefixed button taps) to the named function.
  */
-export const CUSTOM_RESPONSE_HANDLER_NAMES = ["example", "locationHandler"] as const;
+export const CUSTOM_RESPONSE_HANDLER_NAMES = [
+  "example",
+  "locationHandler",
+  "saveLastVisited",
+] as const;
 
 export type CustomResponseHandlerName =
   (typeof CUSTOM_RESPONSE_HANDLER_NAMES)[number];
