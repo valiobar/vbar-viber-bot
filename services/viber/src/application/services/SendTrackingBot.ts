@@ -21,7 +21,9 @@ export function createSendTrackingBot(bot: Bot): SendTrackingBot {
       if (prop === "sendMessage") {
         return (...args: unknown[]) => {
           sent = true;
-          return target.sendMessage(...args);
+          // Reflect.apply avoids TS2556: Bot.sendMessage is not a rest-parameter
+          // signature, so spreading typed args into it fails under tsc.
+          return Reflect.apply(target.sendMessage, target, args);
         };
       }
       const value = Reflect.get(target, prop, receiver);

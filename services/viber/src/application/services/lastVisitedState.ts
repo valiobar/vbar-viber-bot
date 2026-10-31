@@ -1,17 +1,17 @@
 /**
- * Shared last-visited state update used by saveLastVisited and recordLastVisited.
+ * Shared last-visited list update.
  *
- * Reads lastTitle, lastImage, and lastTrigger from user state, prepends
- * { title, image, trigger } to lastVisited, then removes those three fields.
+ * buildLastVisited prepends { title, image, trigger } onto state.lastVisited.
  * A repeat of the same trigger is moved to the front. Only the first 6
- * entries are kept. When any of the three fields is missing, state is left
- * unchanged and the current lastVisited list is returned.
+ * entries are kept. When any of the three fields is missing, the list is
+ * left unchanged.
+ *
+ * Callers pass the visit explicitly. This module does not read lastTitle,
+ * lastImage, or lastTrigger from user state, and it does not write state.
+ * The saveLastVisited response handler returns the built list so
+ * MessageHandler applies one patch.
  */
-import { IUserRepository } from "../../../ports/out/IUserRepository";
 
-const TITLE_PROP = "lastTitle";
-const IMAGE_PROP = "lastImage";
-const TRIGGER_PROP = "lastTrigger";
 const VISITED_PROP = "lastVisited";
 
 const MAX_VISITED = 6;
@@ -20,6 +20,12 @@ export interface LastVisitedEntry {
   title: string;
   image: string;
   trigger: string;
+}
+
+export interface LastVisitedInput {
+  title: unknown;
+  image: unknown;
+  trigger: unknown;
 }
 
 export interface SaveLastVisitedResult {
@@ -32,8 +38,10 @@ export interface SaveLastVisitedResult {
 
 const asString = (value: unknown): string => {
   if (typeof value === "string") return value;
-  if (value == null) return "";
-  return String(value);
+  if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
+    return String(value);
+  }
+  return "";
 };
 
 export const isLastVisitedEntry = (item: unknown): item is LastVisitedEntry => {
@@ -49,36 +57,30 @@ export const isLastVisitedEntry = (item: unknown): item is LastVisitedEntry => {
   );
 };
 
-export async function saveLastVisitedToState(
-  userRepository: IUserRepository,
-  userId: string,
-  state: Record<string, any> | undefined
-): Promise<SaveLastVisitedResult> {
+export function buildLastVisited(
+  state: Record<string, unknown> | undefined,
+  entry: LastVisitedInput
+): SaveLastVisitedResult {
   const current = state ?? {};
-  const title = asString(current[TITLE_PROP]).trim();
-  const image = asString(current[IMAGE_PROP]).trim();
-  const trigger = asString(current[TRIGGER_PROP]).trim();
-  const existing = Array.isArray(current[VISITED_PROP]) ? current[VISITED_PROP] : [];
+  const title = asString(entry.title).trim();
+  const image = asString(entry.image).trim();
+  const trigger = asString(entry.trigger).trim();
+  const existing: unknown[] = Array.isArray(current[VISITED_PROP])
+    ? (current[VISITED_PROP] as unknown[])
+    : [];
 
   if (!title || !image || !trigger) {
     return { saved: false, title, image, trigger, lastVisited: existing };
   }
 
-  const entry: LastVisitedEntry = { title, image, trigger };
+  const visit: LastVisitedEntry = { title, image, trigger };
   const lastVisited = [
-    entry,
+    visit,
     ...existing.filter((item: unknown) => {
       if (!item || typeof item !== "object") return true;
       return asString((item as { trigger?: unknown }).trigger).trim() !== trigger;
     }),
   ].slice(0, MAX_VISITED);
-
-  await userRepository.updateState(userId, {
-    [VISITED_PROP]: lastVisited,
-    [TITLE_PROP]: null,
-    [IMAGE_PROP]: null,
-    [TRIGGER_PROP]: null,
-  });
 
   return { saved: true, title, image, trigger, lastVisited };
 }

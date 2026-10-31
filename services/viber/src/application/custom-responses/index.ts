@@ -12,6 +12,7 @@ import { CustomResponseHandlerName } from "@vbar/shared";
 import { CustomResponseHandler } from "./types";
 import { exampleResponseHandler } from "./handlers/example";
 import { locationHandler } from "./handlers/location";
+import { saveLastVisitedResponseHandler } from "./handlers/saveLastVisited";
 
 export type {
   CustomResponseAction,
@@ -27,6 +28,7 @@ export type {
 export const customResponseHandlers = {
   example: exampleResponseHandler,
   locationHandler,
+  saveLastVisited: saveLastVisitedResponseHandler,
 } satisfies Record<CustomResponseHandlerName, CustomResponseHandler>;
 
 /**
