@@ -19,7 +19,7 @@ export function createSendTrackingBot(bot: Bot): SendTrackingBot {
   const proxy = new Proxy(bot, {
     get(target, prop, receiver) {
       if (prop === "sendMessage") {
-        return (...args: unknown[]) => {
+        return (...args: Parameters<Bot["sendMessage"]>) => {
           sent = true;
           return target.sendMessage(...args);
         };
