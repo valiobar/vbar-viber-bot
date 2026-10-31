@@ -28,9 +28,13 @@ import { KeyboardConverter } from "../services/KeyboardConverter";
 import { IAiServiceClient } from "../../ports/out/IAiServiceClient";
 import { GoogleGeocodingClient } from "../../adapters/out/GoogleGeocodingClient";
 import {
+  CustomResponseResult,
   getCustomResponseHandler,
   InboundMessageType,
 } from "../custom-responses";
+import { createSendTrackingBot } from "../services/SendTrackingBot";
+import { matchStepsByTrigger } from "../services/matchStepsByTrigger";
+import { parseButtonTap } from "../services/parseButtonTap";
 import { MessageDedup } from "./messageDedup";
 
 export class MessageHandler implements IEventHandler {
@@ -219,53 +223,139 @@ export class MessageHandler implements IEventHandler {
             const buttonsPrefix =
               this.viberBotService.getSettings()?.buttonsPrefix;
             const isTextMessage = message instanceof Message.Text;
-            const isMessageContainsPrefix =
-              isTextMessage &&
-              buttonsPrefix &&
-              message.text?.includes(buttonsPrefix);
+            const button = isTextMessage
+              ? parseButtonTap(message.text ?? "", buttonsPrefix)
+              : null;
+            const isMessageContainsPrefix = button !== null;
 
             const botDataService = this.viberBotService.getBotDataService();
             const step = botDataService.getStepById(user.currentStepId);
 
-            // Custom response handler: takes precedence over AI, receives every
-            // message type except prefixed keyboard taps (those keep trigger navigation)
-            if (step && step.responseHandler && !isMessageContainsPrefix) {
+            // Custom response handler runs first for every message on this step,
+            // including prefixed button taps. It stops the flow only when it
+            // owns the reply; a silent handler (and taps, by default) fall through.
+            if (step && step.responseHandler) {
               const responseHandler = getCustomResponseHandler(
                 step.responseHandler
               );
               if (responseHandler) {
-                const bot = this.viberBotService.getBot();
+                const tracker = createSendTrackingBot(
+                  this.viberBotService.getBot()
+                );
                 const messageType = this.getMessageType(
                   message
                 ) as InboundMessageType;
-                await responseHandler({
-                  message,
-                  messageType,
-                  step,
-                  bot,
-                  userProfile,
-                  botDataService,
-                  userRepository: this.userRepository,
-                  stepSender: this.stepSender,
-                  buttonPrefix: buttonsPrefix,
-                  logger: this.logger,
-                });
+                const isTap = button !== null;
+
+                let result: void | CustomResponseResult = undefined;
+                let failed = false;
+                try {
+                  result = await responseHandler({
+                    message,
+                    messageType,
+                    step,
+                    bot: tracker.bot,
+                    userProfile,
+                    botDataService,
+                    userRepository: this.userRepository,
+                    stepSender: this.stepSender,
+                    buttonPrefix: buttonsPrefix,
+                    button,
+                    logger: this.logger,
+                  });
+                } catch (error) {
+                  failed = true;
+                  this.logger.error("Custom response handler failed", {
+                    userId,
+                    stepId: user.currentStepId,
+                    responseHandler: step.responseHandler,
+                    isTap,
+                    messageSent: tracker.wasSent(),
+                    error:
+                      error instanceof Error ? error.message : String(error),
+                  });
+                }
+
+                // JSON-action-body style result: save state, optionally open a step
+                let navigated = false;
+                if (!failed && typeof result === "object" && result !== null) {
+                  try {
+                    if (result.state && Object.keys(result.state).length > 0) {
+                      await this.userRepository.updateState(
+                        userProfile.id,
+                        result.state
+                      );
+                    }
+                    const trigger = result.trigger?.trim();
+                    if (trigger) {
+                      const [matched] = matchStepsByTrigger(
+                        trigger.toLowerCase(),
+                        botDataService
+                      );
+                      if (matched) {
+                        await this.stepSender.sendStep(
+                          matched.id,
+                          tracker.bot,
+                          userProfile,
+                          botDataService,
+                          buttonsPrefix,
+                          { source: "trigger", trigger },
+                          message
+                        );
+                      } else {
+                        this.logger.warn(
+                          "No step found matching response handler trigger",
+                          { userId, trigger }
+                        );
+                      }
+                      // A trigger result always stops (a missing step does not fall through)
+                      navigated = true;
+                    }
+                  } catch (error) {
+                    this.logger.error(
+                      "Failed to apply custom response handler result",
+                      {
+                        userId,
+                        stepId: user.currentStepId,
+                        error:
+                          error instanceof Error
+                            ? error.message
+                            : String(error),
+                      }
+                    );
+                  }
+                }
+
+                const handled = failed
+                  ? !isTap && tracker.wasSent()
+                  : navigated ||
+                    result === "handled" ||
+                    (!isTap && result !== "continue" && tracker.wasSent());
+
                 this.logger.info("Custom response handler executed", {
                   userId,
                   stepId: user.currentStepId,
                   responseHandler: step.responseHandler,
                   messageType,
+                  isTap,
+                  messageSent: tracker.wasSent(),
+                  navigated,
+                  result:
+                    typeof result === "object" ? "action" : result ?? null,
+                  handled,
                 });
-                return; // handled — skip AI and per-type routing
+
+                if (handled) return;
+              } else {
+                this.logger.warn(
+                  "Custom response handler not registered, falling through to normal routing",
+                  {
+                    userId,
+                    stepId: user.currentStepId,
+                    responseHandler: step.responseHandler,
+                  }
+                );
               }
-              this.logger.warn(
-                "Custom response handler not registered, falling through to normal routing",
-                {
-                  userId,
-                  stepId: user.currentStepId,
-                  responseHandler: step.responseHandler,
-                }
-              );
             }
 
             if (!step || step.isAi !== true || isMessageContainsPrefix) {
@@ -434,19 +524,19 @@ export class MessageHandler implements IEventHandler {
       if (message instanceof Message.Text) {
         await this.textHandler.handle(message, userProfile);
       } else if (message instanceof Message.Location) {
-        await this.locationHandler.handle(message, userProfile);
+        this.locationHandler.handle(message, userProfile);
       } else if (message instanceof Message.Contact) {
-        await this.contactHandler.handle(message, userProfile);
+        this.contactHandler.handle(message, userProfile);
       } else if (message instanceof Message.Picture) {
-        await this.pictureHandler.handle(message, userProfile);
+        this.pictureHandler.handle(message, userProfile);
       } else if (message instanceof Message.Video) {
-        await this.videoHandler.handle(message, userProfile);
+        this.videoHandler.handle(message, userProfile);
       } else if (message instanceof Message.File) {
-        await this.fileHandler.handle(message, userProfile);
+        this.fileHandler.handle(message, userProfile);
       } else if (message instanceof Message.Sticker) {
-        await this.stickerHandler.handle(message, userProfile);
+        this.stickerHandler.handle(message, userProfile);
       } else if (message instanceof Message.Url) {
-        await this.urlHandler.handle(message, userProfile);
+        this.urlHandler.handle(message, userProfile);
       } else {
         this.logger.warn("Unknown message type", {
           userId,

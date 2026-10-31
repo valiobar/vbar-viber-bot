@@ -472,9 +472,12 @@ export const StepForm = ({
             {responseHandler && (
               <p className="mt-1 text-sm text-amber-600 dark:text-amber-400">
                 While the user is on this step, every reply (text, location, contact,
-                picture, video, file, sticker, url) is handled by this function.
-                Keyboard button taps with the bot prefix still navigate normally.
-                This takes precedence over AI handling.
+                picture, video, file, sticker, url) and every prefixed button tap goes to
+                this function first. For replies: if it sends a message, that is the reply;
+                if it only saves state and stays silent, the normal flow (AI or per-type
+                handling) continues. For button taps: the button keeps its normal behavior
+                (state merge and opening the trigger step) unless the function swallows or
+                redirects it.
               </p>
             )}
           </div>

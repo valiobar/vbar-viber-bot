@@ -17,6 +17,7 @@ import { Logger, ConsoleLogger, type StepUsageSource } from "@vbar/shared";
 import { IUserRepository } from "../../ports/out/IUserRepository";
 import { getCustomStepHandler } from "../custom-steps";
 import { AnalyticsPublisher } from "../../adapters/out/AnalyticsPublisher";
+import { createSendTrackingBot } from "./SendTrackingBot";
 
 export interface StepAnalyticsContext {
   source: StepUsageSource;
@@ -85,19 +86,7 @@ export class StepSender {
 
       // Custom handler: run first. If it calls sendMessage it owns the reply;
       // otherwise fall through to the normal message/keyboard/carousel path.
-      let messageSent = false;
-      const trackingBot = new Proxy(bot, {
-        get(target, prop, receiver) {
-          if (prop === "sendMessage") {
-            return (...args: unknown[]) => {
-              messageSent = true;
-              return (target.sendMessage as Function).apply(target, args);
-            };
-          }
-          const value = Reflect.get(target, prop, receiver);
-          return typeof value === "function" ? value.bind(target) : value;
-        },
-      });
+      const tracker = createSendTrackingBot(bot);
 
       if (step.customHandler) {
         const handler = getCustomStepHandler(step.customHandler);
@@ -114,7 +103,7 @@ export class StepSender {
           try {
             await handler({
               step,
-              bot: trackingBot,
+              bot: tracker.bot,
               userProfile,
               botDataService,
               userRepository: this.userRepository,
@@ -127,7 +116,7 @@ export class StepSender {
               stepId,
               customHandler: step.customHandler,
               userId: userProfile.id,
-              messageSent,
+              messageSent: tracker.wasSent(),
             });
           } catch (error) {
             const errorMessage =
@@ -136,12 +125,12 @@ export class StepSender {
               stepId,
               customHandler: step.customHandler,
               userId: userProfile.id,
-              messageSent,
+              messageSent: tracker.wasSent(),
               error: errorMessage,
             });
           }
 
-          if (messageSent) {
+          if (tracker.wasSent()) {
             if (analytics) {
               this.analyticsPublisher.publishStepUsage({
                 stepId,
@@ -201,7 +190,7 @@ export class StepSender {
       const resolvedMessageDTOs = messageDTOs
         .map((dto) => {
           if (dto.type !== "rich-media") return dto;
-          const carouselId = (dto.content as any)?.carousel?.id;
+          const carouselId = dto.content?.carousel?.id;
           const carouselDTO = carouselId
             ? botDataService.getCarouselById(carouselId)
             : undefined;
