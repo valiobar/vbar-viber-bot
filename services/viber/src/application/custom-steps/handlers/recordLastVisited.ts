@@ -1,15 +1,10 @@
 /**
  * recordLastVisited custom step handler
  *
- * When a step has `customHandler: "recordLastVisited"`, reads lastTitle,
- * lastImage, and lastTrigger from user state (written by a JSON button
- * action body), prepends `{ title, image, trigger }` to state.lastVisited,
- * then removes those three fields from state.
- *
- * A repeat of the same trigger is moved to the front instead of duplicated.
- * Only the first 6 entries are kept. Those entries are then sent as a
- * product-card carousel with the main keyboard. With no visits yet, a short
- * Bulgarian notice is sent with the same keyboard.
+ * When a step has `customHandler: "recordLastVisited"`, reads
+ * state.lastVisited and sends those entries as a product-card carousel
+ * with the main keyboard. With no visits yet, a short Bulgarian notice is
+ * sent with the same keyboard. This handler does not update user state.
  */
 import { Message } from "viber-bot";
 import { CustomStepHandler } from "../types";
@@ -21,8 +16,7 @@ import { resolveUserMinApiVersion } from "../../services/resolveUserMinApiVersio
 import {
   LastVisitedEntry,
   isLastVisitedEntry,
-  saveLastVisitedToState,
-} from "./lastVisitedState";
+} from "../../services/lastVisitedState";
 
 const CARD_COLUMNS = 6;
 const CARD_ROWS = 7;
@@ -120,13 +114,8 @@ export const recordLastVisitedHandler: CustomStepHandler = async (ctx) => {
     return;
   }
 
-  const { trigger, lastVisited } = await saveLastVisitedToState(
-    userRepository,
-    userProfile.id,
-    user.state
-  );
-
-  const visits = lastVisited.filter(isLastVisitedEntry);
+  const stored = user.state?.lastVisited;
+  const visits = (Array.isArray(stored) ? stored : []).filter(isLastVisitedEntry);
   const keyboard = resolveNamedKeyboard(
     botDataService,
     MAIN_KEYBOARD_NAME,
@@ -167,10 +156,9 @@ export const recordLastVisitedHandler: CustomStepHandler = async (ctx) => {
     ),
   ]);
 
-  logger.info("recordLastVisited saved visit and sent carousel", {
+  logger.info("recordLastVisited sent carousel", {
     stepId: step.id,
     userId: userProfile.id,
-    trigger,
     lastVisitedCount: visits.length,
     keyboardName: keyboard ? MAIN_KEYBOARD_NAME : null,
   });
